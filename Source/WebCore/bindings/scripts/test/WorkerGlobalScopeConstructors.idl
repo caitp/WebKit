@@ -1,4 +1,5 @@
 partial interface WorkerGlobalScope {
+    attribute ExposedStarConstructor ExposedStar;
     attribute ExposedToWorkerAndWindowConstructor ExposedToWorkerAndWindow;
     attribute TestDefaultToJSONFilteredByExposedConstructor TestDefaultToJSONFilteredByExposed;
     attribute TestNodeConstructor TestNode;

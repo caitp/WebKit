@@ -55,6 +55,16 @@ my $supplementalMakefileDeps;
 my $idlAttributesFile;
 my $verbose = 0;
 
+my @supportedGlobalContexts = (
+    "Window",
+    "Worker",
+    "DedicatedWorker",
+    "ServiceWorker",
+    "Worklet",
+    "PaintWorklet",
+    "AudioWorklet"
+);
+
 # Toggle this to validate that the fast regular expression based "parsing" used
 # in this file produces the same results as the slower results produced by the
 # complete IDLParser.
@@ -246,7 +256,11 @@ foreach my $idlFileName (sort keys %idlFileNameHash) {
         if (!$exposedAttribute) {
             die "ERROR: No [Exposed] extended attribute specified for interface in $idlFileName";
         }
+        if ($exposedAttribute eq "*") {
+            $exposedAttribute = "(" . join(',', @supportedGlobalContexts) . ")";
+        }
         $exposedAttribute = substr($exposedAttribute, 1, -1) if substr($exposedAttribute, 0, 1) eq "(";
+
         my @globalContexts = split(",", $exposedAttribute);
         foreach my $globalContext (@globalContexts) {
             my ($attributeCode, $windowAliases) = GenerateConstructorAttributes($interfaceName, $extendedAttributes, $globalContext);

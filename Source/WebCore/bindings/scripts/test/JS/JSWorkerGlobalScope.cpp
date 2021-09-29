@@ -29,6 +29,7 @@
 #include "JSDOMExceptionHandling.h"
 #include "JSDOMGlobalObjectInlines.h"
 #include "JSDOMWrapperCache.h"
+#include "JSExposedStar.h"
 #include "JSExposedToWorkerAndWindow.h"
 #include "JSTestDefaultToJSONFilteredByExposed.h"
 #include "JSTestNode.h"
@@ -54,6 +55,7 @@ using namespace JSC;
 // Attributes
 
 static JSC_DECLARE_CUSTOM_GETTER(jsWorkerGlobalScopeConstructor);
+static JSC_DECLARE_CUSTOM_GETTER(jsWorkerGlobalScope_ExposedStarConstructor);
 static JSC_DECLARE_CUSTOM_GETTER(jsWorkerGlobalScope_ExposedToWorkerAndWindowConstructor);
 static JSC_DECLARE_CUSTOM_GETTER(jsWorkerGlobalScope_TestDefaultToJSONFilteredByExposedConstructor);
 static JSC_DECLARE_CUSTOM_GETTER(jsWorkerGlobalScope_TestNodeConstructor);
@@ -67,28 +69,29 @@ using JSWorkerGlobalScopeDOMConstructor = JSDOMConstructorNotConstructable<JSWor
 
 static const struct CompactHashIndex JSWorkerGlobalScopeTableIndex[18] = {
     { -1, -1 },
-    { 0, 16 },
-    { 5, -1 },
+    { 1, 16 },
+    { 6, -1 },
     { -1, -1 },
     { -1, -1 },
     { -1, -1 },
     { -1, -1 },
-    { -1, -1 },
-    { -1, -1 },
-    { 3, -1 },
-    { -1, -1 },
-    { -1, -1 },
-    { -1, -1 },
+    { 0, -1 },
     { -1, -1 },
     { 4, -1 },
     { -1, -1 },
-    { 1, 17 },
-    { 2, -1 },
+    { -1, -1 },
+    { -1, -1 },
+    { -1, -1 },
+    { 5, -1 },
+    { -1, -1 },
+    { 2, 17 },
+    { 3, -1 },
 };
 
 
 static const HashTableValue JSWorkerGlobalScopeTableValues[] =
 {
+    { "ExposedStar", static_cast<unsigned>(JSC::PropertyAttribute::DontEnum), NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsWorkerGlobalScope_ExposedStarConstructor), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(0) } },
     { "ExposedToWorkerAndWindow", static_cast<unsigned>(JSC::PropertyAttribute::DontEnum), NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsWorkerGlobalScope_ExposedToWorkerAndWindowConstructor), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(0) } },
     { "TestDefaultToJSONFilteredByExposed", static_cast<unsigned>(JSC::PropertyAttribute::DontEnum), NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsWorkerGlobalScope_TestDefaultToJSONFilteredByExposedConstructor), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(0) } },
     { "TestNode", static_cast<unsigned>(JSC::PropertyAttribute::DontEnum), NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsWorkerGlobalScope_TestNodeConstructor), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(0) } },
@@ -97,7 +100,7 @@ static const HashTableValue JSWorkerGlobalScopeTableValues[] =
     { "WorkerGlobalScope", static_cast<unsigned>(JSC::PropertyAttribute::DontEnum), NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsWorkerGlobalScope_WorkerGlobalScopeConstructor), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(0) } },
 };
 
-static const HashTable JSWorkerGlobalScopeTable = { 6, 15, true, JSWorkerGlobalScope::info(), JSWorkerGlobalScopeTableValues, JSWorkerGlobalScopeTableIndex };
+static const HashTable JSWorkerGlobalScopeTable = { 7, 15, true, JSWorkerGlobalScope::info(), JSWorkerGlobalScopeTableValues, JSWorkerGlobalScopeTableIndex };
 template<> const ClassInfo JSWorkerGlobalScopeDOMConstructor::s_info = { "WorkerGlobalScope", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSWorkerGlobalScopeDOMConstructor) };
 
 template<> JSValue JSWorkerGlobalScopeDOMConstructor::prototypeForStructure(JSC::VM& vm, const JSDOMGlobalObject& globalObject)
@@ -175,6 +178,17 @@ JSC_DEFINE_CUSTOM_GETTER(jsWorkerGlobalScopeConstructor, (JSGlobalObject* lexica
     if (UNLIKELY(!prototype))
         return throwVMTypeError(lexicalGlobalObject, throwScope);
     return JSValue::encode(JSWorkerGlobalScope::getConstructor(JSC::getVM(lexicalGlobalObject), prototype->globalObject()));
+}
+
+static inline JSValue jsWorkerGlobalScope_ExposedStarConstructorGetter(JSGlobalObject& lexicalGlobalObject, JSWorkerGlobalScope& thisObject)
+{
+    UNUSED_PARAM(lexicalGlobalObject);
+    return JSExposedStar::getConstructor(JSC::getVM(&lexicalGlobalObject), &thisObject);
+}
+
+JSC_DEFINE_CUSTOM_GETTER(jsWorkerGlobalScope_ExposedStarConstructor, (JSGlobalObject* lexicalGlobalObject, EncodedJSValue thisValue, PropertyName attributeName))
+{
+    return IDLAttribute<JSWorkerGlobalScope>::get<jsWorkerGlobalScope_ExposedStarConstructorGetter>(*lexicalGlobalObject, thisValue, attributeName);
 }
 
 static inline JSValue jsWorkerGlobalScope_ExposedToWorkerAndWindowConstructorGetter(JSGlobalObject& lexicalGlobalObject, JSWorkerGlobalScope& thisObject)

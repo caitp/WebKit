@@ -29,6 +29,7 @@
 #include "JSDOMExceptionHandling.h"
 #include "JSDOMGlobalObjectInlines.h"
 #include "JSDOMWrapperCache.h"
+#include "JSExposedStar.h"
 #include "JSWorkletGlobalScope.h"
 #include "ScriptExecutionContext.h"
 #include "WebCoreJSClientData.h"
@@ -49,24 +50,28 @@ using namespace JSC;
 // Attributes
 
 static JSC_DECLARE_CUSTOM_GETTER(jsWorkletGlobalScopeConstructor);
+static JSC_DECLARE_CUSTOM_GETTER(jsWorkletGlobalScope_ExposedStarConstructor);
 static JSC_DECLARE_CUSTOM_GETTER(jsWorkletGlobalScope_WorkletGlobalScopeConstructor);
 
 using JSWorkletGlobalScopeDOMConstructor = JSDOMConstructorNotConstructable<JSWorkletGlobalScope>;
 
 /* Hash table */
 
-static const struct CompactHashIndex JSWorkletGlobalScopeTableIndex[2] = {
-    { 0, -1 },
+static const struct CompactHashIndex JSWorkletGlobalScopeTableIndex[4] = {
     { -1, -1 },
+    { -1, -1 },
+    { 1, -1 },
+    { 0, -1 },
 };
 
 
 static const HashTableValue JSWorkletGlobalScopeTableValues[] =
 {
+    { "ExposedStar", static_cast<unsigned>(JSC::PropertyAttribute::DontEnum), NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsWorkletGlobalScope_ExposedStarConstructor), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(0) } },
     { "WorkletGlobalScope", static_cast<unsigned>(JSC::PropertyAttribute::DontEnum), NoIntrinsic, { (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsWorkletGlobalScope_WorkletGlobalScopeConstructor), (intptr_t) static_cast<PutPropertySlot::PutValueFunc>(0) } },
 };
 
-static const HashTable JSWorkletGlobalScopeTable = { 1, 1, true, JSWorkletGlobalScope::info(), JSWorkletGlobalScopeTableValues, JSWorkletGlobalScopeTableIndex };
+static const HashTable JSWorkletGlobalScopeTable = { 2, 3, true, JSWorkletGlobalScope::info(), JSWorkletGlobalScopeTableValues, JSWorkletGlobalScopeTableIndex };
 template<> const ClassInfo JSWorkletGlobalScopeDOMConstructor::s_info = { "WorkletGlobalScope", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSWorkletGlobalScopeDOMConstructor) };
 
 template<> JSValue JSWorkletGlobalScopeDOMConstructor::prototypeForStructure(JSC::VM& vm, const JSDOMGlobalObject& globalObject)
@@ -144,6 +149,17 @@ JSC_DEFINE_CUSTOM_GETTER(jsWorkletGlobalScopeConstructor, (JSGlobalObject* lexic
     if (UNLIKELY(!prototype))
         return throwVMTypeError(lexicalGlobalObject, throwScope);
     return JSValue::encode(JSWorkletGlobalScope::getConstructor(JSC::getVM(lexicalGlobalObject), prototype->globalObject()));
+}
+
+static inline JSValue jsWorkletGlobalScope_ExposedStarConstructorGetter(JSGlobalObject& lexicalGlobalObject, JSWorkletGlobalScope& thisObject)
+{
+    UNUSED_PARAM(lexicalGlobalObject);
+    return JSExposedStar::getConstructor(JSC::getVM(&lexicalGlobalObject), &thisObject);
+}
+
+JSC_DEFINE_CUSTOM_GETTER(jsWorkletGlobalScope_ExposedStarConstructor, (JSGlobalObject* lexicalGlobalObject, EncodedJSValue thisValue, PropertyName attributeName))
+{
+    return IDLAttribute<JSWorkletGlobalScope>::get<jsWorkletGlobalScope_ExposedStarConstructorGetter>(*lexicalGlobalObject, thisValue, attributeName);
 }
 
 static inline JSValue jsWorkletGlobalScope_WorkletGlobalScopeConstructorGetter(JSGlobalObject& lexicalGlobalObject, JSWorkletGlobalScope& thisObject)
