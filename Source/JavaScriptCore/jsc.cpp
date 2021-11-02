@@ -22,6 +22,7 @@
 
 #include "config.h"
 
+#include "APICast.h"
 #include "ArrayBuffer.h"
 #include "BigIntConstructor.h"
 #include "BytecodeCacheError.h"
@@ -44,6 +45,7 @@
 #include "JITSizeStatistics.h"
 #include "JSArray.h"
 #include "JSArrayBuffer.h"
+#include "JSBasePrivate.h"
 #include "JSBigInt.h"
 #include "JSFinalizationRegistry.h"
 #include "JSFunction.h"
@@ -86,6 +88,7 @@
 #include <wtf/MainThread.h>
 #include <wtf/MemoryPressureHandler.h>
 #include <wtf/MonotonicTime.h>
+#include <wtf/SafeStrerror.h>
 #include <wtf/Scope.h>
 #include <wtf/StringPrintStream.h>
 #include <wtf/URL.h>
@@ -207,9 +210,9 @@ static void checkException(GlobalObject*, bool isLastFile, bool hasException, JS
 class Message : public ThreadSafeRefCounted<Message> {
 public:
 #if ENABLE(WEBASSEMBLY)
-    using Content = Variant<ArrayBufferContents, Ref<Wasm::MemoryHandle>>;
+    using Content = std::variant<ArrayBufferContents, Ref<Wasm::MemoryHandle>>;
 #else
-    using Content = Variant<ArrayBufferContents>;
+    using Content = std::variant<ArrayBufferContents>;
 #endif
     Message(Content&&, int32_t);
     ~Message();
@@ -276,6 +279,7 @@ static JSC_DECLARE_HOST_FUNCTION(functionIsHeapBigInt);
 
 static JSC_DECLARE_HOST_FUNCTION(functionPrintStdOut);
 static JSC_DECLARE_HOST_FUNCTION(functionPrintStdErr);
+static JSC_DECLARE_HOST_FUNCTION(functionPrettyPrint);
 static JSC_DECLARE_HOST_FUNCTION(functionDebug);
 static JSC_DECLARE_HOST_FUNCTION(functionDescribe);
 static JSC_DECLARE_HOST_FUNCTION(functionDescribeArray);
@@ -285,6 +289,7 @@ static JSC_DECLARE_HOST_FUNCTION(functionGCAndSweep);
 static JSC_DECLARE_HOST_FUNCTION(functionFullGC);
 static JSC_DECLARE_HOST_FUNCTION(functionEdenGC);
 static JSC_DECLARE_HOST_FUNCTION(functionHeapSize);
+static JSC_DECLARE_HOST_FUNCTION(functionMemoryUsageStatistics);
 static JSC_DECLARE_HOST_FUNCTION(functionCreateMemoryFootprint);
 static JSC_DECLARE_HOST_FUNCTION(functionResetMemoryPeak);
 static JSC_DECLARE_HOST_FUNCTION(functionAddressOf);
@@ -360,6 +365,7 @@ static JSC_DECLARE_HOST_FUNCTION(functionDollarCreateRealm);
 static JSC_DECLARE_HOST_FUNCTION(functionDollarEvalScript);
 static JSC_DECLARE_HOST_FUNCTION(functionDollarGC);
 static JSC_DECLARE_HOST_FUNCTION(functionDollarClearKeptObjects);
+static JSC_DECLARE_HOST_FUNCTION(functionDollarGlobalObjectFor);
 static JSC_DECLARE_HOST_FUNCTION(functionDollarAgentStart);
 static JSC_DECLARE_HOST_FUNCTION(functionDollarAgentReceiveBroadcast);
 static JSC_DECLARE_HOST_FUNCTION(functionDollarAgentReport);
@@ -524,11 +530,13 @@ private:
         addFunction(vm, "describeArray", functionDescribeArray, 1);
         addFunction(vm, "print", functionPrintStdOut, 1);
         addFunction(vm, "printErr", functionPrintStdErr, 1);
+        addFunction(vm, "prettyPrint", functionPrettyPrint, 1);
         addFunction(vm, "quit", functionQuit, 0);
         addFunction(vm, "gc", functionGCAndSweep, 0);
         addFunction(vm, "fullGC", functionFullGC, 0);
         addFunction(vm, "edenGC", functionEdenGC, 0);
         addFunction(vm, "gcHeapSize", functionHeapSize, 0);
+        addFunction(vm, "memoryUsageStatistics", functionMemoryUsageStatistics, 0);
         addFunction(vm, "MemoryFootprint", functionCreateMemoryFootprint, 0);
         addFunction(vm, "resetMemoryPeak", functionResetMemoryPeak, 0);
         addFunction(vm, "addressOf", functionAddressOf, 1);
@@ -640,6 +648,7 @@ private:
         addFunction(vm, dollar, "evalScript", functionDollarEvalScript, 1, static_cast<unsigned>(PropertyAttribute::None));
         addFunction(vm, dollar, "gc", functionDollarGC, 0, static_cast<unsigned>(PropertyAttribute::None));
         addFunction(vm, dollar, "clearKeptObjects", functionDollarClearKeptObjects, 0, static_cast<unsigned>(PropertyAttribute::None));
+        addFunction(vm, dollar, "globalObjectFor", functionDollarGlobalObjectFor, 1, static_cast<unsigned>(PropertyAttribute::None));
         
         dollar->putDirect(vm, Identifier::fromString(vm, "global"), globalThis());
         dollar->putDirectCustomAccessor(vm, Identifier::fromString(vm, "IsHTMLDDA"),
@@ -745,6 +754,7 @@ const GlobalObjectMethodTable GlobalObject::s_globalObjectMethodTable = {
     &reportUncaughtExceptionAtEventLoop,
     &currentScriptExecutionOwner,
     &scriptExecutionStatus,
+    &reportViolationForUnsafeEval,
     nullptr, // defaultLanguage
     nullptr, // compileStreaming
     nullptr, // instantinateStreaming
@@ -1234,9 +1244,10 @@ JSObject* GlobalObject::moduleLoaderCreateImportMetaProperties(JSGlobalObject* g
     return metaProperties;
 }
 
-static CString cStringFromViewWithString(JSGlobalObject* globalObject, ThrowScope& scope, StringViewWithUnderlyingString& viewWithString)
+template <typename T>
+static CString toCString(JSGlobalObject* globalObject, ThrowScope& scope, T& string)
 {
-    Expected<CString, UTF8ConversionError> expectedString = viewWithString.view.tryGetUtf8();
+    Expected<CString, UTF8ConversionError> expectedString = string.tryGetUtf8();
     if (expectedString)
         return expectedString.value();
     switch (expectedString.error()) {
@@ -1255,7 +1266,7 @@ static CString cStringFromViewWithString(JSGlobalObject* globalObject, ThrowScop
     return { };
 }
 
-static EncodedJSValue printInternal(JSGlobalObject* globalObject, CallFrame* callFrame, FILE* out)
+static EncodedJSValue printInternal(JSGlobalObject* globalObject, CallFrame* callFrame, FILE* out, bool pretty)
 {
     VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
@@ -1273,13 +1284,11 @@ static EncodedJSValue printInternal(JSGlobalObject* globalObject, CallFrame* cal
             if (EOF == fputc(' ', out))
                 goto fail;
 
-        auto* jsString = callFrame->uncheckedArgument(i).toString(globalObject);
+        String string = pretty ? callFrame->uncheckedArgument(i).toWTFStringForConsole(globalObject) : callFrame->uncheckedArgument(i).toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, { });
-        auto viewWithString = jsString->viewWithUnderlyingString(globalObject);
+        auto cString = toCString(globalObject, scope, string);
         RETURN_IF_EXCEPTION(scope, { });
-        auto string = cStringFromViewWithString(globalObject, scope, viewWithString);
-        RETURN_IF_EXCEPTION(scope, { });
-        fwrite(string.data(), sizeof(char), string.length(), out);
+        fwrite(cString.data(), sizeof(char), cString.length(), out);
         if (ferror(out))
             goto fail;
     }
@@ -1292,12 +1301,17 @@ fail:
 
 JSC_DEFINE_HOST_FUNCTION(functionPrintStdOut, (JSGlobalObject* globalObject, CallFrame* callFrame))
 {
-    return printInternal(globalObject, callFrame, stdout);
+    return printInternal(globalObject, callFrame, stdout, false);
 }
 
 JSC_DEFINE_HOST_FUNCTION(functionPrintStdErr, (JSGlobalObject* globalObject, CallFrame* callFrame))
 {
-    return printInternal(globalObject, callFrame, stderr);
+    return printInternal(globalObject, callFrame, stderr, false);
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionPrettyPrint, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    return printInternal(globalObject, callFrame, stdout, true);
 }
 
 JSC_DEFINE_HOST_FUNCTION(functionDebug, (JSGlobalObject* globalObject, CallFrame* callFrame))
@@ -1308,7 +1322,7 @@ JSC_DEFINE_HOST_FUNCTION(functionDebug, (JSGlobalObject* globalObject, CallFrame
     RETURN_IF_EXCEPTION(scope, { });
     auto viewWithString = jsString->viewWithUnderlyingString(globalObject);
     RETURN_IF_EXCEPTION(scope, { });
-    auto string = cStringFromViewWithString(globalObject, scope, viewWithString);
+    auto string = toCString(globalObject, scope, viewWithString.view);
     RETURN_IF_EXCEPTION(scope, { });
     fputs("--> ", stderr);
     fwrite(string.data(), sizeof(char), string.length(), stderr);
@@ -1460,6 +1474,12 @@ private:
 };
 
 const ClassInfo JSCMemoryFootprint::s_info = { "MemoryFootprint", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSCMemoryFootprint) };
+
+JSC_DEFINE_HOST_FUNCTION(functionMemoryUsageStatistics, (JSGlobalObject* globalObject, CallFrame*))
+{
+    auto contextRef = toRef(globalObject);
+    return JSValue::encode(toJS(JSGetMemoryUsageStatistics(contextRef)));
+}
 
 JSC_DEFINE_HOST_FUNCTION(functionCreateMemoryFootprint, (JSGlobalObject* globalObject, CallFrame*))
 {
@@ -1800,7 +1820,7 @@ JSC_DEFINE_HOST_FUNCTION(functionOpenFile, (JSGlobalObject* globalObject, CallFr
 
     FILE* descriptor = fopen(filePath.fileSystemPath().ascii().data(), "r");
     if (!descriptor)
-        return throwVMException(globalObject, scope, createURIError(globalObject, makeString("Could not open file at "_s, filePath.string(), " fopen had error: "_s, strerror(errno))));
+        return throwVMException(globalObject, scope, createURIError(globalObject, makeString("Could not open file at "_s, filePath.string(), " fopen had error: "_s, safeStrerror(errno).data())));
 
     RELEASE_AND_RETURN(scope, JSValue::encode(JSFileDescriptor::create(vm, globalObject, WTFMove(descriptor))));
 }
@@ -2049,6 +2069,20 @@ JSC_DEFINE_HOST_FUNCTION(functionDollarClearKeptObjects, (JSGlobalObject* global
     return JSValue::encode(jsUndefined());
 }
 
+JSC_DEFINE_HOST_FUNCTION(functionDollarGlobalObjectFor, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    VM& vm = globalObject->vm();
+    auto scope = DECLARE_THROW_SCOPE(vm);
+
+    if (callFrame->argumentCount() < 1)
+        return JSValue::encode(throwException(globalObject, scope, createError(globalObject, "Not enough arguments"_s)));
+    JSValue arg = callFrame->argument(0);
+    if (arg.isCell())
+        return JSValue::encode(arg.asCell()->structure(vm)->globalObject()->globalThis());
+
+    return JSValue::encode(jsUndefined());
+}
+
 JSC_DEFINE_HOST_FUNCTION(functionDollarAgentStart, (JSGlobalObject* globalObject, CallFrame* callFrame))
 {
     VM& vm = globalObject->vm();
@@ -2131,16 +2165,16 @@ JSC_DEFINE_HOST_FUNCTION(functionDollarAgentReceiveBroadcast, (JSGlobalObject* g
 
     auto content = message->releaseContents();
     JSValue result = ([&]() -> JSValue {
-        if (WTF::holds_alternative<ArrayBufferContents>(content)) {
-            auto nativeBuffer = ArrayBuffer::create(WTF::get<ArrayBufferContents>(WTFMove(content)));
+        if (std::holds_alternative<ArrayBufferContents>(content)) {
+            auto nativeBuffer = ArrayBuffer::create(std::get<ArrayBufferContents>(WTFMove(content)));
             ArrayBufferSharingMode sharingMode = nativeBuffer->sharingMode();
             return JSArrayBuffer::create(vm, globalObject->arrayBufferStructure(sharingMode), WTFMove(nativeBuffer));
         }
 #if ENABLE(WEBASSEMBLY)
-        if (WTF::holds_alternative<Ref<Wasm::MemoryHandle>>(content)) {
+        if (std::holds_alternative<Ref<Wasm::MemoryHandle>>(content)) {
             JSWebAssemblyMemory* jsMemory = JSC::JSWebAssemblyMemory::tryCreate(globalObject, vm, globalObject->webAssemblyMemoryStructure());
             scope.releaseAssertNoException();
-            Ref<Wasm::Memory> memory = Wasm::Memory::create(WTF::get<Ref<Wasm::MemoryHandle>>(WTFMove(content)),
+            Ref<Wasm::Memory> memory = Wasm::Memory::create(std::get<Ref<Wasm::MemoryHandle>>(WTFMove(content)),
                 [&vm] (Wasm::Memory::NotifyPressure) { vm.heap.collectAsync(CollectionScope::Full); },
                 [&vm] (Wasm::Memory::SyncTryToReclaim) { vm.heap.collectSync(CollectionScope::Full); },
                 [&vm, jsMemory] (Wasm::Memory::GrowSuccess, Wasm::PageCount oldPageCount, Wasm::PageCount newPageCount) { jsMemory->growSuccessCallback(vm, oldPageCount, newPageCount); });
@@ -3261,7 +3295,7 @@ static void runInteractive(GlobalObject* globalObject)
             fputs("Exception: ", stdout);
             utf8 = evaluationException->value().toWTFString(globalObject).tryGetUtf8();
         } else
-            utf8 = returnValue.toWTFString(globalObject).tryGetUtf8();
+            utf8 = returnValue.toWTFStringForConsole(globalObject).tryGetUtf8();
 
         CString result;
         if (utf8)

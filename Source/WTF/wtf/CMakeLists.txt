@@ -116,7 +116,6 @@ set(WTF_PUBLIC_HEADERS
     KeyValuePair.h
     LEBDecoder.h
     Language.h
-    LeadingZeroBitCount.h
     LikelyDenseUnsignedIntegerSet.h
     ListDump.h
     ListHashSet.h
@@ -230,6 +229,7 @@ set(WTF_PUBLIC_HEADERS
     RobinHoodHashTable.h
     RunLoop.h
     SHA1.h
+    SafeStrerror.h
     SaturatedArithmetic.h
     SchedulePair.h
     Scope.h
@@ -306,7 +306,6 @@ set(WTF_PUBLIC_HEADERS
     UnsafePointer.h
     VMTags.h
     ValueCheck.h
-    Variant.h
     Vector.h
     VectorHash.h
     VectorTraits.h
@@ -425,10 +424,10 @@ set(WTF_SOURCES
     GregorianDateTime.cpp
     HashTable.cpp
     HexNumber.cpp
+    Int128.cpp
     JSONValues.cpp
     JSValueMalloc.cpp
     Language.cpp
-    LeadingZeroBitCount.cpp
     LikelyDenseUnsignedIntegerSet.cpp
     Lock.cpp
     LockedPrintStream.cpp
@@ -460,6 +459,7 @@ set(WTF_SOURCES
     RefCountedLeakCounter.cpp
     RunLoop.cpp
     SHA1.cpp
+    SafeStrerror.cpp
     Seconds.cpp
     SegmentedVector.cpp
     SixCharacterHash.cpp

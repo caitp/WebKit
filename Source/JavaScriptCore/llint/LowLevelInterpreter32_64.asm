@@ -79,8 +79,11 @@ end
 # After calling, calling bytecode is claiming input registers are not used.
 macro dispatchAfterCall(size, opcodeStruct, valueProfileName, dstVirtualRegister, dispatch)
     loadi ArgumentCountIncludingThis + TagOffset[cfr], PC
-    loadp CodeBlock[cfr], PB
-    loadp CodeBlock::m_instructionsRawPointer[PB], PB
+    if C_LOOP or C_LOOP_WIN
+        # On non C_LOOP builds, CSR restore takes care of this.
+        loadp CodeBlock[cfr], PB
+        loadp CodeBlock::m_instructionsRawPointer[PB], PB
+    end
     get(size, opcodeStruct, dstVirtualRegister, t3)
     storei r1, TagOffset[cfr, t3, 8]
     storei r0, PayloadOffset[cfr, t3, 8]
@@ -499,6 +502,9 @@ macro checkSwitchToJITForLoop()
             cCall2(_llint_loop_osr)
             btpz r0, .recover
             move r1, sp
+
+            loadBaselineJITConstantPool()
+
             jmp r0
         .recover:
             loadi ArgumentCountIncludingThis + TagOffset[cfr], PC
@@ -1112,7 +1118,7 @@ macro binaryOpCustomStore(opcodeName, opcodeStruct, integerOperationAndStore, do
         bineq t3, Int32Tag, .op2NotInt
         updateBinaryArithProfile(size, opcodeStruct, ArithProfileIntInt, t5, t2)
         get(m_dst, t2)
-        integerOperationAndStore(t3, t1, t0, .slow, t2)
+        integerOperationAndStore(t3, t0, t1, .slow, t2)
         dispatch()
 
     .op1NotInt:
@@ -1120,27 +1126,27 @@ macro binaryOpCustomStore(opcodeName, opcodeStruct, integerOperationAndStore, do
         bia t2, LowestTag, .slow
         bib t3, LowestTag, .op1NotIntOp2Double
         bineq t3, Int32Tag, .slow
-        updateBinaryArithProfile(size, opcodeStruct, ArithProfileNumberInt, t5, t4)
         ci2ds t1, ft1
+        updateBinaryArithProfile(size, opcodeStruct, ArithProfileNumberInt, t5, t1)
         jmp .op1NotIntReady
     .op1NotIntOp2Double:
         fii2d t1, t3, ft1
-        updateBinaryArithProfile(size, opcodeStruct, ArithProfileNumberNumber, t5, t4)
+        updateBinaryArithProfile(size, opcodeStruct, ArithProfileNumberNumber, t5, t1)
     .op1NotIntReady:
         get(m_dst, t1)
         fii2d t0, t2, ft0
-        doubleOperation(ft1, ft0)
+        doubleOperation(ft0, ft1, ft0)
         stored ft0, [cfr, t1, 8]
         dispatch()
 
     .op2NotInt:
         # First operand is definitely an int, the second operand is definitely not.
-        get(m_dst, t2)
         bia t3, LowestTag, .slow
-        updateBinaryArithProfile(size, opcodeStruct, ArithProfileIntNumber, t5, t4)
+        updateBinaryArithProfile(size, opcodeStruct, ArithProfileIntNumber, t5, t2)
+        get(m_dst, t2)
         ci2ds t0, ft0
         fii2d t1, t3, ft1
-        doubleOperation(ft1, ft0)
+        doubleOperation(ft0, ft1, ft0)
         stored ft0, [cfr, t2, 8]
         dispatch()
 
@@ -1152,53 +1158,53 @@ end
 
 macro binaryOp(opcodeName, opcodeStruct, integerOperation, doubleOperation)
     binaryOpCustomStore(opcodeName, opcodeStruct,
-        macro (int32Tag, left, right, slow, index)
-            integerOperation(left, right, slow)
+        macro (int32Tag, lhs, rhs, slow, index)
+            integerOperation(lhs, rhs, slow)
             storei int32Tag, TagOffset[cfr, index, 8]
-            storei right, PayloadOffset[cfr, index, 8]
+            storei lhs, PayloadOffset[cfr, index, 8]
         end,
         doubleOperation)
 end
 
 binaryOp(add, OpAdd,
-    macro (left, right, slow) baddio left, right, slow end,
-    macro (left, right) addd left, right end)
+    macro (lhs, rhs, slow) baddio rhs, lhs, slow end,
+    macro (left, right, result) addd left, right, result end)
 
 
 binaryOpCustomStore(mul, OpMul,
-    macro (int32Tag, left, right, slow, index)
+    macro (int32Tag, lhs, rhs, slow, index)
         const scratch = int32Tag   # We know that we can reuse the int32Tag register since it has a constant.
-        move right, scratch
-        bmulio left, scratch, slow
+        move lhs, scratch
+        bmulio rhs, scratch, slow
         btinz scratch, .done
-        bilt left, 0, slow
-        bilt right, 0, slow
+        bilt rhs, 0, slow
+        bilt lhs, 0, slow
     .done:
         storei Int32Tag, TagOffset[cfr, index, 8]
         storei scratch, PayloadOffset[cfr, index, 8]
     end,
-    macro (left, right) muld left, right end)
+    macro (left, right, result) muld left, right, result end)
 
 
 binaryOp(sub, OpSub,
-    macro (left, right, slow) bsubio left, right, slow end,
-    macro (left, right) subd left, right end)
+    macro (lhs, rhs, slow) bsubio rhs, lhs, slow end,
+    macro (left, right, result) subd left, right, result end)
 
 
 binaryOpCustomStore(div, OpDiv,
-    macro (int32Tag, left, right, slow, index)
-        ci2ds left, ft0
-        ci2ds right, ft1
+    macro (int32Tag, lhs, rhs, slow, index)
+        ci2ds rhs, ft0
+        ci2ds lhs, ft1
         divd ft0, ft1
-        bcd2i ft1, right, .notInt
+        bcd2i ft1, lhs, .notInt
         storei int32Tag, TagOffset[cfr, index, 8]
-        storei right, PayloadOffset[cfr, index, 8]
+        storei lhs, PayloadOffset[cfr, index, 8]
         jmp .done
     .notInt:
         stored ft1, [cfr, index, 8]
     .done:
     end,
-    macro (left, right) divd left, right end)
+    macro (left, right, result) divd left, right, result end)
 
 
 llintOpWithReturn(op_unsigned, OpUnsigned, macro (size, get, dispatch, return)
@@ -1220,7 +1226,7 @@ macro commonBitOp(opKind, opcodeName, opcodeStruct, operation)
         loadConstantOrVariable2Reg(size, t0, t2, t0)
         bineq t3, Int32Tag, .slow
         bineq t2, Int32Tag, .slow
-        operation(t1, t0)
+        operation(t0, t1)
         return (t3, t0)
 
     .slow:
@@ -1239,24 +1245,24 @@ end
 
 
 bitOpProfiled(lshift, OpLshift,
-    macro (left, right) lshifti left, right end)
+    macro (lhs, rhs) lshifti rhs, lhs end)
 
 
 bitOp(rshift, OpRshift,
-    macro (left, right) rshifti left, right end)
+    macro (lhs, rhs) rshifti rhs, lhs end)
 
 
 bitOp(urshift, OpUrshift,
-    macro (left, right) urshifti left, right end)
+    macro (lhs, rhs) urshifti rhs, lhs end)
 
 bitOpProfiled(bitxor, OpBitxor,
-    macro (left, right) xori left, right end)
+    macro (lhs, rhs) xori rhs, lhs end)
 
 bitOpProfiled(bitand, OpBitand,
-    macro (left, right) andi left, right end)
+    macro (lhs, rhs) andi rhs, lhs end)
 
 bitOpProfiled(bitor, OpBitor,
-    macro (left, right) ori left, right end)
+    macro (lhs, rhs) ori rhs, lhs end)
 
 llintOpWithProfile(op_bitnot, OpBitnot, macro (size, get, dispatch, return)
     get(m_operand, t0)
@@ -1621,6 +1627,10 @@ llintOpWithMetadata(op_get_by_val, OpGetByVal, macro (size, get, dispatch, metad
         dispatch()
     end
 
+    macro setLargeTypedArray()
+        crash()
+    end
+
     metadata(t5, t2)
     get(m_base, t2)
     loadConstantOrVariablePayload(size, t2, CellTag, t0, .opGetByValSlow)
@@ -1666,7 +1676,7 @@ llintOpWithMetadata(op_get_by_val, OpGetByVal, macro (size, get, dispatch, metad
     dispatch()
 
 .opGetByValNotIndexedStorage:
-    getByValTypedArray(t0, t1, finishIntGetByVal, finishDoubleGetByVal, .opGetByValSlow)
+    getByValTypedArray(t0, t1, finishIntGetByVal, finishDoubleGetByVal, setLargeTypedArray, .opGetByValSlow)
 
 .opGetByValSlow:
     callSlowPath(_llint_slow_path_get_by_val)

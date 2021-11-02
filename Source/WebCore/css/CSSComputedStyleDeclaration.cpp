@@ -799,7 +799,7 @@ Ref<CSSValue> ComputedStyleExtractor::valueForFilter(const RenderStyle& style, c
                 DropShadowFilterOperation& dropShadowOperation = downcast<DropShadowFilterOperation>(filterOperation);
                 filterValue = CSSFunctionValue::create(CSSValueDropShadow);
                 // We want our computed style to look like that of a text shadow (has neither spread nor inset style).
-                ShadowData shadowData = ShadowData(dropShadowOperation.location(), dropShadowOperation.stdDeviation(), 0, ShadowStyle::Normal, false, dropShadowOperation.color());
+                ShadowData shadowData = ShadowData({ Length(dropShadowOperation.location().x(), LengthType::Fixed), Length(dropShadowOperation.location().y(), LengthType::Fixed) }, Length(dropShadowOperation.stdDeviation(), LengthType::Fixed), Length(0, LengthType::Fixed), ShadowStyle::Normal, false, dropShadowOperation.color());
                 filterValue->append(valueForShadow(&shadowData, CSSPropertyTextShadow, style, adjust));
                 break;
             }
@@ -1440,6 +1440,22 @@ static Element* styleElementForNode(Node* node)
     return composedTreeAncestors(*node).first();
 }
 
+static Ref<CSSValue> valueForPosition(const RenderStyle& style, const LengthPoint& position)
+{
+    auto list = CSSValueList::createSpaceSeparated();
+    list->append(zoomAdjustedPixelValueForLength(position.x(), style));
+    list->append(zoomAdjustedPixelValueForLength(position.y(), style));
+    return list;
+}
+
+static Ref<CSSValue> valueForPositionOrAuto(const RenderStyle& style, const LengthPoint& position)
+{
+    if (position.x().isAuto() && position.y().isAuto())
+        return CSSValuePool::singleton().createIdentifierValue(CSSValueAuto);
+
+    return valueForPosition(style, position);
+}
+
 ComputedStyleExtractor::ComputedStyleExtractor(Node* node, bool allowVisitedStyle, PseudoId pseudoElementSpecifier)
     : m_element(styleElementForNode(node))
     , m_pseudoElementSpecifier(pseudoElementSpecifier)
@@ -1841,8 +1857,6 @@ static Ref<CSSPrimitiveValue> fontPaletteFromStyle(const RenderStyle& style)
 {
     auto fontPalette = style.fontDescription().fontPalette();
     switch (fontPalette.type) {
-    case FontPalette::Type::None:
-        return CSSValuePool::singleton().createIdentifierValue(CSSValueNone);
     case FontPalette::Type::Normal:
         return CSSValuePool::singleton().createIdentifierValue(CSSValueNormal);
     case FontPalette::Type::Light:
@@ -1852,6 +1866,7 @@ static Ref<CSSPrimitiveValue> fontPaletteFromStyle(const RenderStyle& style)
     case FontPalette::Type::Custom:
         return CSSValuePool::singleton().createCustomIdent(fontPalette.identifier);
     }
+    RELEASE_ASSERT_NOT_REACHED();
 }
 
 Ref<CSSPrimitiveValue> ComputedStyleExtractor::fontNonKeywordWeightFromStyleValue(FontSelectionValue weight)
@@ -2627,7 +2642,13 @@ RefPtr<CSSValue> ComputedStyleExtractor::valueForPropertyInStyle(const RenderSty
         case CSSPropertyInternalTextAutosizingStatus:
 #endif
             break;
-
+        case CSSPropertyAccentColor: {
+            if (!m_element->document().settings().accentColorEnabled())
+                return nullptr;
+            if (style.hasAutoAccentColor())
+                return cssValuePool.createIdentifierValue(CSSValueAuto);
+            return currentColorOrValidColor(&style, style.accentColor());
+        }
         case CSSPropertyBackgroundColor:
             return m_allowVisitedStyle ? cssValuePool.createColorValue(style.visitedDependentColor(CSSPropertyBackgroundColor)) : currentColorOrValidColor(&style, style.backgroundColor());
         case CSSPropertyBackgroundImage:
@@ -2986,10 +3007,10 @@ RefPtr<CSSValue> ComputedStyleExtractor::valueForPropertyInStyle(const RenderSty
         case CSSPropertyGridAutoFlow: {
             auto list = CSSValueList::createSpaceSeparated();
             ASSERT(style.isGridAutoFlowDirectionRow() || style.isGridAutoFlowDirectionColumn());
-            if (style.isGridAutoFlowDirectionRow())
-                list->append(cssValuePool.createIdentifierValue(CSSValueRow));
-            else
+            if (style.isGridAutoFlowDirectionColumn())
                 list->append(cssValuePool.createIdentifierValue(CSSValueColumn));
+            else if (!style.isGridAutoFlowAlgorithmDense())
+                list->append(cssValuePool.createIdentifierValue(CSSValueRow));
 
             if (style.isGridAutoFlowAlgorithmDense())
                 list->append(cssValuePool.createIdentifierValue(CSSValueDense));
@@ -3156,12 +3177,14 @@ RefPtr<CSSValue> ComputedStyleExtractor::valueForPropertyInStyle(const RenderSty
             return zoomAdjustedPixelValueForLength(style.minWidth(), style);
         case CSSPropertyObjectFit:
             return cssValuePool.createValue(style.objectFit());
-        case CSSPropertyObjectPosition: {
-            auto list = CSSValueList::createSpaceSeparated();
-            list->append(zoomAdjustedPixelValueForLength(style.objectPosition().x(), style));
-            list->append(zoomAdjustedPixelValueForLength(style.objectPosition().y(), style));
-            return list;
-        }
+        case CSSPropertyObjectPosition:
+            return valueForPosition(style, style.objectPosition());
+        case CSSPropertyOffsetDistance:
+            return cssValuePool.createValue(style.offsetDistance(), style);
+        case CSSPropertyOffsetPosition:
+            return valueForPositionOrAuto(style, style.offsetPosition());
+        case CSSPropertyOffsetAnchor:
+            return valueForPositionOrAuto(style, style.offsetAnchor());
         case CSSPropertyOpacity:
             return cssValuePool.createValue(style.opacity(), CSSUnitType::CSS_NUMBER);
         case CSSPropertyOrphans:
@@ -3510,7 +3533,7 @@ RefPtr<CSSValue> ComputedStyleExtractor::valueForPropertyInStyle(const RenderSty
         }
         case CSSPropertyAnimationTimingFunction:
             return timingFunctionValue(style.animations());
-        case CSSPropertyWebkitAppearance:
+        case CSSPropertyAppearance:
             return cssValuePool.createValue(style.appearance());
         case CSSPropertyAspectRatio:
             if (!m_element->document().settings().aspectRatioEnabled())
@@ -3549,6 +3572,8 @@ RefPtr<CSSValue> ComputedStyleExtractor::valueForPropertyInStyle(const RenderSty
                 list->append(cssValuePool.createIdentifierValue(CSSValueSize));
             if (containment & Containment::Layout)
                 list->append(cssValuePool.createIdentifierValue(CSSValueLayout));
+            if (containment & Containment::Style)
+                list->append(cssValuePool.createIdentifierValue(CSSValueStyle));
             if (containment & Containment::Paint)
                 list->append(cssValuePool.createIdentifierValue(CSSValuePaint));
             return list;
@@ -3768,17 +3793,17 @@ RefPtr<CSSValue> ComputedStyleExtractor::valueForPropertyInStyle(const RenderSty
             auto* operation = style.clipPath();
             if (!operation)
                 return cssValuePool.createIdentifierValue(CSSValueNone);
-            if (is<ReferenceClipPathOperation>(*operation))
-                return CSSPrimitiveValue::create(downcast<ReferenceClipPathOperation>(*operation).url(), CSSUnitType::CSS_URI);
+            if (is<ReferencePathOperation>(*operation))
+                return CSSPrimitiveValue::create(downcast<ReferencePathOperation>(*operation).url(), CSSUnitType::CSS_URI);
             auto list = CSSValueList::createSpaceSeparated();
-            if (is<ShapeClipPathOperation>(*operation)) {
-                auto& shapeOperation = downcast<ShapeClipPathOperation>(*operation);
+            if (is<ShapePathOperation>(*operation)) {
+                auto& shapeOperation = downcast<ShapePathOperation>(*operation);
                 list->append(valueForBasicShape(style, shapeOperation.basicShape()));
                 if (shapeOperation.referenceBox() != CSSBoxType::BoxMissing)
                     list->append(cssValuePool.createValue(shapeOperation.referenceBox()));
             }
-            if (is<BoxClipPathOperation>(*operation))
-                list->append(cssValuePool.createValue(downcast<BoxClipPathOperation>(*operation).referenceBox()));
+            if (is<BoxPathOperation>(*operation))
+                list->append(cssValuePool.createValue(downcast<BoxPathOperation>(*operation).referenceBox()));
             return list;
         }
         case CSSPropertyShapeMargin:
@@ -4103,7 +4128,6 @@ RefPtr<CSSValue> ComputedStyleExtractor::valueForPropertyInStyle(const RenderSty
         case CSSPropertyBufferedRendering:
         case CSSPropertyClipRule:
         case CSSPropertyMask:
-        case CSSPropertyEnableBackground:
         case CSSPropertyFloodColor:
         case CSSPropertyFloodOpacity:
         case CSSPropertyLightingColor:
@@ -4111,8 +4135,6 @@ RefPtr<CSSValue> ComputedStyleExtractor::valueForPropertyInStyle(const RenderSty
         case CSSPropertyStopOpacity:
         case CSSPropertyColorInterpolation:
         case CSSPropertyColorInterpolationFilters:
-        case CSSPropertyColorProfile:
-        case CSSPropertyColorRendering:
         case CSSPropertyFill:
         case CSSPropertyFillOpacity:
         case CSSPropertyFillRule:

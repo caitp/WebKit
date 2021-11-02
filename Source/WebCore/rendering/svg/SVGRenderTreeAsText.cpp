@@ -34,22 +34,25 @@
 #include "NodeRenderStyle.h"
 #include "RenderImage.h"
 #include "RenderIterator.h"
-#include "RenderSVGGradientStop.h"
+#include "RenderSVGGradientStopInlines.h"
 #include "RenderSVGImage.h"
+#include "RenderSVGInlineText.h"
 #include "RenderSVGPath.h"
-#include "RenderSVGResourceClipper.h"
-#include "RenderSVGResourceFilter.h"
-#include "RenderSVGResourceLinearGradient.h"
-#include "RenderSVGResourceMarker.h"
-#include "RenderSVGResourceMasker.h"
+#include "RenderSVGResourceClipperInlines.h"
+#include "RenderSVGResourceFilterInlines.h"
+#include "RenderSVGResourceLinearGradientInlines.h"
+#include "RenderSVGResourceMarkerInlines.h"
+#include "RenderSVGResourceMaskerInlines.h"
 #include "RenderSVGResourcePattern.h"
-#include "RenderSVGResourceRadialGradient.h"
+#include "RenderSVGResourceRadialGradientInlines.h"
 #include "RenderSVGResourceSolidColor.h"
 #include "RenderSVGRoot.h"
+#include "RenderSVGShapeInlines.h"
 #include "RenderSVGText.h"
 #include "SVGCircleElement.h"
+#include "SVGElementTypeHelpers.h"
 #include "SVGEllipseElement.h"
-#include "SVGInlineTextBox.h"
+#include "SVGInlineTextBoxInlines.h"
 #include "SVGLineElement.h"
 #include "SVGPathElement.h"
 #include "SVGPathUtilities.h"
@@ -569,8 +572,8 @@ void writeResources(TextStream& ts, const RenderObject& renderer, OptionSet<Rend
             ts << " " << masker->resourceBoundingBox(renderer) << "\n";
         }
     }
-    if (style.clipPath() && is<ReferenceClipPathOperation>(style.clipPath())) {
-        auto resourceClipPath = downcast<ReferenceClipPathOperation>(style.clipPath());
+    if (style.clipPath() && is<ReferencePathOperation>(style.clipPath())) {
+        auto resourceClipPath = downcast<ReferencePathOperation>(style.clipPath());
         AtomString id = resourceClipPath->fragment();
         if (RenderSVGResourceClipper* clipper = getRenderSVGResourceById<RenderSVGResourceClipper>(renderer.document(), id)) {
             ts << indent << " ";

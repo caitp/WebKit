@@ -33,7 +33,7 @@ messages -> WebPage LegacyReceiver {
     SendCOEPCORPViolation(WebCore::FrameIdentifier frameID, struct WebCore::SecurityOriginData embedderOrigin, String endpoint, enum:bool WebCore::COEPDisposition disposition, enum:uint8_t WebCore::FetchOptions::Destination destination, URL blockedURL)
     SendViolationReportWhenNavigatingToCOOPResponse(WebCore::FrameIdentifier frameID, struct WebCore::CrossOriginOpenerPolicy coop, enum:bool WebCore::COOPDisposition disposition, URL coopURL, URL previousResponseURL, struct WebCore::SecurityOriginData coopOrigin, struct WebCore::SecurityOriginData previousResponseOrigin, String referrer, String userAgent, String reportToHeaderValue)
     SendViolationReportWhenNavigatingAwayFromCOOPResponse(WebCore::FrameIdentifier frameID, struct WebCore::CrossOriginOpenerPolicy coop, enum:bool WebCore::COOPDisposition disposition, URL coopURL, URL nextResponseURL, struct WebCore::SecurityOriginData coopOrigin, struct WebCore::SecurityOriginData nextResponseOrigin, bool isCOOPResponseNavigationSource, String userAgent)
-    EnqueueSecurityPolicyViolationEvent(WebCore::FrameIdentifier frameID, WebCore::SecurityPolicyViolationEvent::Init eventInit)
+    EnqueueSecurityPolicyViolationEvent(WebCore::FrameIdentifier frameID, struct WebCore::SecurityPolicyViolationEventInit eventInit)
 
     TestProcessIncomingSyncMessagesWhenWaitingForSyncReply() -> (bool handled) Synchronous
 
@@ -53,10 +53,11 @@ messages -> WebPage LegacyReceiver {
     MouseEvent(WebKit::WebMouseEvent event, std::optional<Vector<WebKit::SandboxExtension::Handle>> sandboxExtensions)
 #if PLATFORM(IOS_FAMILY)
     SetViewportConfigurationViewLayoutSize(WebCore::FloatSize size, double scaleFactor, double minimumEffectiveDeviceWidth)
+    SetMinimumUnobscuredSize(WebCore::FloatSize size)
     SetMaximumUnobscuredSize(WebCore::FloatSize size)
     SetDeviceOrientation(int32_t deviceOrientation)
     SetOverrideViewportArguments(std::optional<WebCore::ViewportArguments> arguments)
-    DynamicViewportSizeUpdate(WebCore::FloatSize viewLayoutSize, WebCore::FloatSize maximumUnobscuredSize, WebCore::FloatRect targetExposedContentRect, WebCore::FloatRect targetUnobscuredRect, WebCore::FloatRect targetUnobscuredRectInScrollViewCoordinates, WebCore::RectEdges<float> targetUnobscuredSafeAreaInsets, double scale, int32_t deviceOrientation, double minimumEffectiveDeviceWidth, uint64_t dynamicViewportSizeUpdateID)
+    DynamicViewportSizeUpdate(WebCore::FloatSize viewLayoutSize, WebCore::FloatSize minimumUnobscuredSize, WebCore::FloatSize maximumUnobscuredSize, WebCore::FloatRect targetExposedContentRect, WebCore::FloatRect targetUnobscuredRect, WebCore::FloatRect targetUnobscuredRectInScrollViewCoordinates, WebCore::RectEdges<float> targetUnobscuredSafeAreaInsets, double scale, int32_t deviceOrientation, double minimumEffectiveDeviceWidth, uint64_t dynamicViewportSizeUpdateID)
     
     SetScreenIsBeingCaptured(bool captured)
 
@@ -383,6 +384,9 @@ GenerateSyntheticEditingCommand(enum:uint8_t WebKit::SyntheticEditingCommandType
     UserMediaAccessWasGranted(WebCore::UserMediaRequestIdentifier userMediaID, WebCore::CaptureDevice audioDevice, WebCore::CaptureDevice videoDevice, String mediaDeviceIdentifierHashSalt, WebKit::SandboxExtension::Handle sandboxExtensionHandle) -> () Async
     UserMediaAccessWasDenied(WebCore::UserMediaRequestIdentifier userMediaID, uint64_t reason, String invalidConstraint)
     CaptureDevicesChanged()
+#if USE(GSTREAMER)
+    SetOrientationForMediaCapture(int rotation)
+#endif
 #endif
 
 #if ENABLE(ENCRYPTED_MEDIA)
@@ -417,9 +421,9 @@ GenerateSyntheticEditingCommand(enum:uint8_t WebKit::SyntheticEditingCommandType
 
     # Media
     SetMediaVolume(float volume)
-    SetMuted(WebCore::MediaProducer::MutedStateFlags muted) -> () Async
+    SetMuted(OptionSet<WebCore::MediaProducerMutedState> muted) -> () Async
     SetMayStartMediaWhenInWindow(bool mayStartMedia)
-    StopMediaCapture(WebCore::MediaProducer::MediaCaptureKind kind) -> () Async
+    StopMediaCapture(enum:uint8_t WebCore::MediaProducerMediaCaptureKind kind) -> () Async
 
     SetCanRunBeforeUnloadConfirmPanel(bool canRunBeforeUnloadConfirmPanel)
     SetCanRunModal(bool canRunModal)

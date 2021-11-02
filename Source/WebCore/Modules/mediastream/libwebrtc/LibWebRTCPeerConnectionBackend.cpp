@@ -29,8 +29,10 @@
 
 #include "Document.h"
 #include "IceCandidate.h"
+#include "LibWebRTCAudioModule.h"
 #include "LibWebRTCDataChannelHandler.h"
 #include "LibWebRTCMediaEndpoint.h"
+#include "LibWebRTCProvider.h"
 #include "LibWebRTCRtpReceiverBackend.h"
 #include "LibWebRTCRtpSenderBackend.h"
 #include "LibWebRTCRtpTransceiverBackend.h"
@@ -199,6 +201,12 @@ bool LibWebRTCPeerConnectionBackend::setConfiguration(MediaEndpointConfiguration
     return m_endpoint->setConfiguration(page->libWebRTCProvider(), configurationFromMediaEndpointConfiguration(WTFMove(configuration)));
 }
 
+void LibWebRTCPeerConnectionBackend::gatherDecoderImplementationName(Function<void(String&&)>&& callback)
+{
+    m_endpoint->gatherDecoderImplementationName(WTFMove(callback));
+
+}
+
 void LibWebRTCPeerConnectionBackend::getStats(Ref<DeferredPromise>&& promise)
 {
     m_endpoint->getStats(WTFMove(promise));
@@ -287,7 +295,8 @@ Ref<RTCRtpReceiver> LibWebRTCPeerConnectionBackend::createReceiver(std::unique_p
 {
     auto& document = downcast<Document>(*m_peerConnection.scriptExecutionContext());
 
-    auto source = backend->createSource();
+    auto source = backend->createSource(document);
+
     // Remote source is initially muted and will be unmuted when receiving the first packet.
     source->setMuted(true);
     auto trackID = source->persistentID();
@@ -371,7 +380,7 @@ static inline LibWebRTCRtpTransceiverBackend& backendFromRTPTransceiver(RTCRtpTr
     return static_cast<LibWebRTCRtpTransceiverBackend&>(*transceiver.backend());
 }
 
-RTCRtpTransceiver* LibWebRTCPeerConnectionBackend::existingTransceiver(WTF::Function<bool(LibWebRTCRtpTransceiverBackend&)>&& matchingFunction)
+RTCRtpTransceiver* LibWebRTCPeerConnectionBackend::existingTransceiver(Function<bool(LibWebRTCRtpTransceiverBackend&)>&& matchingFunction)
 {
     for (auto& transceiver : m_peerConnection.currentTransceivers()) {
         if (matchingFunction(backendFromRTPTransceiver(*transceiver)))

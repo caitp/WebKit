@@ -1,3 +1,695 @@
+2021-11-01  Don Olmstead  <don.olmstead@sony.com>
+
+        [Curl] Explicitly disable libcurl's internal cookie support
+        https://bugs.webkit.org/show_bug.cgi?id=232586
+
+        Reviewed by Ross Kirsling.
+
+        Setting CURLOPT_COOKIEFILE to NULL to disable the cookie engine was not added till 7.77.0
+        so require that version or later.
+
+        * Source/cmake/OptionsPlayStation.cmake:
+        * Source/cmake/OptionsWinCairo.cmake:
+
+2021-11-01  David Kilzer  <ddkilzer@apple.com>
+
+        Add ddkilzer's GitHub name to contributors.json
+        <https://webkit.org/b/232587>
+
+        Reviewed by Jonathan Bedard.
+
+        * metadata/contributors.json:
+
+2021-11-01  Robert Jenner  <Jenner@apple.com>
+
+        Add my GitHub name (robert-jenner) to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=232581
+
+        Reviewed by Jonathan Bedard.
+
+        * metadata/contributors.json:
+
+2021-11-01  Beth Dakin  <bdakin@apple.com>
+
+        Add my GitHub name to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=232495
+
+        Reviewed by Alexey Proskuryakov.
+
+        * metadata/contributors.json:
+
+2021-11-01  BJ Burg  <bburg@apple.com>
+
+        Add bburg's GitHub username to contributors.json.
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+        Also, canonicalize a recent change.
+
+2021-10-31  Fujii Hironori  <Hironori.Fujii@sony.com>
+
+        [WinCairo] New GraphicsLayer for GPU process mode
+        https://bugs.webkit.org/show_bug.cgi?id=228308
+
+        Reviewed by Don Olmstead.
+
+        * Source/cmake/OptionsWinCairo.cmake:
+
+2021-10-29  Oriol Brufau  <obrufau@igalia.com>
+
+        Add Aakash's GitHub username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-29  Oriol Brufau  <obrufau@igalia.com>
+
+        Add obrufau's GitHub username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-28  Myles C. Maxfield  <mmaxfield@apple.com>
+
+        The space glyph in the Filicudi font is not substituted by shaping in the complex text codepath, thereby breaking the visual effect of the font
+        https://bugs.webkit.org/show_bug.cgi?id=232293
+
+        Reviewed by Darin Adler.
+
+        Big thanks to Ulrike Rausch and Frank Grießhammer for contributing the test font!!!
+
+        * metadata/contributors.json:
+
+2021-10-28  Aditya Keerthi  <akeerthi@apple.com>
+
+        Add Aditya Keerthi as a reviewer
+        https://bugs.webkit.org/show_bug.cgi?id=232450
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+        Add myself as a reviewer, and add GitHub username.
+
+2021-10-27  Roy Reapor  <rreapor@apple.com>
+
+        Add rreapor's GitHub username to contributors.json.
+        https://bugs.webkit.org/show_bug.cgi?id=232385
+
+        Reviewed by Aakash Jain.
+
+        * metadata/contributors.json:
+
+2021-10-26  Adrian Perez de Castro  <aperez@igalia.com>
+
+        Unreviewed. [WPE] Bump version numbers
+
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-10-26  Adrian Perez de Castro  <aperez@igalia.com>
+
+        Multiple build issues with ENABLE_VIDEO=OFF
+        https://bugs.webkit.org/show_bug.cgi?id=232264
+
+        Reviewed by Carlos Garcia Campos.
+
+        * Source/cmake/WebKitFeatures.cmake: Make ENABLE_MEDIA_SESSION depend on ENABLE_VIDEO.
+
+2021-10-25  Jonathan Bedard  <jbedard@apple.com>
+
+        Add GitHub usernames for bedison and darinadler
+
+        Unreviewed.
+
+        * metadata/contributors.json: Add beidson and darinadler.
+
+2021-10-25  Zan Dobersek  <zdobersek@igalia.com>
+
+        Add zdobersek's GitHub name to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=232234
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-25  Martin Robinson  <mrobinson@webkit.org>
+
+        Add mrobinson's GitHub name to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=232232
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-24  Alexey Shvayka  <ashvayka@apple.com>
+
+        Add my GitHub username to contributors.json and update credentials
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-22  Guillaume Emont  <guijemont@igalia.com>
+
+        Add Guillaume Emont's github username to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=232144
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-22  Pablo Correa Gómez  <ablocorrea@hotmail.com>
+
+        Enable logging under non-systemd linux distros
+        https://bugs.webkit.org/show_bug.cgi?id=232080
+
+        Reviewed by Michael Catanzaro.
+
+        * Source/cmake/FindJournald.cmake: Renamed from Source/cmake/FindSystemd.cmake.
+        * Source/cmake/OptionsGTK.cmake: Replace USE_SYSTEMD for
+        ENABLE_JOURNALD_LOG
+        * Source/cmake/OptionsWPE.cmake: Replace USE_SYSTEMD for
+        ENABLE_JOURNALD_LOG
+
+2021-10-21  Eric Carlson  <eric.carlson@apple.com>
+
+        Add GitHub name to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=232131
+
+        Add my github username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-21  Chris Lord  <clord@igalia.com>
+
+        [WPE][GTK] Enable smooth scrolling by default
+        https://bugs.webkit.org/show_bug.cgi?id=220512
+
+        Reviewed by Carlos Garcia Campos.
+
+        Build smooth scrolling by default on WPE to match other platforms.
+
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-10-20  Kimmo Kinnunen  <kkinnunen@apple.com>
+
+        Add ObjC as supported .clang-format language
+        https://bugs.webkit.org/show_bug.cgi?id=230401
+
+        Reviewed by Jonathan Bedard.
+
+        Add ObjC and change few properties useful
+        for ObjC formatting.
+
+        * .clang-format:
+
+2021-10-20  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [WPE] Reenable -fvisibility=hidden and -fvisibility-inlines-hidden
+        https://bugs.webkit.org/show_bug.cgi?id=222860
+
+        Reviewed by Don Olmstead.
+
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-10-19  Ross Kirsling  <ross.kirsling@sony.com>
+
+        [CMake] Align OptionsMac with Xcode build
+        https://bugs.webkit.org/show_bug.cgi?id=231982
+
+        Reviewed by Don Olmstead.
+
+        * Source/cmake/OptionsMac.cmake:
+        Ensure that the listed options (1) are not redundant with the defaults in WebKitFeatures.cmake and
+        (2) match the options for the Xcode build as closely as possible.
+
+        * Source/cmake/WebKitFeatures.cmake:
+        Remove an outdated feature, ENABLE_APPLE_PAY_SESSION_V9,
+        and let ENABLE_MAC_GESTURE_EVENTS be handled by PlatformEnable, since it depends on USE_APPLE_INTERNAL_SDK.
+
+2021-10-19  Tyler Wilcock  <tyler_w@apple.com>
+
+        Add AX team GitHub usernames to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=231966
+
+        Reviewed by Chris Fleizach.
+
+        * metadata/contributors.json:
+        Add Chris Fleizach's and Andres Gonzalez's GitHub usernames. Add Tyler
+        Wilcock as a contributor. Run validate-committer-lists --canonicalize
+        to fix some style issues.
+
+2021-10-19  Sergio Villar Senin  <svillar@igalia.com>
+
+        Add my github username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-18  Ms2ger  <Ms2ger@igalia.com>
+
+        Add my github username to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=231893
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-18  Rob Buis  <rbuis@igalia.com>
+
+        Add my github username to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=231889
+
+        Reviewed by Manuel Rego Casasnovas.
+
+        * metadata/contributors.json:
+
+2021-10-18  Xan Lopez  <xan@igalia.com>
+
+        Add my github username to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=231887
+
+        Unreviewed.
+
+        * metadata/contributors.json: add my github username.
+
+2021-10-18  Miguel Gomez  <magomez@igalia.com>
+
+        Add my github username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-16  Tetsuharu Ohzeki  <tetsuharu.ohzeki@gmail.com>
+
+        Add github username for tetsuharuohzeki to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=231864
+
+        Reviewed by Fujii Hironori.
+
+        * metadata/contributors.json:
+
+2021-10-16  Angelos Oikonomopoulos  <angelos@igalia.com>
+
+        Add my github username to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=231861
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-16  Caitlin Potter  <caitp@igalia.com>
+
+        Add github username for myself
+        https://bugs.webkit.org/show_bug.cgi?id=231857
+
+        Reviewed by Yusuke Suzuki.
+
+        * metadata/contributors.json:
+
+2021-10-15  Basuke Suzuki  <basuke.suzuki@sony.com>
+
+        Add flag to turn off Iso heap
+        https://bugs.webkit.org/show_bug.cgi?id=231823
+
+        Reviewed by Yusuke Suzuki.
+
+        Added USE_ISO_MALLOC feature flags which is on by default for most platforms.
+
+        * Source/cmake/OptionsPlayStation.cmake:
+        * Source/cmake/WebKitFeatures.cmake:
+
+2021-10-15  Ross Kirsling  <ross.kirsling@sony.com>
+
+        Realize Mac CMake build of WebCore and WebKit
+        https://bugs.webkit.org/show_bug.cgi?id=231749
+
+        Reviewed by Alex Christensen.
+
+        * Source/cmake/OptionsMac.cmake:
+        * Source/cmake/WebKitMacros.cmake:
+
+2021-10-15  Jonathan Bedard  <jbedard@apple.com>
+
+        Add github username for Dewei Zhu
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-15  Andres Gonzalez  <andresg_22@apple.com>
+
+        Change Andres Gonzalez status to reviewer.
+        https://bugs.webkit.org/show_bug.cgi?id=231738
+
+        Reviewed by Chris Fleizach.
+
+        * metadata/contributors.json:
+
+2021-10-15  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        Unreviewed. Fix GTK build with ubuntu 18.04
+
+        GLib version bump in r284152 was too high for ubuntu 18.04 even though it followed our dependencies policy.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-10-14  Ali Juma  <ajuma@chromium.org>
+
+        Add my GitHub username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-14  Víctor Manuel Jáquez Leal  <vjaquez@igalia.com>
+
+        Add my GitHub username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-14  Commit Queue  <commit-queue@webkit.org>
+
+        Unreviewed, reverting r283878.
+        https://bugs.webkit.org/show_bug.cgi?id=231735
+
+        It
+
+        Reverted changeset:
+
+        "[WPE] Reenable -fvisibility=hidden and -fvisibility-inlines-
+        hidden"
+        https://bugs.webkit.org/show_bug.cgi?id=222860
+        https://commits.webkit.org/r283878
+
+2021-10-14  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK][WPE] Bump GLib version to 2.58.3
+        https://bugs.webkit.org/show_bug.cgi?id=231726
+
+        Reviewed by Philippe Normand.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-10-14  Enrique Ocaña González  <eocanha@igalia.com>
+
+        [contributors.json] Add eocanha github account and canonicalize
+        https://bugs.webkit.org/show_bug.cgi?id=231729
+
+        Unreviewed.
+
+        Added eocanha github user to contributors.json and canonicalize the file to make the style checker happy.
+
+        * metadata/contributors.json:
+
+2021-10-13  Tim Horton  <timothy_horton@apple.com>
+
+        Add my GitHub username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-13  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        Add my github username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-12  Alex Christensen  <achristensen@webkit.org>
+
+        Add webpushd executable
+        https://bugs.webkit.org/show_bug.cgi?id=231650
+
+        Reviewed by Brady Eidson.
+
+        * WebKit.xcworkspace/xcshareddata/xcschemes/All Source.xcscheme:
+
+2021-10-12  Basuke Suzuki  <basuke.suzuki@sony.com>
+
+        [PlayStation] Enable RemoteInspector by default
+        https://bugs.webkit.org/show_bug.cgi?id=231599
+
+        Reviewed by Fujii Hironori.
+
+        It was treated as experimental feature but we've depended on this feature in various situation.
+
+        * Source/cmake/OptionsPlayStation.cmake:
+
+2021-10-12  Philippe Normand  <pnormand@igalia.com>
+
+        Add my github username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-11  Patrick Griffis  <pgriffis@igalia.com>
+
+        Add my github username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-11  Sam Weinig  <weinig@apple.com>
+
+        Add my github username and keep my expertise where it is because, while not up to date, it is fun
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-11  Theresa O'Connor  <hober@apple.com>
+
+        Various updates to my contributors.json entry.
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-11  Devin Rousso  <drousso@apple.com>
+
+        Add my github and update my expertise
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-10  Noam Rosenthal  <noam@webkit.org>
+
+        Add my github username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-11 Emilio Cobos Álvarez  <emilio@crisal.io>
+
+        Add my GitHub username to contributors.json.
+        https://bugs.webkit.org/show_bug.cgi?id=231507
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-11  Claudio Saavedra  <csaavedra@igalia.com>
+
+        Add my github username to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-11  Diego Pino Garcia  <dpino@igalia.com>
+
+        Add GitHub username for Diego Pino Garcia
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-10  Pablo Saavedra  <psaavedra@igalia.com>
+
+        Add GitHub username for Pablo Saavedra
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-10  Xabier Rodriguez Calvar  <calvaris@igalia.com>
+
+        Unreviewed. Add GitHub username for Xabier Rodriguez Calvar
+
+        * metadata/contributors.json:
+
+2021-10-10  Cameron McCormack  <heycam@apple.com>
+
+        Add GitHub account to contributors.json
+        https://bugs.webkit.org/show_bug.cgi?id=231497
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-10  Michael Catanzaro  <mcatanzaro@gnome.org>
+
+        [WPE] Reenable -fvisibility=hidden and -fvisibility-inlines-hidden
+        https://bugs.webkit.org/show_bug.cgi?id=222860
+
+        Reviewed by Philippe Normand.
+
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-10-10  Adrian Perez de Castro  <aperez@igalia.com>
+
+        Unreviewed. Add GitHub username for Adrian Perez de Castro
+
+        While at it, run "validate-committer-lists --canonicalize".
+
+        * metadata/contributors.json:
+
+2021-10-09  Alberto Garcia  <berto@igalia.com>
+
+        Add GitHub account to contributors.json
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-09  Jean-Yves Avenard  <jya@apple.com>
+
+        Unreviewed, add my GitHub username
+
+        * metadata/contributors.json:
+
+2021-10-09  Manuel Rego Casasnovas  <rego@igalia.com>
+
+        Add GitHub account to contributors.json and update expertise field
+        https://bugs.webkit.org/show_bug.cgi?id=231476
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-08  Joonghun Park  <jh718.park@samsung.com>
+
+        Unreviewed. Add github username for Joonghun Park.
+
+        * metadata/contributors.json:
+
+2021-10-08  Jonathan Bedard  <jbedard@apple.com>
+
+        Add github username for Michael Catanzaro
+
+        Unreviewed.
+
+        * metadata/contributors.json:
+
+2021-10-08  Kenneth Russell  <kbr@chromium.org>
+
+        Add github username for kbr
+        https://bugs.webkit.org/show_bug.cgi?id=231462
+
+        Reviewed by Dean Jackson.
+
+        * metadata/contributors.json:
+
+2021-10-08  Ross Kirsling  <ross.kirsling@sony.com>
+
+        Unreviewed, add GitHub usernames for Sony contributors.
+
+        * metadata/contributors.json:
+
+2021-10-08  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        Unreviewed, add my GitHub username
+
+        * metadata/contributors.json:
+
+2021-10-08  Tim Nguyen  <ntim@apple.com>
+
+        [contributors.json] Add more Github usernames
+        https://bugs.webkit.org/show_bug.cgi?id=231453
+
+        Reviewed by Jonathan Bedard.
+
+        * metadata/contributors.json:
+
+2021-10-08  Jonathan Bedard  <jbedard@apple.com>
+
+        [contributors.json] Support GitHub usernames
+        https://bugs.webkit.org/show_bug.cgi?id=231400
+        <rdar://problem/84005266>
+
+        Reviewed by Dewei Zhu.
+
+        * metadata/contributors.json: Add some GitHub usernames.
+
+2021-10-07  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Reenable -fvisibility=hidden
+        https://bugs.webkit.org/show_bug.cgi?id=181916
+
+        Reviewed by Michael Catanzaro.
+
+        * Source/cmake/OptionsGTK.cmake:
+
+2021-10-06  Chris Dumez  <cdumez@apple.com>
+
+        Unreviewed, mark Kimmo Kinnunen as reviewer in the right contributors.json file this time.
+
+        * metadata/contributors.json:
+
+2021-10-03  Basuke Suzuki  <basuke.suzuki@sony.com>
+
+        Enable release log to stderr
+        https://bugs.webkit.org/show_bug.cgi?id=230725
+        <rdar://problem/83740529>
+
+        Reviewed by Michael Catanzaro.
+
+        Introduced new flags, USE_LOG_STDERR for release logging to stderr.
+
+        * Source/cmake/WebKitFeatures.cmake:
+
+2021-10-02  Philippe Normand  <pnormand@igalia.com>
+
+        [GTK][WPE] Enable bwrap launcher build on bots
+        https://bugs.webkit.org/show_bug.cgi?id=230969
+
+        Reviewed by Michael Catanzaro.
+
+        * Source/cmake/OptionsGTK.cmake:
+        * Source/cmake/OptionsWPE.cmake:
+
+2021-09-30  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        Upgrade GCC requirement to 8.3.0
+        https://bugs.webkit.org/show_bug.cgi?id=231042
+
+        Reviewed by Darin Adler.
+
+        Based on the roadmap[1], we upgrade GCC requirement to 8.3.0, which is default GCC in Debian one-old-stable (buster) right now.
+        This paves the way to enabling some of useful C++20 features, e.g. default initializer for bitfields.
+
+        [1]: https://trac.webkit.org/wiki/WebKitGTK/GCCRequirement
+
+        * Source/cmake/WebKitCommon.cmake:
+
 2021-09-29  Kimmo Kinnunen  <kkinnunen@apple.com>
 
         MediaStream canvas.captureStream() fails for WebGL

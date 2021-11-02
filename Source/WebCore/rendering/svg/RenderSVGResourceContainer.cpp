@@ -23,6 +23,8 @@
 #include "RenderLayer.h"
 #include "RenderSVGRoot.h"
 #include "RenderView.h"
+#include "SVGElementTypeHelpers.h"
+#include "SVGGraphicsElement.h"
 #include "SVGRenderingContext.h"
 #include "SVGResourcesCache.h"
 #include <wtf/IsoMallocInlines.h>

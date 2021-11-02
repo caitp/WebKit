@@ -30,8 +30,9 @@
     ActiveDOMObject,
     SecureContext,
     Exposed=(Window,ServiceWorker),
+    ExportMacro=WEBCORE_EXPORT,
     Conditional=SERVICE_WORKER,
-    EnabledAtRuntime=ServiceWorker,
+    EnabledAtRuntime=ServiceWorkerEnabled,
     GenerateIsReachable=Impl,
 ] interface ServiceWorkerRegistration : EventTarget {
     readonly attribute ServiceWorker? installing;

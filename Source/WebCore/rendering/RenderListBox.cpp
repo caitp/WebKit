@@ -33,7 +33,7 @@
 #include "AXObjectCache.h"
 #include "CSSFontSelector.h"
 #include "DeprecatedGlobalSettings.h"
-#include "Document.h"
+#include "DocumentInlines.h"
 #include "EventHandler.h"
 #include "FocusController.h"
 #include "Frame.h"
@@ -90,11 +90,6 @@ const int baselineAdjustment = 7;
 
 RenderListBox::RenderListBox(HTMLSelectElement& element, RenderStyle&& style)
     : RenderBlockFlow(element, WTFMove(style))
-    , m_optionsChanged(true)
-    , m_scrollToRevealSelectionAfterLayout(false)
-    , m_inAutoscroll(false)
-    , m_optionsWidth(0)
-    , m_indexOffset(0)
 {
     view().frameView().addScrollableArea(this);
 }
@@ -133,7 +128,7 @@ void RenderListBox::updateFromElement()
         std::optional<FontCascade> boldFont;
         for (auto* element : selectElement().listItems()) {
             String text;
-            WTF::Function<const FontCascade&()> selectFont = [&normalFont] () -> const FontCascade& {
+            Function<const FontCascade&()> selectFont = [&normalFont] () -> const FontCascade& {
                 return normalFont;
             };
             if (is<HTMLOptionElement>(*element))

@@ -107,7 +107,7 @@ public:
     WebCoreDecompressionSession* decompressionSession() const { return m_decompressionSession.get(); }
 
     RetainPtr<PlatformLayer> createVideoFullscreenLayer() override;
-    void setVideoFullscreenLayer(PlatformLayer*, WTF::Function<void()>&& completionHandler) override;
+    void setVideoFullscreenLayer(PlatformLayer*, Function<void()>&& completionHandler) override;
     void setVideoFullscreenFrame(FloatRect) override;
 
     bool requiresTextTrackRepresentation() const override;
@@ -222,6 +222,7 @@ private:
     void paint(GraphicsContext&, const FloatRect&) override;
     void paintCurrentFrameInContext(GraphicsContext&, const FloatRect&) override;
     RetainPtr<CVPixelBufferRef> pixelBufferForCurrentTime() final;
+    DestinationColorSpace colorSpace() final;
 
     bool supportsAcceleratedRendering() const override;
     // called when the rendering system flips the into or out of accelerated rendering mode.

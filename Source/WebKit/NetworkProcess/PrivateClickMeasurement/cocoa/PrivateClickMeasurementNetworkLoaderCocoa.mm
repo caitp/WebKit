@@ -30,6 +30,7 @@
 #import <WebCore/HTTPHeaderValues.h>
 #import <WebCore/MIMETypeRegistry.h>
 #import <pal/spi/cf/CFNetworkSPI.h>
+#import <wtf/BlockPtr.h>
 #import <wtf/NeverDestroyed.h>
 
 static RetainPtr<SecTrustRef>& allowedLocalTestServerTrust()
@@ -59,7 +60,7 @@ static bool trustsServerForLocalTests(NSURLAuthenticationChallenge *challenge)
 
 - (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveResponse:(NSURLResponse *)response completionHandler:(void (^)(NSURLSessionResponseDisposition disposition))completionHandler
 {
-    if (MIMETypeRegistry::isSupportedJSONMIMEType(response.MIMEType))
+    if (WebCore::MIMETypeRegistry::isSupportedJSONMIMEType(response.MIMEType))
         return completionHandler(NSURLSessionResponseAllow);
     completionHandler(NSURLSessionResponseCancel);
 }
@@ -74,9 +75,7 @@ static bool trustsServerForLocalTests(NSURLAuthenticationChallenge *challenge)
 
 @end
 
-namespace WebKit {
-
-namespace PCM {
+namespace WebKit::PCM {
 
 enum LoadTaskIdentifierType { };
 using LoadTaskIdentifier = ObjectIdentifier<LoadTaskIdentifierType>;
@@ -111,7 +110,7 @@ void NetworkLoader::start(URL&& url, RefPtr<JSON::Object>&& jsonPayload, WebCore
     // Prevent contacting non-local servers when a test certificate chain is used for 127.0.0.1.
     // FIXME: Use a proxy server to have tests cover the reports sent to the destination, too.
     if (allowedLocalTestServerTrust() && url.host() != "127.0.0.1")
-        return callback({ }, { }, { });
+        return callback({ }, { });
 
     auto request = adoptNS([[NSMutableURLRequest alloc] initWithURL:url]);
     [request setValue:WebCore::HTTPHeaderValues::maxAge0() forHTTPHeaderField:@"Cache-Control"];
@@ -128,15 +127,13 @@ void NetworkLoader::start(URL&& url, RefPtr<JSON::Object>&& jsonPayload, WebCore
     NSURLSessionDataTask *task = [statelessSessionWithoutRedirects() dataTaskWithRequest:request.get() completionHandler:makeBlockPtr([callback = WTFMove(callback), identifier](NSData *data, NSURLResponse *response, NSError *error) mutable {
         taskMap().remove(identifier);
         if (error)
-            return callback(error, { }, { });
+            return callback(error.localizedDescription, { });
         if (auto jsonValue = JSON::Value::parseJSON(String::fromUTF8(static_cast<const LChar*>(data.bytes), data.length)))
-            return callback({ }, response, jsonValue->asObject());
-        callback({ }, response, nullptr);
+            return callback({ }, jsonValue->asObject());
+        callback({ }, nullptr);
     }).get()];
     [task resume];
     taskMap().add(identifier, task);
 }
 
-} // namespace PCM
-
-} // namespace WebKit
+} // namespace WebKit::PCM

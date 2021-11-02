@@ -41,7 +41,9 @@ NetworkProcess/Downloads/cocoa/DownloadCocoa.mm
 NetworkProcess/EntryPoint/Cocoa/Daemon/DaemonEntryPoint.mm
 NetworkProcess/EntryPoint/Cocoa/XPCService/NetworkServiceEntryPoint.mm
 
-NetworkProcess/PrivateClickMeasurement/cocoa/PrivateClickMeasurementDaemonConnectionCocoa.mm
+NetworkProcess/Notifications/Cocoa/WebPushDaemonConnectionCocoa.mm
+
+NetworkProcess/PrivateClickMeasurement/cocoa/PrivateClickMeasurementConnectionCocoa.mm
 NetworkProcess/PrivateClickMeasurement/cocoa/PrivateClickMeasurementNetworkLoaderCocoa.mm
 NetworkProcess/PrivateClickMeasurement/cocoa/PrivateClickMeasurementXPCUtilities.mm
 
@@ -66,7 +68,6 @@ GPUProcess/cocoa/GPUConnectionToWebProcessCocoa.mm
 GPUProcess/cocoa/GPUProcessCocoa.mm
 GPUProcess/graphics/RemoteGraphicsContextGLCocoa.cpp
 GPUProcess/graphics/ScopedRenderingResourcesRequestCocoa.mm @no-unify
-GPUProcess/graphics/ScopedWebGLRenderingResourcesRequestCocoa.cpp
 GPUProcess/ios/GPUProcessIOS.mm
 GPUProcess/mac/GPUProcessMac.mm
 GPUProcess/mac/LocalAudioSessionRoutingArbitrator.cpp
@@ -97,6 +98,7 @@ Platform/ios/AccessibilityIOS.mm
 Platform/ios/PaymentAuthorizationController.mm
 
 Platform/IPC/cocoa/ConnectionCocoa.mm
+Platform/IPC/cocoa/DaemonConnectionCocoa.mm
 Platform/IPC/cocoa/MachMessage.cpp
 
 Platform/IPC/darwin/IPCSemaphoreDarwin.cpp
@@ -106,11 +108,6 @@ Platform/mac/MenuUtilities.mm
 Platform/mac/StringUtilities.mm
 
 Platform/unix/EnvironmentUtilities.cpp
-
-PluginProcess/EntryPoint/Cocoa/XPCService/PluginServiceEntryPoint.mm @no-unify
-
-PluginProcess/mac/PluginControllerProxyMac.mm @no-unify
-PluginProcess/mac/PluginProcessMac.mm @no-unify
 
 Shared/API/c/cf/WKErrorCF.cpp
 Shared/API/c/cf/WKStringCF.mm
@@ -161,6 +158,9 @@ Shared/Authentication/cocoa/AuthenticationChallengeDispositionCocoa.mm
 Shared/Authentication/cocoa/AuthenticationManagerCocoa.mm
 Shared/Authentication/cocoa/ClientCertificateAuthenticationXPCConstants.cpp
 
+Shared/EntryPointUtilities/Cocoa/Daemon/PCMDaemonConnectionSet.mm
+Shared/EntryPointUtilities/Cocoa/Daemon/PCMDaemonEntryPoint.mm
+
 Shared/Cocoa/APIDataCocoa.mm
 Shared/Cocoa/APIObject.mm
 Shared/Cocoa/ArgumentCodersCocoa.mm
@@ -193,7 +193,7 @@ Shared/Cocoa/WKNSURLRequest.mm
 Shared/Cocoa/WKObject.mm
 Shared/Cocoa/WebPreferencesDefaultValuesCocoa.mm
 
-Shared/EntryPointUtilities/Cocoa/Daemon/PCMDaemonEntryPoint.mm
+Shared/Daemon/DaemonUtilities.mm
 
 Shared/EntryPointUtilities/Cocoa/XPCService/XPCServiceEntryPoint.mm
 Shared/EntryPointUtilities/Cocoa/XPCService/XPCServiceMain.mm
@@ -234,11 +234,6 @@ Shared/mac/MediaFormatReader/MediaFormatReader.cpp
 Shared/mac/MediaFormatReader/MediaSampleByteRange.cpp
 Shared/mac/MediaFormatReader/MediaSampleCursor.cpp
 Shared/mac/MediaFormatReader/MediaTrackReader.cpp
-
-Shared/Plugins/mac/PluginSandboxProfile.mm
-
-Shared/Plugins/Netscape/mac/NetscapePluginModuleMac.mm
-Shared/Plugins/Netscape/mac/PluginInformationMac.mm
 
 Shared/RemoteLayerTree/RemoteLayerBackingStore.mm
 Shared/RemoteLayerTree/RemoteLayerBackingStoreCollection.mm
@@ -288,7 +283,6 @@ UIProcess/API/Cocoa/_WKInspectorConfiguration.mm
 UIProcess/API/Cocoa/_WKInspectorTesting.mm
 UIProcess/API/Cocoa/_WKInspectorDebuggableInfo.mm
 UIProcess/API/Cocoa/_WKInspectorExtension.mm
-UIProcess/API/Cocoa/_WKInspectorExtensionTesting.mm
 UIProcess/API/Cocoa/_WKInspectorWindow.mm
 UIProcess/API/Cocoa/_WKInternalDebugFeature.mm
 UIProcess/API/Cocoa/_WKLinkIconParameters.mm
@@ -553,10 +547,6 @@ UIProcess/Media/cocoa/MediaUsageManagerCocoa.mm
 
 UIProcess/Network/CustomProtocols/LegacyCustomProtocolManagerProxy.cpp
 
-UIProcess/Plugins/mac/PluginInfoStoreMac.mm
-UIProcess/Plugins/mac/PluginProcessManagerMac.mm
-UIProcess/Plugins/mac/PluginProcessProxyMac.mm
-
 UIProcess/RemoteLayerTree/cocoa/RemoteLayerTreeLayers.mm
 
 UIProcess/RemoteLayerTree/mac/ScrollerMac.mm
@@ -592,6 +582,7 @@ UIProcess/WebAuthentication/Cocoa/NfcService.mm
 UIProcess/WebAuthentication/Cocoa/WKASCAuthorizationPresenterDelegate.mm
 UIProcess/WebAuthentication/Cocoa/WKNFReaderSessionDelegate.mm
 UIProcess/WebAuthentication/Cocoa/WebAuthenticationPanelClient.mm
+UIProcess/WebAuthentication/Cocoa/WebAuthenticatorCoordinatorProxy.mm
 
 UIProcess/WebAuthentication/Mock/MockLocalConnection.mm
 UIProcess/WebAuthentication/Mock/MockLocalService.mm
@@ -612,6 +603,7 @@ WebProcess/ApplePay/cocoa/WebPaymentCoordinatorCocoa.mm
 WebProcess/cocoa/PlaybackSessionManager.mm
 WebProcess/cocoa/RemoteCaptureSampleManager.cpp
 WebProcess/cocoa/RemoteRealtimeAudioSource.cpp
+WebProcess/cocoa/RemoteRealtimeDisplaySource.cpp
 WebProcess/cocoa/RemoteRealtimeMediaSourceProxy.cpp
 WebProcess/cocoa/RemoteRealtimeVideoSource.cpp
 WebProcess/cocoa/UserMediaCaptureManager.cpp
@@ -622,6 +614,7 @@ WebProcess/EntryPoint/Cocoa/XPCService/WebContentServiceEntryPoint.mm
 
 WebProcess/GPU/graphics/cocoa/ImageBufferShareableIOSurfaceBackend.cpp
 WebProcess/GPU/graphics/cocoa/ImageBufferShareableMappedIOSurfaceBackend.cpp
+WebProcess/GPU/graphics/cocoa/RemoteGraphicsContextGLProxyCocoa.mm
 WebProcess/GPU/media/RemoteAudioSourceProvider.cpp
 WebProcess/GPU/media/RemoteAudioSourceProviderManager.cpp
 WebProcess/GPU/media/RemoteImageDecoderAVF.cpp
@@ -662,9 +655,6 @@ WebProcess/Inspector/mac/WebInspectorUIMac.mm
 
 WebProcess/MediaCache/WebMediaKeyStorageManager.cpp
 
-WebProcess/Plugins/Netscape/mac/NetscapePluginMac.mm
-WebProcess/Plugins/Netscape/mac/PluginProxyMac.mm
-
 WebProcess/Plugins/PDF/PDFPlugin.mm
 WebProcess/Plugins/PDF/PDFPluginAnnotation.mm
 WebProcess/Plugins/PDF/PDFPluginChoiceAnnotation.mm
@@ -702,6 +692,7 @@ WebProcess/WebPage/ios/WebPageIOS.mm
 
 WebProcess/WebPage/mac/DisplayRefreshMonitorMac.cpp
 WebProcess/WebPage/mac/PageBannerMac.mm
+WebProcess/WebPage/mac/TiledCoreAnimationScrollingCoordinator.mm
 WebProcess/WebPage/mac/TiledCoreAnimationDrawingArea.mm
 WebProcess/WebPage/mac/WebPageMac.mm
 WebProcess/WebPage/mac/WKAccessibilityWebPageObjectBase.mm

@@ -44,7 +44,11 @@ class WEBCORE_EXPORT ScrollingTreeScrollingNode : public ScrollingTreeNode {
 #if PLATFORM(MAC)
     friend class ScrollingTreeScrollingNodeDelegateMac;
 #endif
+#if USE(NICOSIA)
+    friend class ScrollingTreeScrollingNodeDelegateNicosia;
+#endif
     friend class ScrollingTree;
+    friend class ThreadedScrollingTree;
 
 public:
     virtual ~ScrollingTreeScrollingNode();
@@ -71,11 +75,13 @@ public:
     bool isScrollSnapInProgress() const;
     void setScrollSnapInProgress(bool);
 
+    virtual void serviceScrollAnimation() { }
+
     // These are imperative; they adjust the scrolling layers.
     void scrollTo(const FloatPoint&, ScrollType = ScrollType::User, ScrollClamping = ScrollClamping::Clamped);
     void scrollBy(const FloatSize&, ScrollClamping = ScrollClamping::Clamped);
 
-    virtual void stopScrollAnimations() { };
+    void handleScrollPositionRequest(const RequestedScrollData&);
 
     void wasScrolledByDelegatedScrolling(const FloatPoint& position, std::optional<FloatRect> overrideLayoutViewport = { }, ScrollingLayerPositionAction = ScrollingLayerPositionAction::Sync);
     
@@ -120,6 +126,14 @@ protected:
     virtual void willDoProgrammaticScroll(const FloatPoint&) { }
     
     virtual FloatPoint adjustedScrollPosition(const FloatPoint&, ScrollClamping = ScrollClamping::Clamped) const;
+    
+    virtual bool startAnimatedScrollToPosition(FloatPoint) { return false; }
+    virtual void stopAnimatedScroll() { }
+
+    void willStartAnimatedScroll();
+    void didStopAnimatedScroll();
+    
+    void setScrollAnimationInProgress(bool);
 
     virtual void currentScrollPositionChanged(ScrollType, ScrollingLayerPositionAction = ScrollingLayerPositionAction::Sync);
     virtual void updateViewportForCurrentScrollPosition(std::optional<FloatRect> = { }) { }
@@ -146,7 +160,7 @@ protected:
     bool allowsHorizontalScrolling() const { return m_scrollableAreaParameters.allowsHorizontalScrolling; }
     bool allowsVerticalScrolling() const { return m_scrollableAreaParameters.allowsVerticalScrolling; }
 
-    void dumpProperties(WTF::TextStream&, ScrollingStateTreeAsTextBehavior) const override;
+    void dumpProperties(WTF::TextStream&, OptionSet<ScrollingStateTreeAsTextBehavior>) const override;
 
 private:
     FloatSize m_scrollableAreaSize;

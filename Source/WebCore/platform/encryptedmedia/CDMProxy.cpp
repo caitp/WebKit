@@ -32,6 +32,7 @@
 #if ENABLE(ENCRYPTED_MEDIA)
 
 #include "Logging.h"
+#include "MediaPlayer.h"
 #include <wtf/HexNumber.h>
 #include <wtf/Scope.h>
 #include <wtf/StringPrintStream.h>
@@ -110,7 +111,7 @@ bool KeyStore::containsKeyID(const KeyIDType& keyID) const
 {
     return m_keys.findMatching([&](const RefPtr<KeyHandle>& storedKey) {
         return *storedKey == keyID;
-    }) != WTF::notFound;
+    }) != notFound;
 }
 
 void KeyStore::merge(const KeyStore& other)
@@ -153,7 +154,7 @@ bool KeyStore::add(RefPtr<KeyHandle>&& key)
     });
 
     addSessionReferenceTo(key);
-    if (keyWithMatchingKeyIDIndex != WTF::notFound) {
+    if (keyWithMatchingKeyIDIndex != notFound) {
         auto& keyWithMatchingKeyID = m_keys[keyWithMatchingKeyIDIndex];
         didStoreChange = keyWithMatchingKeyID != key;
         if (didStoreChange)
@@ -196,7 +197,7 @@ bool KeyStore::unref(const RefPtr<KeyHandle>& key)
     size_t keyWithMatchingKeyIDIndex = m_keys.find(key);
     LOG(EME, "EME - ClearKey - requested to unref key with ID %s and %d session references", key->idAsString().ascii().data(), key->numSessionReferences());
 
-    if (keyWithMatchingKeyIDIndex != WTF::notFound) {
+    if (keyWithMatchingKeyIDIndex != notFound) {
         auto& keyWithMatchingKeyID = m_keys[keyWithMatchingKeyIDIndex];
         removeSessionReferenceFrom(keyWithMatchingKeyID);
         if (!keyWithMatchingKeyID->hasReferences()) {
@@ -397,7 +398,7 @@ void CDMInstanceProxy::unrefAllKeysFrom(const KeyStore& keyStore)
 }
 
 CDMInstanceSessionProxy::CDMInstanceSessionProxy(CDMInstanceProxy& instance)
-    : m_instance(makeWeakPtr(instance))
+    : m_instance(instance)
 {
 }
 

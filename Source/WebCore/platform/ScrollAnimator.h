@@ -49,6 +49,8 @@ class ScrollableArea;
 class Scrollbar;
 class WheelEventTestMonitor;
 
+struct ScrollExtents;
+
 class ScrollingEffectsControllerTimer;
 
 class ScrollAnimator : private ScrollingEffectsControllerClient {
@@ -83,6 +85,8 @@ public:
 
     virtual bool processWheelEventForScrollSnap(const PlatformWheelEvent&) { return false; }
 
+    void stopKeyboardScrollAnimation();
+    
 #if PLATFORM(COCOA)
     virtual void handleWheelEventPhase(PlatformWheelEventPhase) { }
 #endif
@@ -93,9 +97,10 @@ public:
 
     virtual void cancelAnimations();
 
-    virtual bool isUserScrollInProgress() const { return false; }
     virtual bool isRubberBandInProgress() const { return false; }
-    virtual bool isScrollSnapInProgress() const { return false; }
+
+    bool isUserScrollInProgress() const { return m_scrollController.isUserScrollInProgress(); }
+    bool isScrollSnapInProgress() const { return m_scrollController.isScrollSnapInProgress(); }
 
     void contentsSizeChanged();
 
@@ -144,22 +149,25 @@ private:
     bool allowsHorizontalScrolling() const final;
     bool allowsVerticalScrolling() const final;
 
-    void setScrollBehaviorStatus(ScrollBehaviorStatus) final;
-    ScrollBehaviorStatus scrollBehaviorStatus() const final;
+    void willStartAnimatedScroll() final;
+    void didStopAnimatedScroll() final;
 
-    void immediateScrollByWithoutContentEdgeConstraints(const FloatSize&) final;
-    void immediateScrollBy(const FloatSize&) final;
+    void immediateScrollBy(const FloatSize&, ScrollClamping = ScrollClamping::Clamped) final;
     void adjustScrollPositionToBoundsIfNecessary() final;
 
 #if HAVE(RUBBER_BANDING)
     IntSize stretchAmount() const final;
     RectEdges<bool> edgePinnedState() const final;
-    bool isPinnedForScrollDelta(const FloatSize&) const final;
+    bool isPinnedOnSide(BoxSide) const final;
 #endif
 
 #if PLATFORM(MAC)
     void deferWheelEventTestCompletionForReason(WheelEventTestMonitor::ScrollableAreaIdentifier, WheelEventTestMonitor::DeferReason) const final;
     void removeWheelEventTestCompletionDeferralForReason(WheelEventTestMonitor::ScrollableAreaIdentifier, WheelEventTestMonitor::DeferReason) const final;
+#endif
+
+#if PLATFORM(GTK) || USE(NICOSIA)
+    bool scrollAnimationEnabled() const final;
 #endif
 
     static FloatSize deltaFromStep(ScrollbarOrientation, float step, float multiplier);

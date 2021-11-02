@@ -169,7 +169,7 @@ void JIT::emit_op_instanceof(const Instruction* currentInstruction)
     emitJumpSlowCaseIfNotJSCell(protoGPR, proto);
 
     JITInstanceOfGenerator gen(
-        nullptr, JITType::BaselineJIT, CodeOrigin(m_bytecodeIndex), CallSiteIndex(m_bytecodeIndex),
+        nullptr, nullptr, JITType::BaselineJIT, CodeOrigin(m_bytecodeIndex), CallSiteIndex(m_bytecodeIndex),
         RegisterSet::stubUnavailableRegisters(),
         resultGPR,
         valueGPR,
@@ -177,10 +177,9 @@ void JIT::emit_op_instanceof(const Instruction* currentInstruction)
         stubInfoGPR,
         BaselineInstanceofRegisters::scratch1, BaselineInstanceofRegisters::scratch2);
 
-    UnlinkedStructureStubInfo* stubInfo = m_unlinkedStubInfos.add();
+    auto [ stubInfo, stubInfoIndex ] = addUnlinkedStructureStubInfo();
     stubInfo->accessType = AccessType::InstanceOf;
     stubInfo->bytecodeIndex = m_bytecodeIndex;
-    JITConstantPool::Constant stubInfoIndex = addToConstantPool(JITConstantPool::Type::StructureStubInfo, stubInfo);
     gen.m_unlinkedStubInfoConstantIndex = stubInfoIndex;
     gen.m_unlinkedStubInfo = stubInfo;
 
@@ -369,26 +368,6 @@ void JIT::emit_op_is_object(const Instruction* currentInstruction)
 
     done.link(this);
     emitPutVirtualRegister(dst);
-}
-
-void JIT::emit_op_ret(const Instruction* currentInstruction)
-{
-    ASSERT(callFrameRegister != regT1);
-    ASSERT(regT1 != returnValueGPR);
-    ASSERT(returnValueGPR != callFrameRegister);
-
-    // Return the result in %eax.
-    auto bytecode = currentInstruction->as<OpRet>();
-    emitGetVirtualRegister(bytecode.m_value, returnValueGPR);
-
-#if !ENABLE(EXTRA_CTI_THUNKS)
-    checkStackPointerAlignment();
-    emitRestoreCalleeSaves();
-    emitFunctionEpilogue();
-    ret();
-#else
-    emitNakedNearJump(vm().getCTIStub(op_ret_handlerGenerator).code());
-#endif
 }
 
 #if ENABLE(EXTRA_CTI_THUNKS)
@@ -1135,16 +1114,6 @@ void JIT::emit_op_switch_string(const Instruction* currentInstruction)
     farJump(returnValueGPR, JSSwitchPtrTag);
 }
 
-void JIT::emit_op_debug(const Instruction* currentInstruction)
-{
-    auto bytecode = currentInstruction->as<OpDebug>();
-    loadPtr(addressFor(CallFrameSlot::codeBlock), regT0);
-    load32(Address(regT0, CodeBlock::offsetOfDebuggerRequests()), regT0);
-    Jump noDebuggerRequests = branchTest32(Zero, regT0);
-    callOperation(operationDebug, &vm(), static_cast<int>(bytecode.m_debugHookType));
-    noDebuggerRequests.link(this);
-}
-
 void JIT::emit_op_eq_null(const Instruction* currentInstruction)
 {
     auto bytecode = currentInstruction->as<OpEqNull>();
@@ -1457,6 +1426,16 @@ void JIT::emitSlow_op_instanceof_custom(const Instruction* currentInstruction, V
 
 #endif // USE(JSVALUE64)
 
+void JIT::emit_op_debug(const Instruction* currentInstruction)
+{
+    auto bytecode = currentInstruction->as<OpDebug>();
+    loadPtr(addressFor(CallFrameSlot::codeBlock), regT0);
+    load32(Address(regT0, CodeBlock::offsetOfDebuggerRequests()), regT0);
+    Jump noDebuggerRequests = branchTest32(Zero, regT0);
+    callOperation(operationDebug, &vm(), static_cast<int>(bytecode.m_debugHookType));
+    noDebuggerRequests.link(this);
+}
+
 void JIT::emit_op_loop_hint(const Instruction* instruction)
 {
     if (UNLIKELY(Options::returnEarlyFromInfiniteLoopsForFuzzing() && m_unlinkedCodeBlock->loopHintsAreEligibleForFuzzingEarlyReturn())) {
@@ -1466,10 +1445,12 @@ void JIT::emit_op_loop_hint(const Instruction* instruction)
 
 #if USE(JSVALUE64)
         JSValueRegs resultRegs(GPRInfo::returnValueGPR);
+        loadGlobalObject(resultRegs.gpr());
 #else
         JSValueRegs resultRegs(GPRInfo::returnValueGPR2, GPRInfo::returnValueGPR);
+        loadGlobalObject(resultRegs.payloadGPR());
+        move(TrustedImm32(JSValue::CellTag), resultRegs.tagGPR());
 #endif
-        loadGlobalObject(resultRegs.gpr());
         checkStackPointerAlignment();
         emitRestoreCalleeSaves();
         emitFunctionEpilogue();

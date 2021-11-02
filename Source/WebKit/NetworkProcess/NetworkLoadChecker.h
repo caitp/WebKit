@@ -34,9 +34,9 @@
 #include <WebCore/NetworkLoadInformation.h>
 #include <WebCore/ResourceError.h>
 #include <pal/SessionID.h>
+#include <variant>
 #include <wtf/CompletionHandler.h>
 #include <wtf/Expected.h>
-#include <wtf/Variant.h>
 #include <wtf/WeakPtr.h>
 
 namespace WebCore {
@@ -70,7 +70,7 @@ public:
         WebCore::ResourceResponse redirectResponse;
     };
 
-    using RequestOrRedirectionTripletOrError = Variant<WebCore::ResourceRequest, RedirectionTriplet, WebCore::ResourceError>;
+    using RequestOrRedirectionTripletOrError = std::variant<WebCore::ResourceRequest, RedirectionTriplet, WebCore::ResourceError>;
     using ValidationHandler = CompletionHandler<void(RequestOrRedirectionTripletOrError&&)>;
     void check(WebCore::ResourceRequest&&, WebCore::ContentSecurityPolicyClient*, ValidationHandler&&);
 

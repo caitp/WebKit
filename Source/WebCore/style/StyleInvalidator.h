@@ -35,12 +35,13 @@ namespace WebCore {
 class Document;
 class Element;
 class MediaQueryEvaluator;
-class Scope;
 class SelectorFilter;
 class ShadowRoot;
 class StyleSheetContents;
 
 namespace Style {
+
+class Scope;
 
 struct InvalidationRuleSet;
 
@@ -59,7 +60,7 @@ public:
 
     static void invalidateShadowParts(ShadowRoot&);
 
-    using MatchElementRuleSets = HashMap<MatchElement, InvalidationRuleSetVector, WTF::IntHash<MatchElement>, WTF::StrongEnumHashTraits<MatchElement>>;
+    using MatchElementRuleSets = HashMap<MatchElement, InvalidationRuleSetVector, IntHash<MatchElement>, WTF::StrongEnumHashTraits<MatchElement>>;
     static void addToMatchElementRuleSets(Invalidator::MatchElementRuleSets&, const InvalidationRuleSet&);
     static void invalidateWithMatchElementRuleSets(Element&, const MatchElementRuleSets&);
     static void invalidateAllStyle(Scope&);

@@ -78,14 +78,6 @@ RetainPtr<CGColorSpaceRef> ImageBufferCGBackend::contextColorSpace(const Graphic
 #endif
 }
 
-void ImageBufferCGBackend::setupContext() const
-{
-    // The initial CTM matches DisplayList::Recorder::clipToDrawingCommands()'s initial CTM.
-    context().scale(FloatSize(1, -1));
-    context().translate(0, -backendSize().height());
-    context().applyDeviceScaleFactor(resolutionScale());
-}
-
 static RetainPtr<CGImageRef> createCroppedImageIfNecessary(CGImageRef image, const IntSize& backendSize)
 {
     if (image && (CGImageGetWidth(image) != static_cast<size_t>(backendSize.width()) || CGImageGetHeight(image) != static_cast<size_t>(backendSize.height())))
@@ -253,11 +245,16 @@ String ImageBufferCGBackend::toDataURL(const String& mimeType, std::optional<dou
 
 std::unique_ptr<ThreadSafeImageBufferFlusher> ImageBufferCGBackend::createFlusher()
 {
-    return WTF::makeUnique<ThreadSafeImageBufferFlusherCG>(context().platformContext());
+    return makeUnique<ThreadSafeImageBufferFlusherCG>(context().platformContext());
 }
 
 void ImageBufferCGBackend::prepareToDrawIntoContext(GraphicsContext&)
 {
+}
+
+bool ImageBufferCGBackend::originAtBottomLeftCorner() const
+{
+    return isOriginAtBottomLeftCorner;
 }
 
 } // namespace WebCore

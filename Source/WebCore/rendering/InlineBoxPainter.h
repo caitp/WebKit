@@ -26,6 +26,7 @@
 
 #include "FloatRect.h"
 #include "GraphicsTypes.h"
+#include "InlineIteratorInlineBox.h"
 #include "LayoutRect.h"
 #include "ShadowData.h"
 
@@ -41,25 +42,28 @@ struct PaintInfo;
 class InlineBoxPainter {
 public:
     InlineBoxPainter(const LegacyInlineFlowBox&, PaintInfo&, const LayoutPoint& paintOffset);
+#if ENABLE(LAYOUT_FORMATTING_CONTEXT)
+    InlineBoxPainter(const LayoutIntegration::InlineContent&, const InlineDisplay::Box&, PaintInfo&, const LayoutPoint& paintOffset);
+#endif
     ~InlineBoxPainter();
 
     void paint();
 
 private:
+    InlineBoxPainter(const InlineIterator::InlineBox&, PaintInfo&, const LayoutPoint& paintOffset);
+
     void paintMask();
     void paintDecorations();
     void paintFillLayers(const Color&, const FillLayer&, const LayoutRect& paintRect, CompositeOperator);
     void paintFillLayer(const Color&, const FillLayer&, const LayoutRect& paintRect, CompositeOperator);
     void paintBoxShadow(ShadowStyle, const LayoutRect& paintRect);
 
-    void constrainToLineTopAndBottomIfNeeded(LayoutRect&) const;
-
     const RenderStyle& style() const;
     // FIXME: Make RenderBoxModelObject functions const.
     RenderBoxModelObject& renderer() const { return const_cast<RenderBoxModelObject&>(m_renderer); }
     bool isHorizontal() const { return m_isHorizontal; }
 
-    const LegacyInlineFlowBox& m_inlineBox;
+    const InlineIterator::InlineBox m_inlineBox;
     PaintInfo& m_paintInfo;
     const LayoutPoint m_paintOffset;
     const RenderBoxModelObject& m_renderer;

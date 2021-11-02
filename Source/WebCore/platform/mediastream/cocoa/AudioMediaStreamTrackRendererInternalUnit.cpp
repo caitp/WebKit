@@ -33,6 +33,7 @@
 #include "CAAudioStreamDescription.h"
 #include "Logging.h"
 
+#include <Accelerate/Accelerate.h>
 #include <pal/spi/cocoa/AudioToolboxSPI.h>
 #include <wtf/FastMalloc.h>
 #include <wtf/Lock.h>
@@ -50,7 +51,7 @@ namespace WebCore {
 class LocalAudioMediaStreamTrackRendererInternalUnit final : public AudioMediaStreamTrackRendererInternalUnit {
     WTF_MAKE_FAST_ALLOCATED;
 public:
-    explicit LocalAudioMediaStreamTrackRendererInternalUnit(RenderCallback&&);
+    LocalAudioMediaStreamTrackRendererInternalUnit(RenderCallback&&, ResetCallback&&);
 
 private:
     void createAudioUnitIfNeeded();
@@ -61,24 +62,28 @@ private:
     void retrieveFormatDescription(CompletionHandler<void(const CAAudioStreamDescription*)>&&) final;
     void setAudioOutputDevice(const String&) final;
 
+    OSStatus render(AudioUnitRenderActionFlags*, const AudioTimeStamp*, UInt32 sampleCount, AudioBufferList*);
     static OSStatus renderingCallback(void*, AudioUnitRenderActionFlags*, const AudioTimeStamp*, UInt32 inBusNumber, UInt32 sampleCount, AudioBufferList*);
 
     RenderCallback m_renderCallback;
+    ResetCallback m_resetCallback;
     std::unique_ptr<CAAudioStreamDescription> m_outputDescription;
     AudioComponentInstance m_remoteIOUnit { nullptr };
     bool m_isStarted { false };
+    uint64_t m_sampleTime { 0 };
 #if PLATFORM(MAC)
     uint32_t m_deviceID { 0 };
 #endif
 };
 
-UniqueRef<AudioMediaStreamTrackRendererInternalUnit> AudioMediaStreamTrackRendererInternalUnit::createLocalInternalUnit(RenderCallback&& renderCallback)
+UniqueRef<AudioMediaStreamTrackRendererInternalUnit> AudioMediaStreamTrackRendererInternalUnit::createLocalInternalUnit(RenderCallback&& renderCallback, ResetCallback&& resetCallback)
 {
-    return makeUniqueRef<LocalAudioMediaStreamTrackRendererInternalUnit>(WTFMove(renderCallback));
+    return makeUniqueRef<LocalAudioMediaStreamTrackRendererInternalUnit>(WTFMove(renderCallback), WTFMove(resetCallback));
 }
 
-LocalAudioMediaStreamTrackRendererInternalUnit::LocalAudioMediaStreamTrackRendererInternalUnit(RenderCallback&& renderCallback)
+LocalAudioMediaStreamTrackRendererInternalUnit::LocalAudioMediaStreamTrackRendererInternalUnit(RenderCallback&& renderCallback, ResetCallback&& resetCallback)
     : m_renderCallback(WTFMove(renderCallback))
+    , m_resetCallback(WTFMove(resetCallback))
 {
 }
 
@@ -125,6 +130,7 @@ void LocalAudioMediaStreamTrackRendererInternalUnit::start()
     if (!m_remoteIOUnit)
         return;
 
+    m_sampleTime = 0;
     if (auto error = PAL::AudioOutputUnitStart(m_remoteIOUnit)) {
         RELEASE_LOG_ERROR(WebRTC, "AudioMediaStreamTrackRendererInternalUnit::start AudioOutputUnitStart failed, error = %d", error);
         PAL::AudioComponentInstanceDispose(m_remoteIOUnit);
@@ -230,9 +236,58 @@ void LocalAudioMediaStreamTrackRendererInternalUnit::createAudioUnitIfNeeded()
     m_remoteIOUnit = remoteIOUnit;
 }
 
+static void clipAudioBuffer(float* vector, size_t size)
+{
+    float minimum = -1;
+    float maximum = 1;
+    vDSP_vclip(vector, 1, &minimum, &maximum, vector, 1, size);
+}
+
+static void clipAudioBuffer(double* vector, size_t size)
+{
+    double minimum = -1;
+    double maximum = 1;
+    vDSP_vclipD(vector, 1, &minimum, &maximum, vector, 1, size);
+}
+
+static void clipAudioBufferList(AudioBufferList& list, AudioStreamDescription::PCMFormat format)
+{
+    switch (format) {
+    case AudioStreamDescription::Int16:
+        break;
+    case AudioStreamDescription::Int32:
+        break;
+    case AudioStreamDescription::Float32:
+        for (size_t index = 0; index < list.mNumberBuffers ; ++index)
+            clipAudioBuffer(static_cast<float*>(list.mBuffers[index].mData), list.mBuffers[index].mDataByteSize / sizeof(float));
+        break;
+    case AudioStreamDescription::Float64:
+        for (size_t index = 0; index < list.mNumberBuffers ; ++index)
+            clipAudioBuffer(static_cast<double*>(list.mBuffers[index].mData), list.mBuffers[index].mDataByteSize / sizeof(double));
+        break;
+    case AudioStreamDescription::None:
+        ASSERT_NOT_REACHED();
+        break;
+    }
+}
+
+OSStatus LocalAudioMediaStreamTrackRendererInternalUnit::render(AudioUnitRenderActionFlags* actionFlags, const AudioTimeStamp* timeStamp, UInt32 sampleCount, AudioBufferList* ioData)
+{
+    auto sampleTime = timeStamp->mSampleTime;
+    // If we observe an irregularity in the timeline, we trigger a reset.
+    if (m_sampleTime && (m_sampleTime + 2 * sampleCount < sampleTime || sampleTime <= m_sampleTime))
+        m_resetCallback();
+    m_sampleTime = sampleTime < std::numeric_limits<Float64>::max() - sampleCount ? sampleTime : 0;
+
+    auto result = m_renderCallback(sampleCount, *ioData, sampleTime, timeStamp->mHostTime, *actionFlags);
+    // FIXME: We should probably introduce a limiter to limit the amount of clipping.
+    clipAudioBufferList(*ioData, m_outputDescription->format());
+    return result;
+}
+
 OSStatus LocalAudioMediaStreamTrackRendererInternalUnit::renderingCallback(void* processor, AudioUnitRenderActionFlags* actionFlags, const AudioTimeStamp* timeStamp, UInt32, UInt32 sampleCount, AudioBufferList* ioData)
 {
-    return static_cast<LocalAudioMediaStreamTrackRendererInternalUnit*>(processor)->m_renderCallback(sampleCount, *ioData, timeStamp->mSampleTime, timeStamp->mHostTime, *actionFlags);
+    return static_cast<LocalAudioMediaStreamTrackRendererInternalUnit*>(processor)->render(actionFlags, timeStamp, sampleCount, ioData);
 }
 
 } // namespace WebCore

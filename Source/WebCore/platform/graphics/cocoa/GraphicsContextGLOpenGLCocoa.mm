@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2018 Apple Inc. All rights reserved.
+ * Copyright (C) 2009-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,14 +28,14 @@
 #if ENABLE(WEBGL)
 #import "GraphicsContextGLOpenGL.h"
 
+#import "ANGLEUtilities.h"
+#import "ANGLEUtilitiesCocoa.h"
 #import "CVUtilities.h"
 #import "ExtensionsGLANGLE.h"
-#import "GraphicsContextGLANGLEUtilities.h"
 #import "GraphicsContextGLIOSurfaceSwapChain.h"
 #import "GraphicsContextGLOpenGLManager.h"
 #import "Logging.h"
 #import "RuntimeApplicationChecks.h"
-#import "WebGLLayer.h"
 #import <CoreGraphics/CGBitmapContext.h>
 #import <Metal/Metal.h>
 #import <pal/spi/cocoa/MetalSPI.h>
@@ -48,7 +48,7 @@
 #endif
 
 #if ENABLE(VIDEO) && USE(AVFOUNDATION)
-#include "GraphicsContextGLCV.h"
+#include "GraphicsContextGLCVANGLE.h"
 #endif
 
 #if ENABLE(MEDIA_STREAM)
@@ -58,6 +58,13 @@
 WTF_WEAK_LINK_FORCE_IMPORT(EGL_Initialize);
 
 namespace WebCore {
+
+bool platformIsANGLEAvailable()
+{
+    // The ANGLE is weak linked in full, and the EGL_Initialize is explicitly weak linked above
+    // so that we can detect the case where ANGLE is not present.
+    return !!EGL_Initialize;
+}
 
 // In isCurrentContextPredictable() == true case this variable is accessed in single-threaded manner.
 // In isCurrentContextPredictable() == false case this variable is accessed from multiple threads but always sequentially
@@ -96,7 +103,7 @@ static bool checkVolatileContextSupportIfDeviceExists(EGLDisplay display, const 
 
 static bool platformSupportsMetal(bool isWebGL2)
 {
-    auto device = MTLCreateSystemDefaultDevice();
+    auto device = adoptNS(MTLCreateSystemDefaultDevice());
 
     if (device) {
 #if PLATFORM(IOS_FAMILY) && !PLATFORM(IOS_FAMILY_SIMULATOR)
@@ -113,8 +120,13 @@ static bool platformSupportsMetal(bool isWebGL2)
     return false;
 }
 
-static ScopedEGLDefaultDisplay InitializeEGLDisplay(const GraphicsContextGLAttributes& attrs)
+static EGLDisplay initializeEGLDisplay(const GraphicsContextGLAttributes& attrs)
 {
+    if (!platformIsANGLEAvailable()) {
+        WTFLogAlways("Failed to load ANGLE shared library.");
+        return EGL_NO_DISPLAY;
+    }
+
     EGLint majorVersion = 0;
     EGLint minorVersion = 0;
     EGLDisplay display;
@@ -134,37 +146,38 @@ static ScopedEGLDefaultDisplay InitializeEGLDisplay(const GraphicsContextGLAttri
     }
 
     LOG(WebGL, "Attempting to use ANGLE's %s backend.", attrs.useMetal ? "Metal" : "OpenGL");
+    EGLNativeDisplayType nativeDisplay = GraphicsContextGLOpenGL::defaultDisplay;
     if (attrs.useMetal) {
         displayAttributes.append(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
         displayAttributes.append(EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE);
-    }
-
-    if (attrs.powerPreference != GraphicsContextGLAttributes::PowerPreference::Default || attrs.forceRequestForHighPerformanceGPU) {
-        displayAttributes.append(EGL_POWER_PREFERENCE_ANGLE);
-        if (attrs.powerPreference == GraphicsContextGLAttributes::PowerPreference::LowPower && !attrs.forceRequestForHighPerformanceGPU) {
-            LOG(WebGL, "Requesting low power GPU.");
+        // These properties are defined for EGL_ANGLE_power_preference as EGLContext attributes,
+        // but Metal backend uses EGLDisplay attributes.
+        auto powerPreference = attrs.forceRequestForHighPerformanceGPU ? GraphicsContextGLAttributes::PowerPreference::HighPerformance : attrs.powerPreference;
+        if (powerPreference == GraphicsContextGLAttributes::PowerPreference::LowPower) {
+            displayAttributes.append(EGL_POWER_PREFERENCE_ANGLE);
             displayAttributes.append(EGL_LOW_POWER_ANGLE);
-        } else {
-            ASSERT(attrs.powerPreference == GraphicsContextGLAttributes::PowerPreference::HighPerformance || attrs.forceRequestForHighPerformanceGPU);
-            LOG(WebGL, "Requesting high power GPU if available.");
+            nativeDisplay = GraphicsContextGLOpenGL::lowPowerDisplay;
+        } else if (powerPreference == GraphicsContextGLAttributes::PowerPreference::HighPerformance) {
+            displayAttributes.append(EGL_POWER_PREFERENCE_ANGLE);
             displayAttributes.append(EGL_HIGH_POWER_ANGLE);
+            nativeDisplay = GraphicsContextGLOpenGL::highPerformanceDisplay;
         }
     }
     displayAttributes.append(EGL_NONE);
-    display = EGL_GetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE, reinterpret_cast<void*>(EGL_DEFAULT_DISPLAY), displayAttributes.data());
+    display = EGL_GetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE, reinterpret_cast<void*>(nativeDisplay), displayAttributes.data());
 
     if (EGL_Initialize(display, &majorVersion, &minorVersion) == EGL_FALSE) {
         LOG(WebGL, "EGLDisplay Initialization failed.");
-        return { };
+        return EGL_NO_DISPLAY;
     }
     LOG(WebGL, "ANGLE initialised Major: %d Minor: %d", majorVersion, minorVersion);
     if (shouldInitializeWithVolatileContextSupport) {
         // After initialization, EGL_DEFAULT_DISPLAY will return the platform-customized display.
-        ASSERT(display == EGL_GetDisplay(EGL_DEFAULT_DISPLAY));
+        ASSERT(display == EGL_GetDisplay(nativeDisplay));
         ASSERT(checkVolatileContextSupportIfDeviceExists(display, "EGL_ANGLE_platform_device_context_volatile_eagl", "EGL_ANGLE_device_eagl", EGL_EAGL_CONTEXT_ANGLE));
         ASSERT(checkVolatileContextSupportIfDeviceExists(display, "EGL_ANGLE_platform_device_context_volatile_cgl", "EGL_ANGLE_device_cgl", EGL_CGL_CONTEXT_ANGLE));
     }
-    return ScopedEGLDefaultDisplay::adoptInitializedDisplay(display);
+    return display;
 }
 
 static const unsigned statusCheckThreshold = 5;
@@ -180,51 +193,8 @@ static bool needsEAGLOnMac()
 }
 #endif
 
-static bool isANGLEAvailable()
-{
-    return !!EGL_Initialize;
-}
-
-RefPtr<GraphicsContextGLOpenGL> GraphicsContextGLOpenGL::create(GraphicsContextGLAttributes attrs, HostWindow* hostWindow)
-{
-    // If ANGLE is not loaded, we can fail immediately.
-    if (!isANGLEAvailable()) {
-        WTFLogAlways("ANGLE shared library was not loaded. Can't make GraphicsContextGL.");
-        return nullptr;
-    }
-
-    // Make space for the incoming context if we're full.
-    GraphicsContextGLOpenGLManager::sharedManager().recycleContextIfNecessary();
-    if (GraphicsContextGLOpenGLManager::sharedManager().hasTooManyContexts())
-        return nullptr;
-
-    RefPtr<GraphicsContextGLOpenGL> context = adoptRef(new GraphicsContextGLOpenGL(attrs, hostWindow, nullptr, nullptr));
-
-    if (!context->m_contextObj)
-        return nullptr;
-
-    GraphicsContextGLOpenGLManager::sharedManager().addContext(context.get());
-
-    return context;
-}
-
-Ref<GraphicsContextGLOpenGL> GraphicsContextGLOpenGL::createShared(GraphicsContextGLOpenGL& sharedContext)
-{
-
-    auto context = adoptRef(*new GraphicsContextGLOpenGL(sharedContext.contextAttributes(), nullptr, &sharedContext, nullptr));
-
-    GraphicsContextGLOpenGLManager::sharedManager().addContext(context.ptr());
-
-    return context;
-}
-
-Ref<GraphicsContextGLOpenGL> GraphicsContextGLOpenGL::createForGPUProcess(const GraphicsContextGLAttributes& attrs, GraphicsContextGLIOSurfaceSwapChain* swapChain)
-{
-    return adoptRef(*new GraphicsContextGLOpenGL(attrs, nullptr, nullptr, swapChain));
-}
-
-GraphicsContextGLOpenGL::GraphicsContextGLOpenGL(GraphicsContextGLAttributes attrs, HostWindow*, GraphicsContextGLOpenGL* sharedContext, GraphicsContextGLIOSurfaceSwapChain* swapChain)
-    : GraphicsContextGL(attrs, sharedContext)
+GraphicsContextGLOpenGL::GraphicsContextGLOpenGL(GraphicsContextGLAttributes attrs)
+    : GraphicsContextGL(attrs)
 {
     m_isForWebGL2 = attrs.webGLVersion == GraphicsContextGLWebGLVersion::WebGL2;
     if (attrs.useMetal && !platformSupportsMetal(m_isForWebGL2)) {
@@ -245,20 +215,29 @@ GraphicsContextGLOpenGL::GraphicsContextGLOpenGL(GraphicsContextGLAttributes att
     }
 #endif
 
-    m_displayObj = InitializeEGLDisplay(attrs);
+    m_displayObj = initializeEGLDisplay(attrs);
     if (!m_displayObj)
         return;
 
-    bool supportsPowerPreference = false;
 #if PLATFORM(MAC)
-    const char *displayExtensions = EGL_QueryString(m_displayObj, EGL_EXTENSIONS);
-    m_supportsPowerPreference = strstr(displayExtensions, "EGL_ANGLE_power_preference");
-    supportsPowerPreference = m_supportsPowerPreference;
-#endif
-    if (!supportsPowerPreference && attrs.powerPreference == GraphicsContextGLPowerPreference::HighPerformance) {
-        attrs.powerPreference = GraphicsContextGLPowerPreference::Default;
-        setContextAttributes(attrs);
+    if (!attrs.useMetal) {
+        // For OpenGL, EGL_ANGLE_power_preference is used. The context is initialized with the
+        // default, low-power device. For high-performance contexts, we request the high-performance
+        // GPU in setContextVisibility. When the request is fullfilled by the system, we get the
+        // display reconfiguration callback. Upon this, we update the CGL contexts inside ANGLE.
+        const char *displayExtensions = EGL_QueryString(m_displayObj, EGL_EXTENSIONS);
+        bool supportsPowerPreference = strstr(displayExtensions, "EGL_ANGLE_power_preference");
+        if (supportsPowerPreference) {
+            m_switchesGPUOnDisplayReconfiguration = attrs.powerPreference == GraphicsContextGLPowerPreference::HighPerformance
+                || attrs.forceRequestForHighPerformanceGPU;
+        } else {
+            if (attrs.powerPreference == GraphicsContextGLPowerPreference::HighPerformance) {
+                attrs.powerPreference = GraphicsContextGLPowerPreference::Default;
+                setContextAttributes(attrs);
+            }
+        }
     }
+#endif
 
     EGLint configAttributes[] = {
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
@@ -266,6 +245,8 @@ GraphicsContextGLOpenGL::GraphicsContextGLOpenGL(GraphicsContextGLAttributes att
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
         EGL_ALPHA_SIZE, 8,
+        EGL_DEPTH_SIZE, 0,
+        EGL_STENCIL_SIZE, 0,
         EGL_NONE
     };
     EGLint numberConfigsReturned = 0;
@@ -293,20 +274,12 @@ GraphicsContextGLOpenGL::GraphicsContextGLOpenGL(GraphicsContextGLAttributes att
         eglContextAttributes.append(EGL_CONTEXT_OPENGL_BACKWARDS_COMPATIBLE_ANGLE);
         eglContextAttributes.append(EGL_FALSE);
     }
-    if (!sharedContext) {
-        // The shared context is only non-null when creating a context
-        // on behalf of the VideoTextureCopier. WebGL-specific rendering
-        // feedback loop validation does not work in multi-context
-        // scenarios, and must be disabled for the VideoTextureCopier's
-        // context.
-        eglContextAttributes.append(EGL_CONTEXT_WEBGL_COMPATIBILITY_ANGLE);
-        eglContextAttributes.append(EGL_TRUE);
-        // WebGL requires that all resources are cleared at creation.
-        // FIXME: performing robust resource initialization in the VideoTextureCopier adds a large amount of overhead
-        // so it would be nice to avoid that there (we should always be touching every pixel as we copy).
-        eglContextAttributes.append(EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE);
-        eglContextAttributes.append(EGL_TRUE);
-    }
+    eglContextAttributes.append(EGL_CONTEXT_WEBGL_COMPATIBILITY_ANGLE);
+    eglContextAttributes.append(EGL_TRUE);
+
+    // WebGL requires that all resources are cleared at creation.
+    eglContextAttributes.append(EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE);
+    eglContextAttributes.append(EGL_TRUE);
 
     // WebGL doesn't allow client arrays.
     eglContextAttributes.append(EGL_CONTEXT_CLIENT_ARRAYS_ENABLED_ANGLE);
@@ -317,14 +290,12 @@ GraphicsContextGLOpenGL::GraphicsContextGLOpenGL(GraphicsContextGLAttributes att
 
     eglContextAttributes.append(EGL_NONE);
 
-    m_contextObj = EGL_CreateContext(m_displayObj, m_configObj, sharedContext ? static_cast<EGLContext>(sharedContext->m_contextObj) : EGL_NO_CONTEXT, eglContextAttributes.data());
-    if (m_contextObj == EGL_NO_CONTEXT) {
+    m_contextObj = EGL_CreateContext(m_displayObj, m_configObj, EGL_NO_CONTEXT, eglContextAttributes.data());
+    if (m_contextObj == EGL_NO_CONTEXT || !makeCurrent(m_displayObj, m_contextObj)) {
         LOG(WebGL, "EGLContext Initialization failed.");
         return;
     }
     LOG(WebGL, "Got EGLContext");
-
-    EGL_MakeCurrent(m_displayObj, EGL_NO_SURFACE, EGL_NO_SURFACE, m_contextObj);
 
     if (m_isForWebGL2)
         gl::Enable(GraphicsContextGL::PRIMITIVE_RESTART_FIXED_INDEX);
@@ -357,28 +328,17 @@ GraphicsContextGLOpenGL::GraphicsContextGLOpenGL(GraphicsContextGLAttributes att
         extensions.ensureEnabled(extension);
     }
     if (contextAttributes().useMetal) {
-        // The implementation uses GLsync objects. Enable the functionality for WebGL 1.0 contexts
-        // that use OpenGL ES 2.0.
+        // GraphicsContextGLOpenGL uses sync objects to throttle display on Metal implementations.
+        // OpenGL sync objects are not signaling upon completion on Catalina-era drivers, so
+        // OpenGL cannot use this method of throttling. OpenGL drivers typically implement
+        // some sort of internal throttling.
         if (extensions.supports("GL_ARB_sync"_s)) {
-            attrs.hasFenceSync = true;
+            m_useFenceSyncForDisplayRateLimit = true;
             extensions.ensureEnabled("GL_ARB_sync"_s);
-            setContextAttributes(attrs);
         }
     }
     validateAttributes();
     attrs = contextAttributes(); // They may have changed during validation.
-
-    if (swapChain)
-        m_swapChain = swapChain;
-    else {
-    BEGIN_BLOCK_OBJC_EXCEPTIONS
-        m_webGLLayer = adoptNS([[WebGLLayer alloc] initWithDevicePixelRatio:attrs.devicePixelRatio contentsOpaque:!attrs.alpha]);
-#ifndef NDEBUG
-        [m_webGLLayer setName:@"WebGL Layer"];
-#endif
-    END_BLOCK_OBJC_EXCEPTIONS
-        m_swapChain = &[m_webGLLayer swapChain];
-    }
 
     // Create the texture that will be used for the framebuffer.
     GLenum textureTarget = drawingBufferTextureTarget();
@@ -429,19 +389,18 @@ GraphicsContextGLOpenGL::~GraphicsContextGLOpenGL()
 {
     GraphicsContextGLOpenGLManager::sharedManager().removeContext(this);
     if (makeContextCurrent()) {
-        GraphicsContextGLAttributes attrs = contextAttributes();
-        gl::DeleteTextures(1, &m_texture);
-
-        if (attrs.antialias) {
+        if (m_texture)
+            gl::DeleteTextures(1, &m_texture);
+        if (m_multisampleColorBuffer)
             gl::DeleteRenderbuffers(1, &m_multisampleColorBuffer);
-            if (attrs.stencil || attrs.depth)
-                gl::DeleteRenderbuffers(1, &m_multisampleDepthStencilBuffer);
+        if (m_multisampleDepthStencilBuffer)
+            gl::DeleteRenderbuffers(1, &m_multisampleDepthStencilBuffer);
+        if (m_multisampleFBO)
             gl::DeleteFramebuffers(1, &m_multisampleFBO);
-        } else {
-            if (attrs.stencil || attrs.depth)
-                gl::DeleteRenderbuffers(1, &m_depthStencilBuffer);
-        }
-        gl::DeleteFramebuffers(1, &m_fbo);
+        if (m_depthStencilBuffer)
+            gl::DeleteRenderbuffers(1, &m_depthStencilBuffer);
+        if (m_fbo)
+            gl::DeleteFramebuffers(1, &m_fbo);
         if (m_preserveDrawingBufferTexture)
             gl::DeleteTextures(1, &m_preserveDrawingBufferTexture);
         if (m_preserveDrawingBufferFBO)
@@ -453,60 +412,71 @@ GraphicsContextGLOpenGL::~GraphicsContextGLOpenGL()
         for (auto& fence : m_frameCompletionFences)
             fence.abandon();
     }
-    if (m_displayBufferPbuffer) {
+    if (m_displayBufferPbuffer)
         EGL_DestroySurface(m_displayObj, m_displayBufferPbuffer);
-        auto recycledBuffer = m_swapChain->recycleBuffer();
-        if (recycledBuffer.handle)
-            EGL_DestroySurface(m_displayObj, recycledBuffer.handle);
-        auto contentsHandle = m_swapChain->detachClient();
-        if (contentsHandle)
-            EGL_DestroySurface(m_displayObj, contentsHandle);
-    }
+    auto recycledBuffer = m_swapChain.recycleBuffer();
+    if (recycledBuffer.handle)
+        EGL_DestroySurface(m_displayObj, recycledBuffer.handle);
+    auto contentsHandle = m_swapChain.detachClient();
+    if (contentsHandle)
+        EGL_DestroySurface(m_displayObj, contentsHandle);
     if (m_contextObj) {
-        clearCurrentContext();
+        makeCurrent(m_displayObj, EGL_NO_CONTEXT);
         EGL_DestroyContext(m_displayObj, m_contextObj);
-    } else
-        ASSERT(currentContext != this);
+    }
+    ASSERT(currentContext != this);
+    m_drawingBufferTextureTarget = -1;
     LOG(WebGL, "Destroyed a GraphicsContextGLOpenGL (%p).", this);
+}
+
+bool GraphicsContextGLOpenGL::isValid() const
+{
+    return m_texture;
+}
+
+PlatformLayer* GraphicsContextGLOpenGL::platformLayer() const
+{
+    return nullptr;
 }
 
 GCGLenum GraphicsContextGLOpenGL::drawingBufferTextureTarget()
 {
-#if PLATFORM(MACCATALYST)
-    if (needsEAGLOnMac())
+    if (m_drawingBufferTextureTarget == -1)
+        EGL_GetConfigAttrib(m_displayObj, m_configObj, EGL_BIND_TO_TEXTURE_TARGET_ANGLE, &m_drawingBufferTextureTarget);
+
+    switch (m_drawingBufferTextureTarget) {
+    case EGL_TEXTURE_2D:
         return TEXTURE_2D;
-    return TEXTURE_RECTANGLE_ARB;
-#elif PLATFORM(MAC)
-    return TEXTURE_RECTANGLE_ARB;
-#else
-    return TEXTURE_2D;
-#endif
+    case EGL_TEXTURE_RECTANGLE_ANGLE:
+        return TEXTURE_RECTANGLE_ARB;
+
+    }
+    ASSERT_WITH_MESSAGE(false, "Invalid enum returned from EGL_GetConfigAttrib");
+    return 0;
 }
 
-GCGLenum GraphicsContextGLOpenGL::drawingBufferTextureTargetQuery()
+GCGLenum GraphicsContextGLOpenGL::drawingBufferTextureTargetQueryForDrawingTarget(GCGLenum drawingTarget)
 {
-#if PLATFORM(MACCATALYST)
-    if (needsEAGLOnMac())
+    switch (drawingTarget) {
+    case TEXTURE_2D:
         return TEXTURE_BINDING_2D;
-    return TEXTURE_BINDING_RECTANGLE_ARB;
-#elif PLATFORM(MAC)
-    return TEXTURE_BINDING_RECTANGLE_ARB;
-#else
-    return TEXTURE_BINDING_2D;
-#endif
+    case TEXTURE_RECTANGLE_ARB:
+        return TEXTURE_BINDING_RECTANGLE_ARB;
+    }
+    ASSERT_WITH_MESSAGE(false, "Invalid drawing target");
+    return -1;
 }
 
-GCGLint GraphicsContextGLOpenGL::EGLDrawingBufferTextureTarget()
+GCGLint GraphicsContextGLOpenGL::EGLDrawingBufferTextureTargetForDrawingTarget(GCGLenum drawingTarget)
 {
-#if PLATFORM(MACCATALYST)
-    if (needsEAGLOnMac())
+    switch (drawingTarget) {
+    case TEXTURE_2D:
         return EGL_TEXTURE_2D;
-    return EGL_TEXTURE_RECTANGLE_ANGLE;
-#elif PLATFORM(MAC)
-    return EGL_TEXTURE_RECTANGLE_ANGLE;
-#else
-    return EGL_TEXTURE_2D;
-#endif
+    case TEXTURE_RECTANGLE_ARB:
+        return EGL_TEXTURE_RECTANGLE_ANGLE;
+    }
+    ASSERT_WITH_MESSAGE(false, "Invalid drawing target");
+    return 0;
 }
 
 bool GraphicsContextGLOpenGL::makeContextCurrent()
@@ -519,7 +489,7 @@ bool GraphicsContextGLOpenGL::makeContextCurrent()
         return false;
     if (currentContext == this)
         return true;
-    // Calling MakeCurrent is important to set volatile platform context. See InitializeEGLDisplay().
+    // Calling MakeCurrent is important to set volatile platform context. See initializeEGLDisplay().
     if (!EGL_MakeCurrent(m_displayObj, EGL_NO_SURFACE, EGL_NO_SURFACE, m_contextObj))
         return false;
     if (isCurrentContextPredictable())
@@ -527,59 +497,13 @@ bool GraphicsContextGLOpenGL::makeContextCurrent()
     return true;
 }
 
-void GraphicsContextGLOpenGL::clearCurrentContext()
-{
-    EGLBoolean result = EGL_MakeCurrent(m_displayObj, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    ASSERT_UNUSED(result, result);
-    currentContext = nullptr;
-}
-
-#if PLATFORM(IOS_FAMILY)
-bool GraphicsContextGLOpenGL::releaseCurrentContext(ReleaseBehavior releaseBehavior)
-{
-    if (!isANGLEAvailable())
-        return true;
-
-    // At the moment this function is relevant only when web thread lock owns the GraphicsContextGLOpenGL current context.
-    ASSERT(!isCurrentContextPredictable());
-
-    if (!EGL_BindAPI(EGL_OPENGL_ES_API))
-        return false;
-    if (EGL_GetCurrentContext() == EGL_NO_CONTEXT)
-        return true;
-
-    // At the time of writing, ANGLE does not flush on MakeCurrent. Since we are
-    // potentially switching threads, we should flush.
-    // Note: Here we assume also that ANGLE has only one platform context -- otherwise
-    // we would need to flush each EGL context that has been used.
-    gl::Flush();
-
-    // Unset the EGL current context, since the next access might be from another thread, and the
-    // context cannot be current on multiple threads.
-
-    if (releaseBehavior == ReleaseBehavior::ReleaseThreadResources) {
-        // Called when we do not know if we will ever see another call from this thread again.
-        // Unset the EGL current context by releasing whole EGL thread state.
-        // Theoretically ReleaseThread can reset the bound API, so the rest of the code mentions BindAPI/QueryAPI.
-        return EGL_ReleaseThread();
-    }
-    // On WebKit owned threads, WebKit is able to choose the time for the EGL cleanup.
-    // This is why we only unset the context.
-    // Note: At the time of writing the EGL cleanup is chosen to be not done at all.
-    EGLDisplay display = EGL_GetDisplay(EGL_DEFAULT_DISPLAY);
-    if (display == EGL_NO_DISPLAY)
-        return false;
-    return EGL_MakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-}
-#endif
-
 void GraphicsContextGLOpenGL::checkGPUStatus()
 {
     if (m_failNextStatusCheck) {
         LOG(WebGL, "Pretending the GPU has reset (%p). Lose the context.", this);
         m_failNextStatusCheck = false;
         forceContextLost();
-        clearCurrentContext();
+        makeCurrent(m_displayObj, EGL_NO_CONTEXT);
         return;
     }
 
@@ -597,7 +521,7 @@ void GraphicsContextGLOpenGL::checkGPUStatus()
 void GraphicsContextGLOpenGL::setContextVisibility(bool isVisible)
 {
 #if PLATFORM(MAC)
-    if (contextAttributes().powerPreference != GraphicsContextGLPowerPreference::HighPerformance)
+    if (!m_switchesGPUOnDisplayReconfiguration)
         return;
     if (isVisible)
         m_highPerformanceGPURequest = ScopedHighPerformanceGPURequest::acquire();
@@ -611,7 +535,7 @@ void GraphicsContextGLOpenGL::setContextVisibility(bool isVisible)
 void GraphicsContextGLOpenGL::displayWasReconfigured()
 {
 #if PLATFORM(MAC)
-    if (m_supportsPowerPreference)
+    if (m_switchesGPUOnDisplayReconfiguration)
         EGL_HandleGPUSwitchANGLE(m_displayObj);
 #endif
     dispatchContextChangedNotification();
@@ -628,12 +552,10 @@ bool GraphicsContextGLOpenGL::reshapeDisplayBufferBacking()
         m_displayBufferPbuffer = EGL_NO_SURFACE;
     }
     // Reset the future recycled buffer now, because it most likely will not be reusable at the time it will be reused.
-    if (m_swapChain) {
-        auto recycledBuffer = m_swapChain->recycleBuffer();
-        if (recycledBuffer.handle)
-            EGL_DestroySurface(m_displayObj, recycledBuffer.handle);
-        recycledBuffer.surface.reset();
-    }
+    auto recycledBuffer = m_swapChain.recycleBuffer();
+    if (recycledBuffer.handle)
+        EGL_DestroySurface(m_displayObj, recycledBuffer.handle);
+    recycledBuffer.surface.reset();
     return allocateAndBindDisplayBufferBacking();
 }
 
@@ -652,7 +574,7 @@ bool GraphicsContextGLOpenGL::allocateAndBindDisplayBufferBacking()
         EGL_WIDTH, size.width(),
         EGL_HEIGHT, size.height(),
         EGL_IOSURFACE_PLANE_ANGLE, 0,
-        EGL_TEXTURE_TARGET, WebCore::GraphicsContextGLOpenGL::EGLDrawingBufferTextureTarget(),
+        EGL_TEXTURE_TARGET, EGLDrawingBufferTextureTargetForDrawingTarget(drawingBufferTextureTarget()),
         EGL_TEXTURE_INTERNAL_FORMAT_ANGLE, usingAlpha ? GL_BGRA_EXT : GL_RGB,
         EGL_TEXTURE_FORMAT, EGL_TEXTURE_RGBA,
         EGL_TEXTURE_TYPE_ANGLE, GL_UNSIGNED_BYTE,
@@ -669,7 +591,7 @@ bool GraphicsContextGLOpenGL::allocateAndBindDisplayBufferBacking()
 bool GraphicsContextGLOpenGL::bindDisplayBufferBacking(std::unique_ptr<IOSurface> backing, void* pbuffer)
 {
     GCGLenum textureTarget = drawingBufferTextureTarget();
-    ScopedRestoreTextureBinding restoreBinding(drawingBufferTextureTargetQuery(), textureTarget, textureTarget != TEXTURE_RECTANGLE_ARB);
+    ScopedRestoreTextureBinding restoreBinding(drawingBufferTextureTargetQueryForDrawingTarget(drawingBufferTextureTarget()), textureTarget, textureTarget != TEXTURE_RECTANGLE_ARB);
     gl::BindTexture(textureTarget, m_texture);
     if (!EGL_BindTexImage(m_displayObj, pbuffer, EGL_BACK_BUFFER)) {
         EGL_DestroySurface(m_displayObj, pbuffer);
@@ -680,25 +602,20 @@ bool GraphicsContextGLOpenGL::bindDisplayBufferBacking(std::unique_ptr<IOSurface
     return true;
 }
 
+bool GraphicsContextGLOpenGL::makeCurrent(PlatformGraphicsContextGLDisplay display, PlatformGraphicsContextGL context)
+{
+    currentContext = nullptr;
+    return EGL_MakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, context);
+}
+
 void* GraphicsContextGLOpenGL::createPbufferAndAttachIOSurface(GCGLenum target, PbufferAttachmentUsage usage, GCGLenum internalFormat, GCGLsizei width, GCGLsizei height, GCGLenum type, IOSurfaceRef surface, GCGLuint plane)
 {
-    if (target != GraphicsContextGL::TEXTURE_RECTANGLE_ARB && target != GraphicsContextGL::TEXTURE_2D) {
+    if (target != GraphicsContextGLOpenGL::drawingBufferTextureTarget()) {
         LOG(WebGL, "Unknown texture target %d.", static_cast<int>(target));
         return nullptr;
     }
 
-    auto eglTextureTarget = [&] () -> EGLint {
-        if (target == GraphicsContextGL::TEXTURE_RECTANGLE_ARB)
-            return EGL_TEXTURE_RECTANGLE_ANGLE;
-        return EGL_TEXTURE_2D;
-    }();
-
-    if (eglTextureTarget != GraphicsContextGLOpenGL::EGLDrawingBufferTextureTarget()) {
-        LOG(WebGL, "Mismatch in EGL texture target: %d should be %d.", static_cast<int>(target), GraphicsContextGLOpenGL::EGLDrawingBufferTextureTarget());
-        return nullptr;
-    }
-
-    auto usageHintAngle = [&] () -> EGLint {
+    auto usageHint = [&] () -> EGLint {
         if (usage == PbufferAttachmentUsage::Read)
             return EGL_IOSURFACE_READ_HINT_ANGLE;
         if (usage == PbufferAttachmentUsage::Write)
@@ -706,40 +623,12 @@ void* GraphicsContextGLOpenGL::createPbufferAndAttachIOSurface(GCGLenum target, 
         return EGL_IOSURFACE_READ_HINT_ANGLE | EGL_IOSURFACE_WRITE_HINT_ANGLE;
     }();
 
-    const EGLint surfaceAttributes[] = {
-        EGL_WIDTH, width,
-        EGL_HEIGHT, height,
-        EGL_IOSURFACE_PLANE_ANGLE, static_cast<EGLint>(plane),
-        EGL_TEXTURE_TARGET, static_cast<EGLint>(eglTextureTarget),
-        EGL_TEXTURE_INTERNAL_FORMAT_ANGLE, static_cast<EGLint>(internalFormat),
-        EGL_TEXTURE_FORMAT, EGL_TEXTURE_RGBA,
-        EGL_TEXTURE_TYPE_ANGLE, static_cast<EGLint>(type),
-        // Only has an effect on the iOS Simulator.
-        EGL_IOSURFACE_USAGE_HINT_ANGLE, usageHintAngle,
-        EGL_NONE, EGL_NONE
-    };
-
-    auto display = platformDisplay();
-    EGLSurface pbuffer = EGL_CreatePbufferFromClientBuffer(display, EGL_IOSURFACE_ANGLE, surface, platformConfig(), surfaceAttributes);
-    if (!pbuffer) {
-        LOG(WebGL, "EGL_CreatePbufferFromClientBuffer failed.");
-        return nullptr;
-    }
-
-    if (!EGL_BindTexImage(display, pbuffer, EGL_BACK_BUFFER)) {
-        LOG(WebGL, "EGL_BindTexImage failed.");
-        EGL_DestroySurface(display, pbuffer);
-        return nullptr;
-    }
-
-    return pbuffer;
+    return WebCore::createPbufferAndAttachIOSurface(m_displayObj, m_configObj, target, usageHint, internalFormat, width, height, type, surface, plane);
 }
 
 void GraphicsContextGLOpenGL::destroyPbufferAndDetachIOSurface(void* handle)
 {
-    auto display = platformDisplay();
-    EGL_ReleaseTexImage(display, handle, EGL_BACK_BUFFER);
-    EGL_DestroySurface(display, handle);
+    WebCore::destroyPbufferAndDetachIOSurface(m_displayObj, handle);
 }
 
 #if !PLATFORM(IOS_FAMILY_SIMULATOR)
@@ -818,10 +707,10 @@ void GraphicsContextGLOpenGL::prepareForDisplay()
     // The IOSurface will be used from other graphics subsystem, so flush GL commands.
     gl::Flush();
 
-    auto recycledBuffer = m_swapChain->recycleBuffer();
+    auto recycledBuffer = m_swapChain.recycleBuffer();
 
     EGL_ReleaseTexImage(m_displayObj, m_displayBufferPbuffer, EGL_BACK_BUFFER);
-    m_swapChain->present({ WTFMove(m_displayBufferBacking), m_displayBufferPbuffer });
+    m_swapChain.present({ WTFMove(m_displayBufferBacking), m_displayBufferPbuffer });
     m_displayBufferPbuffer = EGL_NO_SURFACE;
 
     bool hasNewBacking = false;
@@ -839,17 +728,25 @@ void GraphicsContextGLOpenGL::prepareForDisplay()
 
     markLayerComposited();
 
-    if (contextAttributes().useMetal && contextAttributes().hasFenceSync) {
-        // OpenGL sync objects are not signaling upon completion on Catalina-era drivers.
-        // OpenGL drivers typically implement some sort of internal throttling.
+    if (m_useFenceSyncForDisplayRateLimit) {
         bool success = waitAndUpdateOldestFrame();
         UNUSED_VARIABLE(success); // FIXME: implement context lost.
     }
 }
 
+
+#if ENABLE(VIDEO) && USE(AVFOUNDATION)
+GraphicsContextGLCV* GraphicsContextGLOpenGL::asCV()
+{
+    if (!m_cv)
+        m_cv = GraphicsContextGLCVANGLE::create(*this);
+    return m_cv.get();
+}
+#endif
+
 std::optional<PixelBuffer> GraphicsContextGLOpenGL::readCompositedResults()
 {
-    auto& displayBuffer = m_swapChain->displayBuffer();
+    auto& displayBuffer = m_swapChain.displayBuffer();
     if (!displayBuffer.surface || !displayBuffer.handle)
         return std::nullopt;
     if (displayBuffer.surface->size() != getInternalFramebufferSize())
@@ -861,7 +758,7 @@ std::optional<PixelBuffer> GraphicsContextGLOpenGL::readCompositedResults()
     // the IOSurface be unrefenced after the draw call finishes.
     ScopedTexture texture;
     GCGLenum textureTarget = drawingBufferTextureTarget();
-    ScopedRestoreTextureBinding restoreBinding(drawingBufferTextureTargetQuery(), textureTarget, textureTarget != TEXTURE_RECTANGLE_ARB);
+    ScopedRestoreTextureBinding restoreBinding(drawingBufferTextureTargetQueryForDrawingTarget(drawingBufferTextureTarget()), textureTarget, textureTarget != TEXTURE_RECTANGLE_ARB);
     gl::BindTexture(textureTarget, texture);
     if (!EGL_BindTexImage(m_displayObj, displayBuffer.handle, EGL_BACK_BUFFER))
         return std::nullopt;
@@ -878,26 +775,27 @@ std::optional<PixelBuffer> GraphicsContextGLOpenGL::readCompositedResults()
     return result;
 }
 
-void GraphicsContextGLOpenGL::releaseAllResourcesIfUnused()
-{
-    ScopedEGLDefaultDisplay::releaseAllResourcesIfUnused();
-}
-
 #if ENABLE(MEDIA_STREAM)
 RefPtr<MediaSample> GraphicsContextGLOpenGL::paintCompositedResultsToMediaSample()
 {
-    auto &displayBuffer = m_swapChain->displayBuffer();
+    auto &displayBuffer = m_swapChain.displayBuffer();
     if (!displayBuffer.surface || !displayBuffer.handle)
         return nullptr;
     if (displayBuffer.surface->size() != getInternalFramebufferSize())
         return nullptr;
-    m_swapChain->markDisplayBufferInUse();
+    m_swapChain.markDisplayBufferInUse();
     auto pixelBuffer = createCVPixelBuffer(displayBuffer.surface->surface());
     if (!pixelBuffer)
         return nullptr;
     return MediaSampleAVFObjC::createImageSample(WTFMove(*pixelBuffer), MediaSampleAVFObjC::VideoRotation::UpsideDown, true);
 }
 #endif
+
+void GraphicsContextGLOpenGL::platformReleaseThreadResources()
+{
+    currentContext = nullptr;
+}
+
 }
 
 #endif // ENABLE(WEBGL)

@@ -30,7 +30,7 @@
 #include "Filter.h"
 #include "FilterEffect.h"
 #include "LightSource.h"
-#include <JavaScriptCore/Uint8ClampedArray.h>
+#include <JavaScriptCore/Forward.h>
 
 // Common base class for FEDiffuseLighting and FESpecularLighting
 
@@ -116,9 +116,6 @@ protected:
         inline IntSize bottomRowNormal(int offset) const;
         inline IntSize bottomRightNormal(int offset) const;
     };
-
-    template<typename Type>
-    friend class ParallelJobs;
 
     struct PlatformApplyGenericParameters {
         FELighting* filter;

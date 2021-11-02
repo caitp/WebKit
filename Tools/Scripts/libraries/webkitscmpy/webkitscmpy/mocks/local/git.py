@@ -431,9 +431,13 @@ nothing to commit, working tree clean
                 cwd=self.path,
                 generator=lambda *args, **kwargs: mocks.ProcessCompletion(returncode=0),
             ), mocks.Subprocess.Route(
-                self.executable, 'update-ref', re.compile(r'.+'), re.compile(r'.+'),
+                self.executable, 'fetch', 'origin', re.compile(r'.+:.+'),
                 cwd=self.path,
                 generator=lambda *args, **kwargs: mocks.ProcessCompletion(returncode=0),
+            ), mocks.Subprocess.Route(
+                self.executable, 'rebase', '--onto', re.compile(r'.+'), re.compile(r'.+'), re.compile(r'.+'),
+                cwd=self.path,
+                generator=lambda *args, **kwargs: self.rebase(args[3], args[4], args[5]),
             ), mocks.Subprocess.Route(
                 self.executable,
                 cwd=self.path,
@@ -441,6 +445,17 @@ nothing to commit, working tree clean
                     returncode=1,
                     stderr='usage: git [--version] [--help]...\n',
                 ),
+            ), mocks.Subprocess.Route(
+                self.executable, 'status',
+                generator=lambda *args, **kwargs:
+                    mocks.ProcessCompletion(
+                        returncode=0,
+                        stdout=''''On branch {branch}
+Your branch is up to date with 'origin/{branch}'.
+
+nothing to commit, working tree clean
+'''.format(branch=self.branch),
+                    ),
             ), mocks.Subprocess.Route(
                 self.executable,
                 completion=mocks.ProcessCompletion(
@@ -766,4 +781,13 @@ nothing to commit, working tree clean
         for key, value in self.modified.items():
             self.staged[key] = value
         self.modified = {}
+        return mocks.ProcessCompletion(returncode=0)
+
+    def rebase(self, target, base, head):
+        if target not in self.commits or base not in self.commits or head not in self.commits:
+            return mocks.ProcessCompletion(returncode=1)
+        for commit in self.commits[head]:
+            commit.branch_point = self.commits[target][-1].branch_point or self.commits[target][-1].identifier
+            if self.commits[target][-1].branch_point:
+                commit.identifier += self.commits[target][-1].identifier
         return mocks.ProcessCompletion(returncode=0)

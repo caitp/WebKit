@@ -3,6 +3,7 @@ align-content: normal
 align-items: normal
 align-self: auto
 alignment-baseline: auto
+appearance: none
 background-attachment: scroll
 background-clip: border-box
 background-color: rgb(0, 128, 0)
@@ -45,7 +46,6 @@ clip-rule: nonzero
 color: rgb(0, 0, 0)
 color-interpolation: sRGB
 color-interpolation-filters: linearRGB
-color-rendering: auto
 column-count: auto
 column-fill: balance
 column-gap: normal
@@ -192,7 +192,6 @@ word-wrap: normal
 writing-mode: horizontal-tb
 z-index: auto
 zoom: 1
--webkit-appearance: none
 -webkit-backface-visibility: visible
 -webkit-background-clip: border-box
 -webkit-background-composite: source-over

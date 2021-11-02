@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013, 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2013–2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -421,6 +421,12 @@ WI.ContentViewContainer = class ContentViewContainer extends WI.View
             return;
         }
 
+        // Hidden/non-visible extension tabs must remain attached to the DOM to avoid reloading.
+        if (contentView.constructor.shouldNotRemoveFromDOMWhenHidden() && !contentView.visible)
+            return;
+
+        this.removeSubview(contentView);
+
         console.assert(!contentView.isAttached);
 
         if (!contentView._parentContainer)
@@ -457,6 +463,10 @@ WI.ContentViewContainer = class ContentViewContainer extends WI.View
 
         if (!this.subviews.includes(entry.contentView))
             this.addSubview(entry.contentView);
+        else if (entry.contentView.constructor.shouldNotRemoveFromDOMWhenHidden()) {
+            entry.contentView.visible = true;
+            entry.contentView._didMoveToParent(this);
+        }
 
         entry.prepareToShow();
     }
@@ -471,8 +481,13 @@ WI.ContentViewContainer = class ContentViewContainer extends WI.View
             return;
 
         entry.prepareToHide();
-        if (this.subviews.includes(entry.contentView))
-            this.removeSubview(entry.contentView);
+        if (this.subviews.includes(entry.contentView)) {
+            if (entry.contentView.constructor.shouldNotRemoveFromDOMWhenHidden()) {
+                entry.contentView.visible = false;
+                entry.contentView._didMoveToParent(null);
+            } else
+                this.removeSubview(entry.contentView);
+        }
     }
 
     _tombstoneContentViewContainersForContentView(contentView)

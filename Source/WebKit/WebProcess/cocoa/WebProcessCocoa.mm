@@ -313,7 +313,7 @@ void WebProcess::platformInitializeWebProcess(WebProcessCreationParameters& para
     setEnhancedAccessibility(parameters.accessibilityEnhancedUserInterfaceEnabled);
 
 #if PLATFORM(IOS_FAMILY)
-    setCurrentUserInterfaceIdiomIsPhoneOrWatch(parameters.currentUserInterfaceIdiomIsPhoneOrWatch);
+    setCurrentUserInterfaceIdiomIsSmallScreen(parameters.currentUserInterfaceIdiomIsSmallScreen);
     setLocalizedDeviceModel(parameters.localizedDeviceModel);
     RenderThemeIOS::setContentSizeCategory(parameters.contentSizeCategory);
 #if ENABLE(VIDEO_PRESENTATION_MODE)
@@ -496,19 +496,19 @@ void WebProcess::updateProcessName(IsInProcessInitialization isInProcessInitiali
     RetainPtr<NSString> applicationName;
     switch (m_processType) {
     case ProcessType::Inspector:
-        applicationName = [NSString stringWithFormat:WEB_UI_STRING("%@ Web Inspector", "Visible name of Web Inspector's web process. The argument is the application name."), (NSString *)m_uiProcessName];
+        applicationName = [NSString stringWithFormat:WEB_UI_NSSTRING(@"%@ Web Inspector", "Visible name of Web Inspector's web process. The argument is the application name."), (NSString *)m_uiProcessName];
         break;
     case ProcessType::ServiceWorker:
-        applicationName = [NSString stringWithFormat:WEB_UI_STRING("%@ Service Worker (%@)", "Visible name of Service Worker process. The argument is the application name."), (NSString *)m_uiProcessName, (NSString *)m_registrableDomain.string()];
+        applicationName = [NSString stringWithFormat:WEB_UI_NSSTRING(@"%@ Service Worker (%@)", "Visible name of Service Worker process. The argument is the application name."), (NSString *)m_uiProcessName, (NSString *)m_registrableDomain.string()];
         break;
     case ProcessType::PrewarmedWebContent:
-        applicationName = [NSString stringWithFormat:WEB_UI_STRING("%@ Web Content (Prewarmed)", "Visible name of the web process. The argument is the application name."), (NSString *)m_uiProcessName];
+        applicationName = [NSString stringWithFormat:WEB_UI_NSSTRING(@"%@ Web Content (Prewarmed)", "Visible name of the web process. The argument is the application name."), (NSString *)m_uiProcessName];
         break;
     case ProcessType::CachedWebContent:
-        applicationName = [NSString stringWithFormat:WEB_UI_STRING("%@ Web Content (Cached)", "Visible name of the web process. The argument is the application name."), (NSString *)m_uiProcessName];
+        applicationName = [NSString stringWithFormat:WEB_UI_NSSTRING(@"%@ Web Content (Cached)", "Visible name of the web process. The argument is the application name."), (NSString *)m_uiProcessName];
         break;
     case ProcessType::WebContent:
-        applicationName = [NSString stringWithFormat:WEB_UI_STRING("%@ Web Content", "Visible name of the web process. The argument is the application name."), (NSString *)m_uiProcessName];
+        applicationName = [NSString stringWithFormat:WEB_UI_NSSTRING(@"%@ Web Content", "Visible name of the web process. The argument is the application name."), (NSString *)m_uiProcessName];
         break;
     }
 
@@ -930,9 +930,10 @@ void WebProcess::destroyRenderingResources()
 }
 
 #if PLATFORM(IOS_FAMILY)
-void WebProcess::userInterfaceIdiomDidChange(bool isPhoneOrWatch)
+
+void WebProcess::userInterfaceIdiomDidChange(bool isSmallScreen)
 {
-    WebKit::setCurrentUserInterfaceIdiomIsPhoneOrWatch(isPhoneOrWatch);
+    WebKit::setCurrentUserInterfaceIdiomIsSmallScreen(isSmallScreen);
 }
 
 bool WebProcess::shouldFreezeOnSuspension() const
@@ -965,6 +966,7 @@ void WebProcess::updateFreezerStatus()
     else
         WEBPROCESS_RELEASE_LOG(ProcessSuspension, "updateFreezerStatus: isFreezable=%d, success", isFreezable);
 }
+
 #endif
 
 #if PLATFORM(MAC)
@@ -1130,8 +1132,11 @@ void WebProcess::handlePreferenceChange(const String& domain, const String& key,
 
 #if USE(APPKIT)
     auto cfKey = key.createCFString();
-    if (CFEqual(cfKey.get(), kAXInterfaceReduceMotionKey) || CFEqual(cfKey.get(), kAXInterfaceIncreaseContrastKey) || key == invertColorsPreferenceKey())
+    if (CFEqual(cfKey.get(), kAXInterfaceReduceMotionKey) || CFEqual(cfKey.get(), kAXInterfaceIncreaseContrastKey) || key == invertColorsPreferenceKey()) {
         [NSWorkspace _invalidateAccessibilityDisplayValues];
+        for (auto& page : m_pageMap.values())
+            page->accessibilitySettingsDidChange();
+    }
 #endif
 
     AuxiliaryProcess::handlePreferenceChange(domain, key, value);

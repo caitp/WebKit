@@ -55,6 +55,10 @@
 #include "UserMediaCaptureManager.h"
 #endif
 
+#if OS(LINUX)
+#include <wtf/linux/RealTimeThreads.h>
+#endif
+
 namespace WebKit {
 
 using namespace WebCore;
@@ -62,6 +66,14 @@ using namespace WebCore;
 void WebProcess::platformSetCacheModel(CacheModel cacheModel)
 {
     WebCore::MemoryCache::singleton().setDisabled(cacheModel == CacheModel::DocumentViewer);
+}
+
+void WebProcess::platformInitializeProcess(const AuxiliaryProcessInitializationParameters&)
+{
+#if OS(LINUX)
+    // Disable RealTimeThreads in WebProcess initially, since it depends on having a visible web page.
+    RealTimeThreads::singleton().setEnabled(false);
+#endif
 }
 
 void WebProcess::platformInitializeWebProcess(WebProcessCreationParameters& parameters)
@@ -115,6 +127,10 @@ void WebProcess::platformInitializeWebProcess(WebProcessCreationParameters& para
 
     if (!parameters.applicationName.isEmpty())
         WebCore::setApplicationName(parameters.applicationName);
+
+#if USE(ATSPI)
+    m_accessibility = makeUnique<AccessibilityAtspi>(parameters.accessibilityBusAddress);
+#endif
 }
 
 void WebProcess::platformSetWebsiteDataStoreParameters(WebProcessDataStoreParameters&&)

@@ -401,8 +401,6 @@ String InspectorFrontendHost::platformVersionName() const
     return "big-sur"_s;
 #elif PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500
     return "catalina"_s;
-#elif PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
-    return "mojave"_s;
 #else
     return emptyString();
 #endif
@@ -707,6 +705,14 @@ void InspectorFrontendHost::didHideExtensionTab(const String& extensionID, const
         return;
     
     m_client->didHideExtensionTab(extensionID, extensionTabID);
+}
+
+void InspectorFrontendHost::inspectedPageDidNavigate(const String& newURLString)
+{
+    if (!m_client)
+        return;
+    
+    m_client->inspectedPageDidNavigate({ URL(), newURLString });
 }
 
 ExceptionOr<JSC::JSValue> InspectorFrontendHost::evaluateScriptInExtensionTab(HTMLIFrameElement& extensionFrameElement, const String& scriptSource)

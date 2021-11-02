@@ -26,8 +26,7 @@
 #import "config.h"
 #import "AudioSampleDataSource.h"
 
-#import "CAAudioStreamDescription.h"
-#import "CARingBuffer.h"
+#import "AudioSampleBufferList.h"
 #import "Logging.h"
 #import "PlatformAudioData.h"
 #import <AudioToolbox/AudioConverter.h>
@@ -210,7 +209,7 @@ static inline int64_t computeOffsetDelay(double sampleRate, uint64_t lastPushedS
     return 0;
 }
 
-bool AudioSampleDataSource::pullSamplesInternal(AudioBufferList& buffer, size_t sampleCount, uint64_t timeStamp, double /*hostTime*/, PullMode mode)
+bool AudioSampleDataSource::pullSamples(AudioBufferList& buffer, size_t sampleCount, uint64_t timeStamp, double /*hostTime*/, PullMode mode)
 {
     size_t byteCount = sampleCount * m_outputDescription->bytesPerFrame();
 
@@ -234,7 +233,8 @@ bool AudioSampleDataSource::pullSamplesInternal(AudioBufferList& buffer, size_t 
     if (m_shouldComputeOutputSampleOffset) {
         uint64_t buffered = endFrame - startFrame;
         if (m_isFirstPull) {
-            if (buffered >= m_waitToStartForPushCount * m_lastPushedSampleCount) {
+            auto minimumBuffer = m_waitToStartForPushCount * m_lastPushedSampleCount;
+            if (buffered >= minimumBuffer) {
                 m_outputSampleOffset = startFrame - timeStamp;
                 m_shouldComputeOutputSampleOffset = false;
                 m_endFrameWhenNotEnoughData = 0;
@@ -286,6 +286,11 @@ bool AudioSampleDataSource::pullSamplesInternal(AudioBufferList& buffer, size_t 
 
     m_isFirstPull = false;
 
+    return pullSamplesInternal(buffer, sampleCount, timeStamp, mode);
+}
+
+bool AudioSampleDataSource::pullSamplesInternal(AudioBufferList& buffer, size_t sampleCount, uint64_t timeStamp, PullMode mode)
+{
     if (mode == Copy) {
         m_ringBuffer->fetch(&buffer, sampleCount, timeStamp, CARingBuffer::Copy);
         if (m_volume < EquivalentToMaxVolume)
@@ -307,6 +312,25 @@ bool AudioSampleDataSource::pullSamplesInternal(AudioBufferList& buffer, size_t 
         return false;
 
     return true;
+}
+
+bool AudioSampleDataSource::pullAvailableSampleChunk(AudioBufferList& buffer, size_t sampleCount, uint64_t timeStamp, PullMode mode)
+{
+    ASSERT(buffer.mNumberBuffers == m_ringBuffer->channelCount());
+    if (buffer.mNumberBuffers != m_ringBuffer->channelCount())
+        return false;
+
+    if (m_muted)
+        return false;
+
+    if (m_shouldComputeOutputSampleOffset) {
+        m_shouldComputeOutputSampleOffset = false;
+        m_outputSampleOffset = m_inputSampleOffset.timeValue() * m_outputDescription->sampleRate() / m_inputSampleOffset.timeScale();
+    }
+
+    timeStamp += m_outputSampleOffset;
+
+    return pullSamplesInternal(buffer, sampleCount, timeStamp, mode);
 }
 
 bool AudioSampleDataSource::pullAvailableSamplesAsChunks(AudioBufferList& buffer, size_t sampleCountPerChunk, uint64_t timeStamp, Function<void()>&& consumeFilledBuffer)
@@ -344,22 +368,6 @@ bool AudioSampleDataSource::pullAvailableSamplesAsChunks(AudioBufferList& buffer
         consumeFilledBuffer();
         startFrame += sampleCountPerChunk;
     }
-    return true;
-}
-
-bool AudioSampleDataSource::pullSamples(AudioBufferList& buffer, size_t sampleCount, uint64_t timeStamp, double hostTime, PullMode mode)
-{
-    return pullSamplesInternal(buffer, sampleCount, timeStamp, hostTime, mode);
-}
-
-bool AudioSampleDataSource::pullSamples(AudioSampleBufferList& buffer, size_t sampleCount, uint64_t timeStamp, double hostTime, PullMode mode)
-{
-    if (!pullSamplesInternal(buffer.bufferList(), sampleCount, timeStamp, hostTime, mode))
-        return false;
-
-    buffer.setTimes(timeStamp, hostTime);
-    buffer.setSampleCount(sampleCount);
-
     return true;
 }
 

@@ -41,6 +41,7 @@
 #include "RenderLayer.h"
 #include "SVGElement.h"
 #include "SVGFilterBuilder.h"
+#include "SVGFilterElement.h"
 #include "SVGFilterPrimitiveStandardAttributes.h"
 #include "SourceAlpha.h"
 #include "SourceGraphic.h"
@@ -330,7 +331,7 @@ void CSSFilter::allocateBackingStoreIfNeeded(const GraphicsContext& targetContex
     if (m_graphicsBufferAttached)
         return;
 
-    IntSize logicalSize { m_sourceDrawingRegion.size() };
+    auto logicalSize = m_sourceDrawingRegion.size();
     if (!sourceImage() || sourceImage()->logicalSize() != logicalSize) {
 #if USE(DIRECT2D)
         setSourceImage(ImageBuffer::create(logicalSize, renderingMode(), &targetContext, filterScale(), DestinationColorSpace::SRGB(), PixelFormat::BGRA8));

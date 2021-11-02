@@ -68,7 +68,6 @@
 #include "ValueProfile.h"
 #include "VirtualRegister.h"
 #include "Watchpoint.h"
-#include <wtf/Bag.h>
 #include <wtf/FastMalloc.h>
 #include <wtf/FixedVector.h>
 #include <wtf/HashSet.h>
@@ -261,8 +260,8 @@ public:
         WTF_MAKE_STRUCT_FAST_ALLOCATED;
         friend class LLIntOffsetsExtractor;
 
-        Bag<StructureStubInfo> m_stubInfos;
-        Bag<CallLinkInfo> m_callLinkInfos;
+        FixedVector<StructureStubInfo> m_stubInfos;
+        FixedVector<CallLinkInfo> m_callLinkInfos;
         SentinelLinkedList<CallLinkInfo, PackedRawSentinelNode<CallLinkInfo>> m_incomingCalls;
         SentinelLinkedList<PolymorphicCallNode, PackedRawSentinelNode<PolymorphicCallNode>> m_incomingPolymorphicCalls;
         bool m_hasCalleeSaveRegisters { false };
@@ -284,12 +283,10 @@ public:
 
     static ptrdiff_t offsetOfJITData() { return OBJECT_OFFSETOF(CodeBlock, m_jitData); }
 
-    StructureStubInfo* addStubInfo(AccessType, CodeOrigin);
+    StructureStubInfo* addOptimizingStubInfo(AccessType, CodeOrigin);
 
     // O(n) operation. Use getICStatusMap() unless you really only intend to get one stub info.
     StructureStubInfo* findStubInfo(CodeOrigin);
-
-    CallLinkInfo* addCallLinkInfo(CodeOrigin);
 
     // This is a slow function call used primarily for compiling OSR exits in the case
     // that there had been inlining. Chances are if you want to use this, you're really
@@ -757,7 +754,6 @@ public:
     bool hasOpDebugForLineAndColumn(unsigned line, std::optional<unsigned> column);
 
     bool hasDebuggerRequests() const { return m_debuggerRequests; }
-    void* debuggerRequestsAddress() { return &m_debuggerRequests; }
     static ptrdiff_t offsetOfDebuggerRequests() { return OBJECT_OFFSETOF(CodeBlock, m_debuggerRequests); }
 
     void addBreakpoint(unsigned numBreakpoints);
@@ -917,8 +913,8 @@ private:
     template<typename Visitor> void stronglyVisitWeakReferences(const ConcurrentJSLocker&, Visitor&);
     template<typename Visitor> void visitOSRExitTargets(const ConcurrentJSLocker&, Visitor&);
 
-    unsigned numberOfNonArgumentValueProfiles() { return m_numberOfNonArgumentValueProfiles; }
-    unsigned totalNumberOfValueProfiles() { return numberOfArgumentValueProfiles() + numberOfNonArgumentValueProfiles(); }
+    unsigned numberOfNonArgumentValueProfiles() { return totalNumberOfValueProfiles() - numberOfArgumentValueProfiles(); }
+    unsigned totalNumberOfValueProfiles() { return m_unlinkedCode->numberOfValueProfiles(); }
     ValueProfile* tryGetValueProfileForBytecodeIndex(BytecodeIndex);
 
     Seconds timeSinceCreation()
@@ -942,7 +938,7 @@ private:
     unsigned m_numVars;
     unsigned m_numParameters;
     unsigned m_numberOfArgumentsToSkip { 0 };
-    unsigned m_numberOfNonArgumentValueProfiles { 0 };
+    uint32_t m_osrExitCounter { 0 };
     union {
         unsigned m_debuggerRequests;
         struct {
@@ -989,10 +985,9 @@ private:
     WriteBarrier<CodeBlock> m_alternative;
 
     BaselineExecutionCounter m_jitExecuteCounter;
-    uint32_t m_osrExitCounter;
 
-    uint16_t m_optimizationDelayCounter;
-    uint16_t m_reoptimizationRetryCounter;
+    uint16_t m_optimizationDelayCounter { 0 };
+    uint16_t m_reoptimizationRetryCounter { 0 };
 
     RefPtr<MetadataTable> m_metadata;
 

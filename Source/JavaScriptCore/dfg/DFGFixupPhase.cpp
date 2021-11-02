@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2012-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -1043,6 +1043,7 @@ private:
                     && isFullNumberSpeculation(indexSpeculation)
                     && node->arrayMode().isSpecific()
                     && node->arrayMode().isInBounds()
+                    && !node->arrayMode().mayBeLargeTypedArray()
                     && !m_graph.hasExitSite(node->origin.semantic, Overflow)) {
 
                     Node* newIndex = m_insertionSet.insertNode(
@@ -1073,7 +1074,7 @@ private:
 
             case Array::ForceExit: {
                 // Don't force OSR because we have only seen OwnStructureMode.
-                // FIXME: WE should have a better way to do this...
+                // FIXME: We should have a better way to do this...
                 if (node->op() == EnumeratorGetByVal)
                     node->setArrayMode(node->arrayMode().withType(Array::Generic));
                 break;
@@ -1123,14 +1124,23 @@ private:
                         break;
                     }
                 }
-#if USE(JSVALUE32_64)
-                fixEdge<CellUse>(m_graph.varArgChild(node, 0)); // Speculating cell due to register pressure on 32-bit.
-#endif
                 break;
             case Array::ForceExit:
                 break;
             case Array::String:
                 fixEdge<KnownStringUse>(m_graph.varArgChild(node, 0));
+                fixEdge<Int32Use>(m_graph.varArgChild(node, 1));
+                break;
+            case Array::Int8Array:
+            case Array::Int16Array:
+            case Array::Int32Array:
+            case Array::Uint8Array:
+            case Array::Uint8ClampedArray:
+            case Array::Uint16Array:
+            case Array::Uint32Array:
+            case Array::Float32Array:
+            case Array::Float64Array:
+                fixEdge<KnownCellUse>(m_graph.varArgChild(node, 0));
                 fixEdge<Int32Use>(m_graph.varArgChild(node, 1));
                 break;
             default:
@@ -1184,6 +1194,7 @@ private:
                     && isFullNumberSpeculation(indexSpeculation)
                     && node->arrayMode().isSpecific()
                     && node->arrayMode().isInBounds()
+                    && !node->arrayMode().mayBeLargeTypedArray()
                     && !m_graph.hasExitSite(node->origin.semantic, Overflow)) {
 
                     Node* newIndex = m_insertionSet.insertNode(
@@ -1241,12 +1252,6 @@ private:
                         break;
                     }
                 }
-#if USE(JSVALUE32_64)
-                // Due to register pressure on 32-bit, we speculate cell and
-                // ignore the base-is-not-cell case entirely by letting the
-                // baseline JIT handle it.
-                fixEdge<CellUse>(child1);
-#endif
                 break;
             case Array::Int32:
                 fixEdge<KnownCellUse>(child1);
@@ -1665,7 +1670,7 @@ private:
             if (node->child1()->shouldSpeculateArray()
                 && arrayPrototypeStructure->transitionWatchpointSetIsStillValid()
                 && objectPrototypeStructure->transitionWatchpointSetIsStillValid()
-                && globalObject->arrayPrototypeChainIsSane()
+                && globalObject->arrayPrototypeChainIsSaneConcurrently(arrayPrototypeStructure, objectPrototypeStructure)
                 && m_graph.isWatchingArrayIteratorProtocolWatchpoint(node->child1().node())
                 && m_graph.isWatchingHavingABadTimeWatchpoint(node->child1().node())) {
                 m_graph.registerAndWatchStructureTransition(objectPrototypeStructure);
@@ -1717,9 +1722,13 @@ private:
             
         case NewTypedArray: {
             watchHavingABadTime(node);
-            
             if (node->child1()->shouldSpeculateInt32()) {
                 fixEdge<Int32Use>(node->child1());
+                node->clearFlags(NodeMustGenerate);
+                break;
+            }
+            if (node->child1()->shouldSpeculateInt52()) {
+                fixEdge<Int52RepUse>(node->child1());
                 node->clearFlags(NodeMustGenerate);
                 break;
             }
@@ -2149,6 +2158,21 @@ private:
             break;
         }
 
+        case GetTypedArrayLengthAsInt52: {
+            ArrayMode arrayMode = node->arrayMode().refine(m_graph, node, node->child1()->prediction(), ArrayMode::unusedIndexSpeculatedType);
+            ASSERT(arrayMode.isSomeTypedArrayView());
+            node->setArrayMode(arrayMode);
+            blessArrayOperation(node->child1(), Edge(), node->child2(), lengthNeedsStorage);
+
+            fixEdge<KnownCellUse>(node->child1());
+            break;
+        }
+
+        case GetTypedArrayByteOffsetAsInt52: {
+            fixEdge<KnownCellUse>(node->child1());
+            break;
+        }
+
         case GetTypedArrayByteOffset: {
             fixEdge<KnownCellUse>(node->child1());
             break;
@@ -2182,6 +2206,7 @@ private:
         case CheckTierUpAndOSREnter:
         case AssertInBounds:
         case CheckInBounds:
+        case CheckInBoundsInt52:
         case ConstantStoragePointer:
         case DoubleAsInt32:
         case ValueToInt32:
@@ -3747,7 +3772,7 @@ private:
         Structure* objectPrototypeStructure = globalObject->objectPrototype()->structure(vm());
         if (arrayPrototypeStructure->transitionWatchpointSetIsStillValid()
             && objectPrototypeStructure->transitionWatchpointSetIsStillValid()
-            && globalObject->arrayPrototypeChainIsSane()) {
+            && globalObject->arrayPrototypeChainIsSaneConcurrently(arrayPrototypeStructure, objectPrototypeStructure)) {
             m_graph.registerAndWatchStructureTransition(arrayPrototypeStructure);
             m_graph.registerAndWatchStructureTransition(objectPrototypeStructure);
             node->setArrayMode(node->arrayMode().withSpeculation(speculation));
@@ -4095,14 +4120,6 @@ private:
             return;
             
         node->child2() = Edge(storage);
-    }
-    
-    Node* prependGetArrayLength(NodeOrigin origin, Node* child, ArrayMode arrayMode)
-    {
-        Node* storage = checkArray(arrayMode, origin, child, nullptr, lengthNeedsStorage);
-        return m_insertionSet.insertNode(
-            m_indexInBlock, SpecInt32Only, GetArrayLength, origin,
-            OpInfo(arrayMode.asWord()), Edge(child, KnownCellUse), Edge(storage));
     }
 
     void convertToHasIndexedProperty(Node* node)

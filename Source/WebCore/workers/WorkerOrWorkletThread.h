@@ -26,6 +26,7 @@
 #pragma once
 
 #include "WorkerRunLoop.h"
+#include "WorkerThreadMode.h"
 #include <wtf/Forward.h>
 #include <wtf/Function.h>
 #include <wtf/Lock.h>
@@ -40,13 +41,12 @@ namespace WebCore {
 
 class WorkerDebuggerProxy;
 class WorkerLoaderProxy;
-class WorkerRunLoop;
 
 class WorkerOrWorkletThread : public ThreadSafeRefCounted<WorkerOrWorkletThread> {
 public:
     virtual ~WorkerOrWorkletThread();
 
-    WTF::Thread* thread() const { return m_thread.get(); }
+    Thread* thread() const { return m_thread.get(); }
 
     virtual WorkerDebuggerProxy* workerDebuggerProxy() const = 0;
     virtual WorkerLoaderProxy& workerLoaderProxy() = 0;
@@ -70,14 +70,14 @@ public:
     static void releaseFastMallocFreeMemoryInAllThreads();
 
 protected:
-    explicit WorkerOrWorkletThread(const String& identifier);
+    explicit WorkerOrWorkletThread(const String& identifier, WorkerThreadMode = WorkerThreadMode::CreateNewThread);
     void workerOrWorkletThread();
 
     // Executes the event loop for the worker thread. Derived classes can override to perform actions before/after entering the event loop.
     virtual void runEventLoop();
 
 private:
-    virtual Ref<WTF::Thread> createThread() = 0;
+    virtual Ref<Thread> createThread() = 0;
     virtual RefPtr<WorkerOrWorkletGlobalScope> createGlobalScope() = 0;
     virtual void evaluateScriptIfNecessary(String&) { }
     virtual bool shouldWaitForWebInspectorOnStartup() const { return false; }
@@ -87,8 +87,8 @@ private:
     String m_identifier;
     Lock m_threadCreationAndGlobalScopeLock;
     RefPtr<WorkerOrWorkletGlobalScope> m_globalScope;
-    RefPtr<WTF::Thread> m_thread;
-    WorkerRunLoop m_runLoop;
+    RefPtr<Thread> m_thread;
+    UniqueRef<WorkerRunLoop> m_runLoop;
     Function<void(const String&)> m_evaluateCallback;
     Function<void()> m_stoppedCallback;
     BinarySemaphore m_suspensionSemaphore;

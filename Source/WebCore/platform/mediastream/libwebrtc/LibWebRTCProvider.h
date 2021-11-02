@@ -36,6 +36,8 @@
 
 #if USE(LIBWEBRTC)
 
+#include "RTCRtpCapabilities.h"
+
 ALLOW_UNUSED_PARAMETERS_BEGIN
 ALLOW_DEPRECATED_DECLARATIONS_BEGIN
 
@@ -62,7 +64,12 @@ class PeerConnectionFactoryInterface;
 
 namespace WebCore {
 
+class ContentType;
 class LibWebRTCAudioModule;
+struct MediaCapabilitiesDecodingInfo;
+struct MediaCapabilitiesEncodingInfo;
+struct MediaDecodingConfiguration;
+struct MediaEncodingConfiguration;
 class RegistrableDomain;
 struct PeerConnectionFactoryAndThreads;
 struct RTCRtpCapabilities;
@@ -72,7 +79,7 @@ class WEBCORE_EXPORT LibWebRTCProvider {
 public:
     static UniqueRef<LibWebRTCProvider> create();
 
-    virtual ~LibWebRTCProvider() = default;
+    virtual ~LibWebRTCProvider();
 
     static bool webRTCAvailable();
     static void registerWebKitVP9Decoder();
@@ -87,10 +94,16 @@ public:
 
     virtual RefPtr<RTCDataChannelRemoteHandlerConnection> createRTCDataChannelRemoteHandlerConnection() { return nullptr; }
 
+    using DecodingConfigurationCallback = Function<void(MediaCapabilitiesDecodingInfo&&)>;
+    using EncodingConfigurationCallback = Function<void(MediaCapabilitiesEncodingInfo&&)>;
+    void createDecodingConfiguration(MediaDecodingConfiguration&&, DecodingConfigurationCallback&&);
+    void createEncodingConfiguration(MediaEncodingConfiguration&&, EncodingConfigurationCallback&&);
+
 #if USE(LIBWEBRTC)
     virtual rtc::scoped_refptr<webrtc::PeerConnectionInterface> createPeerConnection(DocumentIdentifier, webrtc::PeerConnectionObserver&, rtc::PacketSocketFactory*, webrtc::PeerConnectionInterface::RTCConfiguration&&);
 
     webrtc::PeerConnectionFactoryInterface* factory();
+    LibWebRTCAudioModule* audioModule();
 
     // FIXME: Make these methods not static.
     static void callOnWebRTCNetworkThread(Function<void()>&&);
@@ -105,9 +118,9 @@ public:
     void enableEnumeratingAllNetworkInterfaces();
     bool isEnumeratingAllNetworkInterfacesEnabled() const { return m_enableEnumeratingAllNetworkInterfaces; }
 
-    void setH265Support(bool value) { m_supportsH265 = value; }
+    void setH265Support(bool);
     void setVP9Support(bool supportsVP9Profile0, bool supportsVP9Profile2);
-    void setVP9VTBSupport(bool value) { m_supportsVP9VTB = value; }
+    void setVP9VTBSupport(bool);
     bool isSupportingH265() const { return m_supportsH265; }
     bool isSupportingVP9Profile0() const { return m_supportsVP9Profile0; }
     bool isSupportingVP9Profile2() const { return m_supportsVP9Profile2; }
@@ -122,7 +135,7 @@ public:
     std::optional<RTCRtpCapabilities> receiverCapabilities(const String& kind);
     std::optional<RTCRtpCapabilities> senderCapabilities(const String& kind);
 
-    void clearFactory() { m_factory = nullptr; }
+    void clearFactory();
 
     virtual void setLoggingLevel(WTFLogLevel);
     void setEnableWebRTCEncryption(bool);
@@ -138,7 +151,7 @@ public:
     virtual std::unique_ptr<SuspendableSocketFactory> createSocketFactory(String&& /* userAgent */, bool /* isFirstParty */, RegistrableDomain&&) { return nullptr; }
 
 protected:
-    LibWebRTCProvider() = default;
+    LibWebRTCProvider();
 
     rtc::scoped_refptr<webrtc::PeerConnectionInterface> createPeerConnection(webrtc::PeerConnectionObserver&, rtc::NetworkManager&, rtc::PacketSocketFactory&, webrtc::PeerConnectionInterface::RTCConfiguration&&, std::unique_ptr<webrtc::AsyncResolverFactory>&&);
 
@@ -149,11 +162,17 @@ protected:
     virtual void startedNetworkThread() { };
 
     PeerConnectionFactoryAndThreads& getStaticFactoryAndThreads(bool useNetworkThreadWithSocketServer);
+    std::optional<RTCRtpCapabilities>& audioDecodingCapabilities();
+    std::optional<RTCRtpCapabilities>& videoDecodingCapabilities();
+    std::optional<RTCRtpCapabilities>& audioEncodingCapabilities();
+    std::optional<RTCRtpCapabilities>& videoEncodingCapabilities();
+    std::optional<RTCRtpCodecCapability> codecCapability(const ContentType&, const std::optional<RTCRtpCapabilities>&);
 
     bool m_enableEnumeratingAllNetworkInterfaces { false };
     // FIXME: Remove m_useNetworkThreadWithSocketServer member variable and make it a global.
     bool m_useNetworkThreadWithSocketServer { true };
 
+    RefPtr<LibWebRTCAudioModule> m_audioModule;
     rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> m_factory;
     bool m_disableNonLocalhostConnections { false };
     bool m_supportsH265 { false };
@@ -162,14 +181,18 @@ protected:
     bool m_supportsVP9VTB { false };
     bool m_useDTLS10 { false };
     bool m_supportsMDNS { false };
+
+    std::optional<RTCRtpCapabilities> m_audioDecodingCapabilities;
+    std::optional<RTCRtpCapabilities> m_videoDecodingCapabilities;
+    std::optional<RTCRtpCapabilities> m_audioEncodingCapabilities;
+    std::optional<RTCRtpCapabilities> m_videoEncodingCapabilities;
 #endif
 };
 
 #if USE(LIBWEBRTC)
-inline void LibWebRTCProvider::setVP9Support(bool supportsVP9Profile0, bool supportsVP9Profile2)
+inline LibWebRTCAudioModule* LibWebRTCProvider::audioModule()
 {
-    m_supportsVP9Profile0 = supportsVP9Profile0;
-    m_supportsVP9Profile2 = supportsVP9Profile2;
+    return m_audioModule.get();
 }
 #endif
 

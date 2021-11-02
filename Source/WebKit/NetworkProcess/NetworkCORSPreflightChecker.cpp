@@ -46,7 +46,7 @@ NetworkCORSPreflightChecker::NetworkCORSPreflightChecker(NetworkProcess& network
     , m_networkProcess(networkProcess)
     , m_completionCallback(WTFMove(completionCallback))
     , m_shouldCaptureExtraNetworkLoadMetrics(shouldCaptureExtraNetworkLoadMetrics)
-    , m_networkResourceLoader(makeWeakPtr(networkResourceLoader))
+    , m_networkResourceLoader(networkResourceLoader)
 {
 }
 
@@ -89,7 +89,7 @@ void NetworkCORSPreflightChecker::willPerformHTTPRedirection(WebCore::ResourceRe
 
     CORS_CHECKER_RELEASE_LOG("willPerformHTTPRedirection");
     completionHandler({ });
-    m_completionCallback(ResourceError { errorDomainWebKitInternal, 0, m_parameters.originalRequest.url(), "Preflight response is not successful"_s, ResourceError::Type::AccessControl });
+    m_completionCallback(ResourceError { errorDomainWebKitInternal, 0, m_parameters.originalRequest.url(), makeString("Preflight response is not successful. Status code: ", response.httpStatusCode()), ResourceError::Type::AccessControl });
 }
 
 void NetworkCORSPreflightChecker::didReceiveChallenge(WebCore::AuthenticationChallenge&& challenge, NegotiatedLegacyTLS negotiatedLegacyTLS, ChallengeCompletionHandler&& completionHandler)

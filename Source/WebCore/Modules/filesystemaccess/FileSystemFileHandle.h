@@ -26,19 +26,28 @@
 #pragma once
 
 #include "FileSystemHandle.h"
+#include "FileSystemSyncAccessHandleIdentifier.h"
 
 namespace WebCore {
 
 class File;
+class FileSystemSyncAccessHandle;
+template<typename> class ExceptionOr;
 
 class FileSystemFileHandle final : public FileSystemHandle {
     WTF_MAKE_ISO_ALLOCATED(FileSystemFileHandle);
 public:
-    WEBCORE_EXPORT static Ref<FileSystemFileHandle> create(String&&, FileSystemHandleIdentifier, Ref<FileSystemStorageConnection>&&);
+    WEBCORE_EXPORT static Ref<FileSystemFileHandle> create(ScriptExecutionContext&, String&&, FileSystemHandleIdentifier, Ref<FileSystemStorageConnection>&&);
     void getFile(DOMPromiseDeferred<IDLInterface<File>>&&);
 
+    void createSyncAccessHandle(DOMPromiseDeferred<IDLInterface<FileSystemSyncAccessHandle>>&&);
+    void getSize(FileSystemSyncAccessHandleIdentifier, CompletionHandler<void(ExceptionOr<uint64_t>&&)>&&);
+    void truncate(FileSystemSyncAccessHandleIdentifier, unsigned long long size, CompletionHandler<void(ExceptionOr<void>&&)>&&);
+    void flush(FileSystemSyncAccessHandleIdentifier, CompletionHandler<void(ExceptionOr<void>&&)>&&);
+    void close(FileSystemSyncAccessHandleIdentifier, CompletionHandler<void(ExceptionOr<void>&&)>&&);
+
 private:
-    FileSystemFileHandle(String&&, FileSystemHandleIdentifier, Ref<FileSystemStorageConnection>&&);
+    FileSystemFileHandle(ScriptExecutionContext&, String&&, FileSystemHandleIdentifier, Ref<FileSystemStorageConnection>&&);
 };
 
 } // namespace WebCore

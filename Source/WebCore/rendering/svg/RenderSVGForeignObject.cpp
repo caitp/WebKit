@@ -26,8 +26,10 @@
 #include "HitTestResult.h"
 #include "LayoutRepainter.h"
 #include "RenderObject.h"
+#include "RenderSVGBlockInlines.h"
 #include "RenderSVGResource.h"
 #include "RenderView.h"
+#include "SVGElementTypeHelpers.h"
 #include "SVGForeignObjectElement.h"
 #include "SVGRenderingContext.h"
 #include "SVGResourcesCache.h"
@@ -91,24 +93,6 @@ void RenderSVGForeignObject::paint(PaintInfo& paintInfo, const LayoutPoint&)
     RenderBlock::paint(childPaintInfo, childPoint);
     childPaintInfo.phase = PaintPhase::Outline;
     RenderBlock::paint(childPaintInfo, childPoint);
-}
-
-LayoutRect RenderSVGForeignObject::clippedOverflowRect(const RenderLayerModelObject* repaintContainer, VisibleRectContext) const
-{
-    return SVGRenderSupport::clippedOverflowRectForRepaint(*this, repaintContainer);
-}
-
-std::optional<FloatRect> RenderSVGForeignObject::computeFloatVisibleRectInContainer(const FloatRect& rect, const RenderLayerModelObject* container, VisibleRectContext context) const
-{
-    return SVGRenderSupport::computeFloatVisibleRectInContainer(*this, rect, container, context);
-}
-
-std::optional<LayoutRect> RenderSVGForeignObject::computeVisibleRectInContainer(const LayoutRect& rect, const RenderLayerModelObject* container, VisibleRectContext context) const
-{
-    std::optional<FloatRect> adjustedRect = computeFloatVisibleRectInContainer(rect, container, context);
-    if (adjustedRect)
-        return enclosingLayoutRect(*adjustedRect);
-    return std::nullopt;
 }
 
 const AffineTransform& RenderSVGForeignObject::localToParentTransform() const
@@ -196,22 +180,6 @@ bool RenderSVGForeignObject::nodeAtFloatPoint(const HitTestRequest& request, Hit
     return RenderBlock::nodeAtPoint(request, result, hitTestLocation, LayoutPoint(), HitTestForeground)
         || RenderBlock::nodeAtPoint(request, result, hitTestLocation, LayoutPoint(), HitTestFloat)
         || RenderBlock::nodeAtPoint(request, result, hitTestLocation, LayoutPoint(), HitTestChildBlockBackgrounds);
-}
-
-bool RenderSVGForeignObject::nodeAtPoint(const HitTestRequest&, HitTestResult&, const HitTestLocation&, const LayoutPoint&, HitTestAction)
-{
-    ASSERT_NOT_REACHED();
-    return false;
-}
-
-void RenderSVGForeignObject::mapLocalToContainer(const RenderLayerModelObject* ancestorContainer, TransformState& transformState, OptionSet<MapCoordinatesMode>, bool* wasFixed) const
-{
-    SVGRenderSupport::mapLocalToContainer(*this, ancestorContainer, transformState, wasFixed);
-}
-
-const RenderObject* RenderSVGForeignObject::pushMappingToContainer(const RenderLayerModelObject* ancestorToStopAt, RenderGeometryMap& geometryMap) const
-{
-    return SVGRenderSupport::pushMappingToContainer(*this, ancestorToStopAt, geometryMap);
 }
 
 }

@@ -917,7 +917,7 @@ public:
     // register is passed.
 
     /* Need to use zero-extened load byte for load8.  */
-    void load8(ImplicitAddress address, RegisterID dest)
+    void load8(Address address, RegisterID dest)
     {
         if (address.offset >= -32768 && address.offset <= 32767
             && !m_fixedWidth)
@@ -976,7 +976,7 @@ public:
         }
     }
 
-    void load8SignedExtendTo32(ImplicitAddress address, RegisterID dest)
+    void load8SignedExtendTo32(Address address, RegisterID dest)
     {
         if (address.offset >= -32768 && address.offset <= 32767
             && !m_fixedWidth)
@@ -1036,7 +1036,7 @@ public:
     }
 
 
-    void load32(ImplicitAddress address, RegisterID dest)
+    void load32(Address address, RegisterID dest)
     {
         if (address.offset >= -32768 && address.offset <= 32767
             && !m_fixedWidth)
@@ -1233,7 +1233,7 @@ public:
     }
 
     /* Need to use zero-extened load half-word for load16.  */
-    void load16(ImplicitAddress address, RegisterID dest)
+    void load16(Address address, RegisterID dest)
     {
         if (address.offset >= -32768 && address.offset <= 32767
             && !m_fixedWidth)
@@ -1327,7 +1327,7 @@ public:
         return dataLabel;
     }
 
-    void store8(RegisterID src, ImplicitAddress address)
+    void store8(RegisterID src, Address address)
     {
         if (address.offset >= -32768 && address.offset <= 32767
             && !m_fixedWidth)
@@ -1406,7 +1406,7 @@ public:
         }
     }
 
-    void store8(TrustedImm32 imm, ImplicitAddress address)
+    void store8(TrustedImm32 imm, Address address)
     {
         TrustedImm32 imm8(static_cast<int8_t>(imm.m_value));
         if (address.offset >= -32768 && address.offset <= 32767
@@ -1450,7 +1450,7 @@ public:
         }
     }
 
-    void store16(RegisterID src, ImplicitAddress address)
+    void store16(RegisterID src, Address address)
     {
         if (address.offset >= -32768 && address.offset <= 32767
             && !m_fixedWidth) {
@@ -1488,7 +1488,7 @@ public:
         }
     }
 
-    void store32(RegisterID src, ImplicitAddress address)
+    void store32(RegisterID src, Address address)
     {
         if (address.offset >= -32768 && address.offset <= 32767
             && !m_fixedWidth)
@@ -1526,7 +1526,7 @@ public:
         }
     }
 
-    void store32(TrustedImm32 imm, ImplicitAddress address)
+    void store32(TrustedImm32 imm, Address address)
     {
         if (address.offset >= -32768 && address.offset <= 32767
             && !m_fixedWidth) {
@@ -2354,6 +2354,95 @@ public:
         return Jump();
     }
 
+    Jump branchAdd32(ResultCondition cond, TrustedImm32 imm, Address dest)
+    {
+        ASSERT((cond == Overflow) || (cond == Signed) || (cond == PositiveOrZero) || (cond == Zero) || (cond == NonZero));
+        if (cond == Overflow) {
+            if (m_fixedWidth) {
+                /*
+                  load    dest, dataTemp
+                  move    imm, immTemp
+                  xor     cmpTemp, dataTemp, immTemp
+                  addu    dataTemp, dataTemp, immTemp
+                  store   dataTemp, dest
+                  bltz    cmpTemp, No_overflow    # diff sign bit -> no overflow
+                  xor     cmpTemp, dataTemp, immTemp
+                  bgez    cmpTemp, No_overflow    # same sign big -> no overflow
+                  nop
+                  b       Overflow
+                  nop
+                  b       No_overflow
+                  nop
+                  nop
+                  nop
+                  No_overflow:
+                */
+                load32(dest, dataTempRegister);
+                move(imm, immTempRegister);
+                m_assembler.xorInsn(cmpTempRegister, dataTempRegister, immTempRegister);
+                m_assembler.addu(dataTempRegister, dataTempRegister, immTempRegister);
+                store32(dataTempRegister, dest);
+                m_assembler.bltz(cmpTempRegister, 9);
+                m_assembler.xorInsn(cmpTempRegister, dataTempRegister, immTempRegister);
+                m_assembler.bgez(cmpTempRegister, 7);
+                m_assembler.nop();
+            } else {
+                m_assembler.lw(dataTempRegister, dest.base, dest.offset);
+                if (imm.m_value >= 0 && imm.m_value  <= 32767) {
+                    move(dataTempRegister, cmpTempRegister);
+                    m_assembler.addiu(dataTempRegister, dataTempRegister, imm.m_value);
+                    m_assembler.bltz(cmpTempRegister, 9);
+                    m_assembler.sw(dataTempRegister, dest.base, dest.offset);
+                    m_assembler.bgez(dataTempRegister, 7);
+                    m_assembler.nop();
+                } else if (imm.m_value >= -32768 && imm.m_value < 0) {
+                    move(dataTempRegister, cmpTempRegister);
+                    m_assembler.addiu(dataTempRegister, dataTempRegister, imm.m_value);
+                    m_assembler.bgez(cmpTempRegister, 9);
+                    m_assembler.sw(dataTempRegister, dest.base, dest.offset);
+                    m_assembler.bltz(cmpTempRegister, 7);
+                    m_assembler.nop();
+                } else {
+                    move(imm, immTempRegister);
+                    m_assembler.xorInsn(cmpTempRegister, dataTempRegister, immTempRegister);
+                    m_assembler.addu(dataTempRegister, dataTempRegister, immTempRegister);
+                    m_assembler.bltz(cmpTempRegister, 10);
+                    m_assembler.sw(dataTempRegister, dest.base, dest.offset);
+                    m_assembler.xorInsn(cmpTempRegister, dataTempRegister, immTempRegister);
+                    m_assembler.bgez(cmpTempRegister, 7);
+                    m_assembler.nop();
+                }
+            }
+            return jump();
+        }
+        if (m_fixedWidth) {
+            move(imm, immTempRegister);
+            load32(dest, dataTempRegister);
+            add32(immTempRegister, dataTempRegister);
+            store32(dataTempRegister, dest);
+        } else {
+            m_assembler.lw(dataTempRegister, dest.base, dest.offset);
+            add32(imm, dataTempRegister);
+            m_assembler.sw(dataTempRegister, dest.base, dest.offset);
+        }
+        if (cond == Signed) {
+            // Check if dest is negative.
+            m_assembler.slt(cmpTempRegister, dataTempRegister, MIPSRegisters::zero);
+            return branchNotEqual(cmpTempRegister, MIPSRegisters::zero);
+        }
+        if (cond == PositiveOrZero) {
+            // Check if dest is not negative.
+            m_assembler.slt(cmpTempRegister, dataTempRegister, MIPSRegisters::zero);
+            return branchEqual(cmpTempRegister, MIPSRegisters::zero);
+        }
+        if (cond == Zero)
+            return branchEqual(dataTempRegister, MIPSRegisters::zero);
+        if (cond == NonZero)
+            return branchNotEqual(dataTempRegister, MIPSRegisters::zero);
+        ASSERT(0);
+        return Jump();
+    }
+
     Jump branchMul32(ResultCondition cond, RegisterID src1, RegisterID src2, RegisterID dest)
     {
         ASSERT((cond == Overflow) || (cond == Signed) || (cond == Zero) || (cond == NonZero));
@@ -2823,7 +2912,7 @@ public:
         return temp;
     }
 
-    DataLabelPtr storePtrWithPatch(TrustedImmPtr initialValue, ImplicitAddress address)
+    DataLabelPtr storePtrWithPatch(TrustedImmPtr initialValue, Address address)
     {
         m_fixedWidth = true;
         DataLabelPtr dataLabel = moveWithPatch(initialValue, dataTempRegister);
@@ -2832,7 +2921,7 @@ public:
         return dataLabel;
     }
 
-    DataLabelPtr storePtrWithPatch(ImplicitAddress address)
+    DataLabelPtr storePtrWithPatch(Address address)
     {
         return storePtrWithPatch(TrustedImmPtr(nullptr), address);
     }
@@ -2858,7 +2947,7 @@ public:
         }
     }
 
-    void loadFloat(ImplicitAddress address, FPRegisterID dest)
+    void loadFloat(Address address, FPRegisterID dest)
     {
         if (address.offset >= -32768 && address.offset <= 32767
             && !m_fixedWidth) {
@@ -2875,7 +2964,7 @@ public:
         }
     }
 
-    void loadDouble(ImplicitAddress address, FPRegisterID dest)
+    void loadDouble(Address address, FPRegisterID dest)
     {
 #if WTF_MIPS_ISA(1)
         /*
@@ -2997,7 +3086,7 @@ public:
         }
     }
 
-    void storeFloat(FPRegisterID src, ImplicitAddress address)
+    void storeFloat(FPRegisterID src, Address address)
     {
         if (address.offset >= -32768 && address.offset <= 32767
             && !m_fixedWidth)
@@ -3014,7 +3103,7 @@ public:
         }
     }
 
-    void storeDouble(FPRegisterID src, ImplicitAddress address)
+    void storeDouble(FPRegisterID src, Address address)
     {
 #if WTF_MIPS_ISA(1)
         /*

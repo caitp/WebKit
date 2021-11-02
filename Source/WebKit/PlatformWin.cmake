@@ -11,6 +11,10 @@ add_definitions(-DBUILDING_WEBKIT)
 list(APPEND WebKit_SOURCES
     GPUProcess/graphics/RemoteGraphicsContextGLWin.cpp
 
+    GPUProcess/graphics/wc/RemoteWCLayerTreeHost.cpp
+    GPUProcess/graphics/wc/WCScene.cpp
+    GPUProcess/graphics/wc/WCSceneContext.cpp
+
     GPUProcess/media/win/RemoteMediaPlayerProxyWin.cpp
 
     GPUProcess/win/GPUProcessMainWin.cpp
@@ -69,12 +73,16 @@ list(APPEND WebKit_SOURCES
 
     UIProcess/WebsiteData/win/WebsiteDataStoreWin.cpp
 
+    UIProcess/wc/DrawingAreaProxyWC.cpp
+
     UIProcess/win/PageClientImpl.cpp
     UIProcess/win/WebContextMenuProxyWin.cpp
     UIProcess/win/WebPageProxyWin.cpp
     UIProcess/win/WebPopupMenuProxyWin.cpp
     UIProcess/win/WebProcessPoolWin.cpp
     UIProcess/win/WebView.cpp
+
+    WebProcess/GPU/graphics/wc/RemoteWCLayerTreeHostProxy.cpp
 
     WebProcess/GPU/media/win/VideoLayerRemoteWin.cpp
 
@@ -84,9 +92,6 @@ list(APPEND WebKit_SOURCES
 
     WebProcess/MediaCache/WebMediaKeyStorageManager.cpp
 
-    WebProcess/Plugins/Netscape/NetscapePluginNone.cpp
-    WebProcess/Plugins/Netscape/win/PluginProxyWin.cpp
-
     WebProcess/WebCoreSupport/win/WebPopupMenuWin.cpp
 
     WebProcess/WebPage/AcceleratedSurface.cpp
@@ -95,6 +100,10 @@ list(APPEND WebKit_SOURCES
     WebProcess/WebPage/CoordinatedGraphics/DrawingAreaCoordinatedGraphics.cpp
     WebProcess/WebPage/CoordinatedGraphics/LayerTreeHostTextureMapper.cpp
 
+    WebProcess/WebPage/wc/DrawingAreaWC.cpp
+    WebProcess/WebPage/wc/GraphicsLayerWC.cpp
+    WebProcess/WebPage/wc/WCLayerFactory.cpp
+
     WebProcess/WebPage/win/WebPageWin.cpp
 
     WebProcess/win/WebProcessMainWin.cpp
@@ -102,6 +111,7 @@ list(APPEND WebKit_SOURCES
 )
 
 list(APPEND WebKit_INCLUDE_DIRECTORIES
+    "${WEBKIT_DIR}/GPUProcess/graphics/wc"
     "${WEBKIT_DIR}/Platform/classifier"
     "${WEBKIT_DIR}/Platform/generic"
     "${WEBKIT_DIR}/PluginProcess/win"
@@ -119,14 +129,23 @@ list(APPEND WebKit_INCLUDE_DIRECTORIES
     "${WEBKIT_DIR}/UIProcess/Inspector/socket"
     "${WEBKIT_DIR}/UIProcess/Inspector/win"
     "${WEBKIT_DIR}/UIProcess/Plugins/win"
+    "${WEBKIT_DIR}/UIProcess/wc"
     "${WEBKIT_DIR}/UIProcess/win"
+    "${WEBKIT_DIR}/WebProcess/GPU/graphics/wc"
     "${WEBKIT_DIR}/WebProcess/InjectedBundle/API/win"
     "${WEBKIT_DIR}/WebProcess/InjectedBundle/API/win/DOM"
     "${WEBKIT_DIR}/WebProcess/Inspector/win"
     "${WEBKIT_DIR}/WebProcess/WebCoreSupport/win"
     "${WEBKIT_DIR}/WebProcess/WebPage/CoordinatedGraphics"
+    "${WEBKIT_DIR}/WebProcess/WebPage/wc"
     "${WEBKIT_DIR}/WebProcess/WebPage/win"
     "${WEBKIT_DIR}/win"
+)
+
+list(APPEND WebKit_MESSAGES_IN_FILES
+    GPUProcess/graphics/wc/RemoteWCLayerTreeHost
+
+    WebProcess/GPU/graphics/wc/RemoteWCLayerTreeHostProxy
 )
 
 set(WebKitCommonIncludeDirectories ${WebKit_INCLUDE_DIRECTORIES})

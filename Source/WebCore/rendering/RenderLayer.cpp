@@ -57,6 +57,7 @@
 #include "DocumentTimeline.h"
 #include "Editor.h"
 #include "Element.h"
+#include "ElementInlines.h"
 #include "EventHandler.h"
 #include "FEColorMatrix.h"
 #include "FEMerge.h"
@@ -682,6 +683,21 @@ void RenderLayer::dirtyStackingContextZOrderLists()
         sc->dirtyZOrderLists();
 }
 
+bool RenderLayer::willCompositeClipPath() const
+{
+    if (!isComposited())
+        return false;
+
+    auto* clipPath = renderer().style().clipPath();
+    if (!clipPath)
+        return false;
+
+    if (renderer().hasMask())
+        return false;
+
+    return (clipPath->type() != PathOperation::Shape || clipPath->type() == PathOperation::Shape) && GraphicsLayer::supportsLayerType(GraphicsLayer::Type::Shape);
+}
+
 void RenderLayer::dirtyNormalFlowList()
 {
     ASSERT(layerListMutationAllowed());
@@ -1123,7 +1139,6 @@ void RenderLayer::setRepaintRects(const LayerRepaintRects& rects)
 
 void RenderLayer::clearRepaintRects()
 {
-    ASSERT(!m_visibleContentStatusDirty);
     m_repaintRectsValid = false;
 }
 
@@ -1394,7 +1409,7 @@ void RenderLayer::updatePagination()
     // layers). We track an enclosingPaginationLayer instead of using a simple bit, since we want to be able to get back
     // to that layer easily.
     if (renderer().isRenderFragmentedFlow()) {
-        m_enclosingPaginationLayer = makeWeakPtr(*this);
+        m_enclosingPaginationLayer = *this;
         return;
     }
 
@@ -1405,7 +1420,7 @@ void RenderLayer::updatePagination()
         if (parent()->hasTransform())
             m_enclosingPaginationLayer = nullptr;
         else
-            m_enclosingPaginationLayer = makeWeakPtr(parent()->enclosingPaginationLayer(IncludeCompositedPaginatedLayers));
+            m_enclosingPaginationLayer = parent()->enclosingPaginationLayer(IncludeCompositedPaginatedLayers);
         return;
     }
 
@@ -1419,7 +1434,7 @@ void RenderLayer::updatePagination()
             if (containingBlock->layer()->hasTransform())
                 m_enclosingPaginationLayer = nullptr;
             else
-                m_enclosingPaginationLayer = makeWeakPtr(containingBlock->layer()->enclosingPaginationLayer(IncludeCompositedPaginatedLayers));
+                m_enclosingPaginationLayer = containingBlock->layer()->enclosingPaginationLayer(IncludeCompositedPaginatedLayers);
             return;
         }
     }
@@ -1874,7 +1889,7 @@ void RenderLayer::setBackingProviderLayer(RenderLayer* backingProvider)
     if (!renderer().renderTreeBeingDestroyed())
         clearClipRectsIncludingDescendants();
 
-    m_backingProviderLayer = makeWeakPtr(backingProvider);
+    m_backingProviderLayer = backingProvider;
 }
 
 void RenderLayer::disconnectFromBackingProviderLayer()
@@ -1905,18 +1920,19 @@ RenderLayer* RenderLayer::enclosingCompositingLayer(IncludeSelfOrNot includeSelf
     return nullptr;
 }
 
+static RenderLayer* repaintTargetForLayer(const RenderLayer& layer)
+{
+    if (compositedWithOwnBackingStore(layer))
+        return const_cast<RenderLayer*>(&layer);
+
+    if (layer.paintsIntoProvidedBacking())
+        return layer.backingProviderLayer();
+
+    return nullptr;
+}
+
 RenderLayer* RenderLayer::enclosingCompositingLayerForRepaint(IncludeSelfOrNot includeSelf) const
 {
-    auto repaintTargetForLayer = [](const RenderLayer& layer) -> RenderLayer* {
-        if (compositedWithOwnBackingStore(layer))
-            return const_cast<RenderLayer*>(&layer);
-        
-        if (layer.paintsIntoProvidedBacking())
-            return layer.backingProviderLayer();
-        
-        return nullptr;
-    };
-
     RenderLayer* repaintTarget = nullptr;
     if (includeSelf == IncludeSelf && (repaintTarget = repaintTargetForLayer(*this)))
         return repaintTarget;
@@ -1927,6 +1943,18 @@ RenderLayer* RenderLayer::enclosingCompositingLayerForRepaint(IncludeSelfOrNot i
     }
          
     return nullptr;
+}
+
+bool RenderLayer::sharesCompositingLayerForRepaint(const RenderLayer& otherLayer) const
+{
+    if (repaintTargetForLayer(*this))
+        return false;
+
+    const RenderLayer* paintParent = paintOrderParent();
+    if (&otherLayer == paintParent)
+        return true;
+    auto* otherPaintParent = otherLayer.paintOrderParent();
+    return paintParent == otherPaintParent || this == otherPaintParent;
 }
 
 RenderLayer* RenderLayer::enclosingFilterLayer(IncludeSelfOrNot includeSelf) const
@@ -2416,7 +2444,7 @@ void RenderLayer::scrollRectToVisible(const LayoutRect& absoluteRect, bool insid
     {
         auto scrollPositionOptions = ScrollPositionChangeOptions::createProgrammatic();
         if (!renderer().frame().eventHandler().autoscrollInProgress() && element && useSmoothScrolling(options.behavior, element))
-            scrollPositionOptions.animated = AnimatedScroll::Yes;
+            scrollPositionOptions.animated = ScrollIsAnimated::Yes;
         return scrollPositionOptions;
     };
 
@@ -2876,21 +2904,19 @@ void RenderLayer::paint(GraphicsContext& context, const LayoutRect& damageRect, 
         widget->setOverlapTestResult(false);
 }
 
-void RenderLayer::clipToRect(GraphicsContext& context, const LayerPaintingInfo& paintingInfo, OptionSet<PaintBehavior> paintBehavior, const ClipRect& clipRect, BorderRadiusClippingRule rule)
+void RenderLayer::clipToRect(GraphicsContext& context, GraphicsContextStateSaver& stateSaver, EventRegionContextStateSaver& eventRegionStateSaver, const LayerPaintingInfo& paintingInfo, OptionSet<PaintBehavior> paintBehavior, const ClipRect& clipRect, BorderRadiusClippingRule rule)
 {
     float deviceScaleFactor = renderer().document().deviceScaleFactor();
     bool needsClipping = !clipRect.isInfinite() && clipRect.rect() != paintingInfo.paintDirtyRect;
     if (needsClipping || clipRect.affectedByRadius())
-        context.save();
+        stateSaver.save();
 
     if (needsClipping) {
         LayoutRect adjustedClipRect = clipRect.rect();
         adjustedClipRect.move(paintingInfo.subpixelOffset);
         auto snappedClipRect = snapRectToDevicePixels(adjustedClipRect, deviceScaleFactor);
         context.clip(snappedClipRect);
-
-        if (paintingInfo.eventRegionContext)
-            paintingInfo.eventRegionContext->pushClip(enclosingIntRect(snappedClipRect));
+        eventRegionStateSaver.pushClip(enclosingIntRect(snappedClipRect));
     }
 
     if (clipRect.affectedByRadius()) {
@@ -2915,16 +2941,6 @@ void RenderLayer::clipToRect(GraphicsContext& context, const LayerPaintingInfo& 
                 break;
         }
     }
-}
-
-void RenderLayer::restoreClip(GraphicsContext& context, const LayerPaintingInfo& paintingInfo, const ClipRect& clipRect)
-{
-    bool needsClipping = !clipRect.isInfinite() && clipRect.rect() != paintingInfo.paintDirtyRect;
-    if (needsClipping || clipRect.affectedByRadius())
-        context.restore();
-
-    if (needsClipping && paintingInfo.eventRegionContext)
-        paintingInfo.eventRegionContext->popClip();
 }
 
 static void performOverlapTests(OverlapTestRequestMap& overlapTestRequests, const RenderLayer* rootLayer, const RenderLayer* layer)
@@ -3043,6 +3059,8 @@ void RenderLayer::paintLayerWithEffects(GraphicsContext& context, const LayerPai
 
         // Make sure the parent's clip rects have been calculated.
         ClipRect clipRect = paintingInfo.paintDirtyRect;
+        GraphicsContextStateSaver stateSaver(context, false);
+        EventRegionContextStateSaver eventRegionStateSaver(paintingInfo.eventRegionContext);
         if (parent()) {
             ClipRectsContext clipRectsContext(paintingInfo.rootLayer, (paintFlags & PaintLayerFlag::TemporaryClipRects) ? TemporaryClipRects : PaintingClipRects,
                 IgnoreOverlayScrollbarSize, (paintFlags & PaintLayerFlag::PaintingOverflowContents) ? IgnoreOverflowClip : RespectOverflowClip);
@@ -3054,15 +3072,10 @@ void RenderLayer::paintLayerWithEffects(GraphicsContext& context, const LayerPai
                 paintBehavior.add(PaintBehavior::CompositedOverflowScrollContent);
 
             // Push the parent coordinate space's clip.
-            parent()->clipToRect(context, paintingInfo, paintBehavior, clipRect);
+            parent()->clipToRect(context, stateSaver, eventRegionStateSaver, paintingInfo, paintBehavior, clipRect);
         }
 
         paintLayerByApplyingTransform(context, paintingInfo, paintFlags);
-
-        // Restore the clip.
-        if (parent())
-            parent()->restoreClip(context, paintingInfo, clipRect);
-
         return;
     }
     
@@ -3110,78 +3123,79 @@ bool RenderLayer::setupFontSubpixelQuantization(GraphicsContext& context, bool& 
     return false;
 }
 
-Path RenderLayer::computeClipPath(const LayoutSize& offsetFromRoot, LayoutRect& rootRelativeBounds, WindRule& windRule) const
+std::pair<Path, WindRule> RenderLayer::computeClipPath(const LayoutSize& offsetFromRoot, const LayoutRect& rootRelativeBoundsForNonBoxes) const
 {
     const RenderStyle& style = renderer().style();
     float deviceScaleFactor = renderer().document().deviceScaleFactor();
 
-    if (is<ShapeClipPathOperation>(*style.clipPath())) {
-        auto& clipPath = downcast<ShapeClipPathOperation>(*style.clipPath());
+    if (is<ShapePathOperation>(*style.clipPath())) {
+        auto& clipPath = downcast<ShapePathOperation>(*style.clipPath());
 
         LayoutRect referenceBox;
         if (is<RenderBox>(renderer())) {
             referenceBox = downcast<RenderBox>(renderer()).referenceBox(clipPath.referenceBox());
             referenceBox.move(offsetFromRoot);
-        } else
-            referenceBox = rootRelativeBounds;
+        } else {
+            // Reference box for inlines is not well defined: https://github.com/w3c/csswg-drafts/issues/6383
+            referenceBox = rootRelativeBoundsForNonBoxes;
+        }
 
-        FloatRect snappedReferenceBox = snapRectToDevicePixels(referenceBox, deviceScaleFactor);
-
-        windRule = clipPath.windRule();
-        return clipPath.pathForReferenceRect(snappedReferenceBox);
+        auto snappedReferenceBox = snapRectToDevicePixels(referenceBox, deviceScaleFactor);
+        return { clipPath.pathForReferenceRect(snappedReferenceBox), clipPath.windRule() };
     }
 
-    if (is<BoxClipPathOperation>(*style.clipPath()) && is<RenderBox>(renderer())) {
-        auto& clipPath = downcast<BoxClipPathOperation>(*style.clipPath());
+    if (is<BoxPathOperation>(*style.clipPath()) && is<RenderBox>(renderer())) {
+        auto& clipPath = downcast<BoxPathOperation>(*style.clipPath());
 
-        FloatRoundedRect shapeRect = computeRoundedRectForBoxShape(clipPath.referenceBox(), downcast<RenderBox>(renderer())).pixelSnappedRoundedRectForPainting(deviceScaleFactor);
+        auto shapeRect = computeRoundedRectForBoxShape(clipPath.referenceBox(), downcast<RenderBox>(renderer())).pixelSnappedRoundedRectForPainting(deviceScaleFactor);
         shapeRect.move(offsetFromRoot);
 
-        windRule = WindRule::NonZero;
-        return clipPath.pathForReferenceRect(shapeRect);
+        return { clipPath.pathForReferenceRect(shapeRect), WindRule::NonZero };
     }
 
-    return Path();
+    return { Path(), WindRule::NonZero };
 }
 
-bool RenderLayer::setupClipPath(GraphicsContext& context, const LayerPaintingInfo& paintingInfo, const LayoutSize& offsetFromRoot)
+void RenderLayer::setupClipPath(GraphicsContext& context, GraphicsContextStateSaver& stateSaver, const LayerPaintingInfo& paintingInfo, const LayoutSize& offsetFromRoot)
 {
     if (!renderer().hasClipPath() || context.paintingDisabled() || paintingInfo.paintDirtyRect.isEmpty())
-        return false;
+        return;
 
     // SVG elements get clipped in SVG code.
     if (is<RenderSVGRoot>(renderer()))
-        return false;
+        return;
 
-    // It's not clear that this geometry is correct: https://github.com/w3c/csswg-drafts/issues/5786
-    auto rootRelativeBounds = calculateLayerBounds(paintingInfo.rootLayer, offsetFromRoot, { UseLocalClipRectIfPossible });
+    auto clippedContentBounds = calculateLayerBounds(paintingInfo.rootLayer, offsetFromRoot, { UseLocalClipRectIfPossible });
 
     auto& style = renderer().style();
     LayoutSize paintingOffsetFromRoot = LayoutSize(snapSizeToDevicePixel(offsetFromRoot + paintingInfo.subpixelOffset, LayoutPoint(), renderer().document().deviceScaleFactor()));
     ASSERT(style.clipPath());
-    if (is<ShapeClipPathOperation>(*style.clipPath()) || (is<BoxClipPathOperation>(*style.clipPath()) && is<RenderBox>(renderer()))) {
-        WindRule windRule;
-        Path path = computeClipPath(paintingOffsetFromRoot, rootRelativeBounds, windRule);
-        context.save();
+    if (is<ShapePathOperation>(*style.clipPath()) || (is<BoxPathOperation>(*style.clipPath()) && is<RenderBox>(renderer()))) {
+        // clippedContentBounds is used as the reference box for inlines, which is also poorly specified: https://github.com/w3c/csswg-drafts/issues/6383.
+        auto [path, windRule] = computeClipPath(paintingOffsetFromRoot, clippedContentBounds);
+        stateSaver.save();
         context.clipPath(path, windRule);
-        return true;
     }
 
-    if (is<ReferenceClipPathOperation>(style.clipPath())) {
-        auto& referenceClipPathOperation = downcast<ReferenceClipPathOperation>(*style.clipPath());
+    if (is<ReferencePathOperation>(style.clipPath())) {
+        auto& referenceClipPathOperation = downcast<ReferencePathOperation>(*style.clipPath());
         if (auto* clipperRenderer = renderer().ensureReferencedSVGResources().referencedClipperRenderer(renderer().document(), referenceClipPathOperation)) {
-            context.save();
-            auto referenceBox = snapRectToDevicePixels(rootRelativeBounds, renderer().document().deviceScaleFactor());
-            auto offset = referenceBox.location();
+            // Use the border box as the reference box, even though this is not clearly specified: https://github.com/w3c/csswg-drafts/issues/5786.
+            // clippedContentBounds is used as the reference box for inlines, which is also poorly specified: https://github.com/w3c/csswg-drafts/issues/6383.
+            auto referenceBox = computeReferenceBox(renderer(), CSSBoxType::BorderBox, offsetFromRoot, clippedContentBounds);
+            auto snappedReferenceBox = snapRectToDevicePixels(referenceBox, renderer().document().deviceScaleFactor());
+            auto offset = snappedReferenceBox.location();
+
+            auto snappedClippingBounds = snapRectToDevicePixels(clippedContentBounds, renderer().document().deviceScaleFactor());
+            snappedClippingBounds.moveBy(-offset);
+
+            stateSaver.save();
             context.translate(offset);
-            FloatRect svgReferenceBox { {}, referenceBox.size() };
-            clipperRenderer->applyClippingToContext(context, renderer(), svgReferenceBox, renderer().style().effectiveZoom());
+            FloatRect clipPathReferenceBox { { }, referenceBox.size() };
+            clipperRenderer->applyClippingToContext(context, renderer(), clipPathReferenceBox, snappedClippingBounds, renderer().style().effectiveZoom());
             context.translate(-offset);
-            return true;
         }
     }
-
-    return false;
 }
 
 RenderLayerFilters* RenderLayer::filtersForPainting(GraphicsContext& context, OptionSet<PaintLayerFlag> paintFlags) const
@@ -3232,9 +3246,12 @@ void RenderLayer::applyFilters(GraphicsContext& originalContext, const LayerPain
 {
     // FIXME: Handle more than one fragment.
     ClipRect backgroundRect = layerFragments.isEmpty() ? ClipRect() : layerFragments[0].backgroundRect;
-    clipToRect(originalContext, paintingInfo, behavior, backgroundRect);
+
+    GraphicsContextStateSaver stateSaver(originalContext, false);
+    EventRegionContextStateSaver eventRegionStateSaver(paintingInfo.eventRegionContext);
+
+    clipToRect(originalContext, stateSaver, eventRegionStateSaver, paintingInfo, behavior, backgroundRect);
     m_filters->applyFilterEffect(originalContext);
-    restoreClip(originalContext, paintingInfo, backgroundRect);
 }
 
 void RenderLayer::paintLayerContents(GraphicsContext& context, const LayerPaintingInfo& paintingInfo, OptionSet<PaintLayerFlag> paintFlags)
@@ -3293,9 +3310,9 @@ void RenderLayer::paintLayerContents(GraphicsContext& context, const LayerPainti
     if (renderer().enclosingFragmentedFlow() && (renderer().hasClipPath() || filtersForPainting(context, paintFlags)))
         columnAwareOffsetFromRoot = toLayoutSize(convertToLayerCoords(paintingInfo.rootLayer, LayoutPoint(), AdjustForColumns));
 
-    bool hasClipPath = false;
+    GraphicsContextStateSaver stateSaver(context, false);
     if (shouldApplyClipPath(paintingInfo.paintBehavior, localPaintFlags))
-        hasClipPath = setupClipPath(context, paintingInfo, columnAwareOffsetFromRoot);
+        setupClipPath(context, stateSaver, paintingInfo, columnAwareOffsetFromRoot);
 
     bool selectionAndBackgroundsOnly = paintingInfo.paintBehavior.contains(PaintBehavior::SelectionAndBackgroundsOnly);
     bool selectionOnly = paintingInfo.paintBehavior.contains(PaintBehavior::SelectionOnly);
@@ -3446,9 +3463,6 @@ void RenderLayer::paintLayerContents(GraphicsContext& context, const LayerPainti
     // Re-set this to whatever it was before we painted the layer.
     if (needToAdjustSubpixelQuantization)
         context.setShouldSubpixelQuantizeFonts(didQuantizeFonts);
-
-    if (hasClipPath)
-        context.restore();
 }
 
 void RenderLayer::paintLayerByApplyingTransform(GraphicsContext& context, const LayerPaintingInfo& paintingInfo, OptionSet<PaintLayerFlag> paintFlags, const LayoutSize& translationOffset)
@@ -3699,9 +3713,11 @@ void RenderLayer::paintTransformedLayerIntoFragments(GraphicsContext& context, c
         if (paintFlags.contains(PaintLayerFlag::PaintingOverflowContents))
             paintBehavior.add(PaintBehavior::CompositedOverflowScrollContent);
 
-        parent()->clipToRect(context, paintingInfo, paintBehavior, clipRect);
+        GraphicsContextStateSaver stateSaver(context, false);
+        EventRegionContextStateSaver eventRegionStateSaver(paintingInfo.eventRegionContext);
+
+        parent()->clipToRect(context, stateSaver, eventRegionStateSaver, paintingInfo, paintBehavior, clipRect);
         paintLayerByApplyingTransform(context, paintingInfo, paintFlags, fragment.paginationOffset);
-        parent()->restoreClip(context, paintingInfo, clipRect);
     }
 }
 
@@ -3717,19 +3733,19 @@ void RenderLayer::paintBackgroundForFragments(const LayerFragments& layerFragmen
         if (haveTransparency)
             beginTransparencyLayers(contextForTransparencyLayer, localPaintingInfo, transparencyPaintDirtyRect);
     
+        GraphicsContextStateSaver stateSaver(context, false);
+        EventRegionContextStateSaver eventRegionStateSaver(localPaintingInfo.eventRegionContext);
+
         if (localPaintingInfo.clipToDirtyRect) {
             // Paint our background first, before painting any child layers.
             // Establish the clip used to paint our background.
-            clipToRect(context, localPaintingInfo, paintBehavior, fragment.backgroundRect, DoNotIncludeSelfForBorderRadius); // Background painting will handle clipping to self.
+            clipToRect(context, stateSaver, eventRegionStateSaver, localPaintingInfo, paintBehavior, fragment.backgroundRect, DoNotIncludeSelfForBorderRadius); // Background painting will handle clipping to self.
         }
         
         // Paint the background.
         // FIXME: Eventually we will collect the region from the fragment itself instead of just from the paint info.
         PaintInfo paintInfo(context, fragment.backgroundRect.rect(), PaintPhase::BlockBackground, paintBehavior, subtreePaintRootForRenderer, nullptr, nullptr, &localPaintingInfo.rootLayer->renderer(), this);
         renderer().paint(paintInfo, toLayoutPoint(fragment.layerBounds.location() - renderBoxLocation() + localPaintingInfo.subpixelOffset));
-
-        if (localPaintingInfo.clipToDirtyRect)
-            restoreClip(context, localPaintingInfo, fragment.backgroundRect);
     }
 }
 
@@ -3768,13 +3784,13 @@ void RenderLayer::paintForegroundForFragments(const LayerFragments& layerFragmen
     if (localPaintingInfo.paintBehavior & PaintBehavior::CompositedOverflowScrollContent)
         localPaintBehavior.add(PaintBehavior::CompositedOverflowScrollContent);
 
+    GraphicsContextStateSaver stateSaver(context, false);
+    EventRegionContextStateSaver eventRegionStateSaver(localPaintingInfo.eventRegionContext);
+
     // Optimize clipping for the single fragment case.
     bool shouldClip = localPaintingInfo.clipToDirtyRect && layerFragments.size() == 1 && layerFragments[0].shouldPaintContent && !layerFragments[0].foregroundRect.isEmpty();
-    ClipRect clippedRect;
-    if (shouldClip) {
-        clippedRect = layerFragments[0].foregroundRect;
-        clipToRect(context, localPaintingInfo, localPaintBehavior, clippedRect);
-    }
+    if (shouldClip)
+        clipToRect(context, stateSaver, eventRegionStateSaver, localPaintingInfo, localPaintBehavior, layerFragments[0].foregroundRect);
     
     // We have to loop through every fragment multiple times, since we have to repaint in each specific phase in order for
     // interleaving of the fragments to work properly.
@@ -3791,9 +3807,6 @@ void RenderLayer::paintForegroundForFragments(const LayerFragments& layerFragmen
         paintForegroundForFragmentsWithPhase(PaintPhase::Foreground, layerFragments, context, localPaintingInfo, localPaintBehavior, subtreePaintRootForRenderer);
         paintForegroundForFragmentsWithPhase(PaintPhase::ChildOutlines, layerFragments, context, localPaintingInfo, localPaintBehavior, subtreePaintRootForRenderer);
     }
-    
-    if (shouldClip)
-        restoreClip(context, localPaintingInfo, clippedRect);
 }
 
 void RenderLayer::paintForegroundForFragmentsWithPhase(PaintPhase phase, const LayerFragments& layerFragments, GraphicsContext& context,
@@ -3804,17 +3817,17 @@ void RenderLayer::paintForegroundForFragmentsWithPhase(PaintPhase phase, const L
     for (const auto& fragment : layerFragments) {
         if (!fragment.shouldPaintContent || fragment.foregroundRect.isEmpty())
             continue;
-        
+
+        GraphicsContextStateSaver stateSaver(context, false);
+        EventRegionContextStateSaver eventRegionStateSaver(localPaintingInfo.eventRegionContext);
+
         if (shouldClip)
-            clipToRect(context, localPaintingInfo, paintBehavior, fragment.foregroundRect);
+            clipToRect(context, stateSaver, eventRegionStateSaver, localPaintingInfo, paintBehavior, fragment.foregroundRect);
     
         PaintInfo paintInfo(context, fragment.foregroundRect.rect(), phase, paintBehavior, subtreePaintRootForRenderer, nullptr, nullptr, &localPaintingInfo.rootLayer->renderer(), this, localPaintingInfo.requireSecurityOriginAccessForWidgets);
         if (phase == PaintPhase::Foreground)
             paintInfo.overlapTestRequests = localPaintingInfo.overlapTestRequests;
         renderer().paint(paintInfo, toLayoutPoint(fragment.layerBounds.location() - renderBoxLocation() + localPaintingInfo.subpixelOffset));
-        
-        if (shouldClip)
-            restoreClip(context, localPaintingInfo, fragment.foregroundRect);
     }
 }
 
@@ -3827,9 +3840,12 @@ void RenderLayer::paintOutlineForFragments(const LayerFragments& layerFragments,
     
         // Paint our own outline
         PaintInfo paintInfo(context, fragment.backgroundRect.rect(), PaintPhase::SelfOutline, paintBehavior, subtreePaintRootForRenderer, nullptr, nullptr, &localPaintingInfo.rootLayer->renderer(), this);
-        clipToRect(context, localPaintingInfo, paintBehavior, fragment.backgroundRect, DoNotIncludeSelfForBorderRadius);
+
+        GraphicsContextStateSaver stateSaver(context, false);
+        EventRegionContextStateSaver eventRegionStateSaver(localPaintingInfo.eventRegionContext);
+
+        clipToRect(context, stateSaver, eventRegionStateSaver, localPaintingInfo, paintBehavior, fragment.backgroundRect, DoNotIncludeSelfForBorderRadius);
         renderer().paint(paintInfo, toLayoutPoint(fragment.layerBounds.location() - renderBoxLocation() + localPaintingInfo.subpixelOffset));
-        restoreClip(context, localPaintingInfo, fragment.backgroundRect);
     }
 }
 
@@ -3840,16 +3856,16 @@ void RenderLayer::paintMaskForFragments(const LayerFragments& layerFragments, Gr
         if (!fragment.shouldPaintContent)
             continue;
 
+        GraphicsContextStateSaver stateSaver(context, false);
+        EventRegionContextStateSaver eventRegionStateSaver(localPaintingInfo.eventRegionContext);
+
         if (localPaintingInfo.clipToDirtyRect)
-            clipToRect(context, localPaintingInfo, paintBehavior, fragment.backgroundRect, DoNotIncludeSelfForBorderRadius); // Mask painting will handle clipping to self.
+            clipToRect(context, stateSaver, eventRegionStateSaver, localPaintingInfo, paintBehavior, fragment.backgroundRect, DoNotIncludeSelfForBorderRadius); // Mask painting will handle clipping to self.
         
         // Paint the mask.
         // FIXME: Eventually we will collect the region from the fragment itself instead of just from the paint info.
         PaintInfo paintInfo(context, fragment.backgroundRect.rect(), PaintPhase::Mask, paintBehavior, subtreePaintRootForRenderer, nullptr, nullptr, &localPaintingInfo.rootLayer->renderer(), this);
         renderer().paint(paintInfo, toLayoutPoint(fragment.layerBounds.location() - renderBoxLocation() + localPaintingInfo.subpixelOffset));
-        
-        if (localPaintingInfo.clipToDirtyRect)
-            restoreClip(context, localPaintingInfo, fragment.backgroundRect);
     }
 }
 
@@ -3859,15 +3875,15 @@ void RenderLayer::paintChildClippingMaskForFragments(const LayerFragments& layer
         if (!fragment.shouldPaintContent)
             continue;
 
+        GraphicsContextStateSaver stateSaver(context, false);
+        EventRegionContextStateSaver eventRegionStateSaver(localPaintingInfo.eventRegionContext);
+
         if (localPaintingInfo.clipToDirtyRect)
-            clipToRect(context, localPaintingInfo, paintBehavior, fragment.foregroundRect, IncludeSelfForBorderRadius); // Child clipping mask painting will handle clipping to self.
+            clipToRect(context, stateSaver, eventRegionStateSaver, localPaintingInfo, paintBehavior, fragment.foregroundRect, IncludeSelfForBorderRadius); // Child clipping mask painting will handle clipping to self.
 
         // Paint the clipped mask.
         PaintInfo paintInfo(context, fragment.backgroundRect.rect(), PaintPhase::ClippingMask, paintBehavior, subtreePaintRootForRenderer, nullptr, nullptr, &localPaintingInfo.rootLayer->renderer(), this);
         renderer().paint(paintInfo, toLayoutPoint(fragment.layerBounds.location() - renderBoxLocation() + localPaintingInfo.subpixelOffset));
-
-        if (localPaintingInfo.clipToDirtyRect)
-            restoreClip(context, localPaintingInfo, fragment.foregroundRect);
     }
 }
 
@@ -3878,10 +3894,12 @@ void RenderLayer::paintOverflowControlsForFragments(const LayerFragments& layerF
     for (const auto& fragment : layerFragments) {
         if (fragment.backgroundRect.isEmpty())
             continue;
-        clipToRect(context, localPaintingInfo, { }, fragment.backgroundRect);
-        m_scrollableArea->paintOverflowControls(context, roundedIntPoint(toLayoutPoint(fragment.layerBounds.location() - renderBoxLocation() + localPaintingInfo.subpixelOffset)),
-            snappedIntRect(fragment.backgroundRect.rect()), true);
-        restoreClip(context, localPaintingInfo, fragment.backgroundRect);
+
+        GraphicsContextStateSaver stateSaver(context, false);
+        EventRegionContextStateSaver eventRegionStateSaver(localPaintingInfo.eventRegionContext);
+
+        clipToRect(context, stateSaver, eventRegionStateSaver, localPaintingInfo, { }, fragment.backgroundRect);
+        m_scrollableArea->paintOverflowControls(context, roundedIntPoint(toLayoutPoint(fragment.layerBounds.location() - renderBoxLocation() + localPaintingInfo.subpixelOffset)), snappedIntRect(fragment.backgroundRect.rect()), true);
     }
 }
 
@@ -3953,10 +3971,7 @@ Element* RenderLayer::enclosingElement() const
 
 bool RenderLayer::establishesTopLayer() const
 {
-    if (!renderer().element())
-        return renderer().style().styleType() == PseudoId::Backdrop;
-
-    return renderer().element()->isInTopLayer();
+    return isInTopLayerOrBackdrop(renderer().style(), renderer().element());
 }
 
 void RenderLayer::establishesTopLayerWillChange()
@@ -4438,8 +4453,11 @@ ClipRects* RenderLayer::clipRects(const ClipRectsContext& context) const
 
 bool RenderLayer::clipCrossesPaintingBoundary() const
 {
-    return parent()->enclosingPaginationLayer(IncludeCompositedPaginatedLayers) != enclosingPaginationLayer(IncludeCompositedPaginatedLayers)
-        || parent()->enclosingCompositingLayerForRepaint() != enclosingCompositingLayerForRepaint();
+    auto* parentLayer = parent();
+    if (!sharesCompositingLayerForRepaint(*parentLayer))
+        return true;
+
+    return parentLayer->enclosingPaginationLayer(IncludeCompositedPaginatedLayers) != enclosingPaginationLayer(IncludeCompositedPaginatedLayers);
 }
 
 void RenderLayer::calculateClipRects(const ClipRectsContext& clipRectsContext, ClipRects& clipRects) const
@@ -5211,7 +5229,7 @@ static void determineNonLayerDescendantsPaintedContent(const RenderElement& rend
             if (!renderText.hasRenderedText())
                 continue;
 
-            if (renderer.style().userSelect() != UserSelect::None)
+            if (renderer.style().userSelectIncludingInert() != UserSelect::None)
                 request.setHasPaintedContent();
 
             if (!renderText.text().isAllSpecialCharacters<isHTMLSpace>()) {
@@ -5717,7 +5735,7 @@ void showLayerTree(const WebCore::RenderLayer* layer)
     if (!layer)
         return;
 
-    WTF::String output = externalRepresentation(&layer->renderer().frame(), {
+    String output = externalRepresentation(&layer->renderer().frame(), {
         WebCore::RenderAsTextFlag::ShowAllLayers,
         WebCore::RenderAsTextFlag::ShowLayerNesting,
         WebCore::RenderAsTextFlag::ShowCompositedLayers,

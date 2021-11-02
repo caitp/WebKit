@@ -86,7 +86,9 @@ namespace WebCore {
             Child,
             DirectAdjacent,
             IndirectAdjacent,
-            ShadowDescendant
+            ShadowDescendant,
+            ShadowPartDescendant,
+            ShadowSlotted
         };
 
         enum PseudoClassType {

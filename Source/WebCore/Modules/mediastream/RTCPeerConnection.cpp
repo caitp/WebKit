@@ -182,8 +182,8 @@ ExceptionOr<Ref<RTCRtpTransceiver>> RTCPeerConnection::addTransceiver(AddTransce
 {
     INFO_LOG(LOGIDENTIFIER);
 
-    if (WTF::holds_alternative<String>(withTrack)) {
-        const String& kind = WTF::get<String>(withTrack);
+    if (std::holds_alternative<String>(withTrack)) {
+        const String& kind = std::get<String>(withTrack);
         if (kind != "audio"_s && kind != "video"_s)
             return Exception { TypeError };
 
@@ -196,7 +196,7 @@ ExceptionOr<Ref<RTCRtpTransceiver>> RTCPeerConnection::addTransceiver(AddTransce
     if (isClosed())
         return Exception { InvalidStateError };
 
-    auto track = WTF::get<RefPtr<MediaStreamTrack>>(withTrack).releaseNonNull();
+    auto track = std::get<RefPtr<MediaStreamTrack>>(withTrack).releaseNonNull();
     return m_backend->addTransceiver(WTFMove(track), init);
 }
 
@@ -331,7 +331,7 @@ void RTCPeerConnection::addIceCandidate(Candidate&& rtcCandidate, Ref<DeferredPr
     std::optional<Exception> exception;
     RefPtr<RTCIceCandidate> candidate;
     if (rtcCandidate) {
-        candidate = switchOn(*rtcCandidate, [&exception](RTCIceCandidateInit& init) -> RefPtr<RTCIceCandidate> {
+        candidate = WTF::switchOn(*rtcCandidate, [&exception](RTCIceCandidateInit& init) -> RefPtr<RTCIceCandidate> {
             if (init.candidate.isEmpty())
                 return nullptr;
 
@@ -523,6 +523,11 @@ void RTCPeerConnection::getStats(MediaStreamTrack* selector, Ref<DeferredPromise
     m_backend->getStats(WTFMove(promise));
 }
 
+void RTCPeerConnection::gatherDecoderImplementationName(Function<void(String&&)>&& callback)
+{
+    m_backend->gatherDecoderImplementationName(WTFMove(callback));
+}
+
 ExceptionOr<Ref<RTCDataChannel>> RTCPeerConnection::createDataChannel(String&& label, RTCDataChannelInit&& options)
 {
     ALWAYS_LOG(LOGIDENTIFIER);
@@ -670,12 +675,13 @@ void RTCPeerConnection::updateIceGatheringState(RTCIceGatheringState newState)
     });
 }
 
-void RTCPeerConnection::updateIceConnectionState(RTCIceConnectionState newState)
+void RTCPeerConnection::updateIceConnectionState(RTCIceConnectionState)
 {
-    ALWAYS_LOG(LOGIDENTIFIER, newState);
-
-    queueTaskKeepingObjectAlive(*this, TaskSource::Networking, [this, newState] {
-        if (isClosed() || m_iceConnectionState == newState)
+    queueTaskKeepingObjectAlive(*this, TaskSource::Networking, [this] {
+        if (isClosed())
+            return;
+        auto newState = computeIceConnectionStateFromIceTransports();
+        if (m_iceConnectionState == newState)
             return;
 
         m_iceConnectionState = newState;
@@ -791,6 +797,16 @@ void RTCPeerConnection::processIceTransportStateChange(RTCIceTransport& iceTrans
         dispatchEvent(Event::create(eventNames().connectionstatechangeEvent, Event::CanBubble::No, Event::IsCancelable::No));
 }
 
+void RTCPeerConnection::processIceTransportChanges()
+{
+    auto newIceConnectionState = computeIceConnectionStateFromIceTransports();
+    bool iceConnectionStateChanged = m_iceConnectionState != newIceConnectionState;
+    m_iceConnectionState = newIceConnectionState;
+
+    if (iceConnectionStateChanged && !isClosed())
+        dispatchEvent(Event::create(eventNames().iceconnectionstatechangeEvent, Event::CanBubble::No, Event::IsCancelable::No));
+}
+
 void RTCPeerConnection::updateNegotiationNeededFlag(std::optional<uint32_t> eventId)
 {
     queueTaskKeepingObjectAlive(*this, TaskSource::Networking, [this, eventId]() mutable {
@@ -832,10 +848,10 @@ void RTCPeerConnection::dispatchEvent(Event& event)
 
 static inline ExceptionOr<PeerConnectionBackend::CertificateInformation> certificateTypeFromAlgorithmIdentifier(JSC::JSGlobalObject& lexicalGlobalObject, RTCPeerConnection::AlgorithmIdentifier&& algorithmIdentifier)
 {
-    if (WTF::holds_alternative<String>(algorithmIdentifier))
+    if (std::holds_alternative<String>(algorithmIdentifier))
         return Exception { NotSupportedError, "Algorithm is not supported"_s };
 
-    auto& value = WTF::get<JSC::Strong<JSC::JSObject>>(algorithmIdentifier);
+    auto& value = std::get<JSC::Strong<JSC::JSObject>>(algorithmIdentifier);
 
     JSC::VM& vm = lexicalGlobalObject.vm();
     auto scope = DECLARE_CATCH_SCOPE(vm);

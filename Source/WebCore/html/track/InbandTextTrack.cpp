@@ -28,10 +28,12 @@
 
 #if ENABLE(VIDEO)
 
+#include "Document.h"
 #include "InbandDataTextTrack.h"
 #include "InbandGenericTextTrack.h"
 #include "InbandTextTrackPrivate.h"
 #include "InbandWebVTTTextTrack.h"
+#include "TextTrackClient.h"
 #include <wtf/IsoMallocInlines.h>
 
 namespace WebCore {

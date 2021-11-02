@@ -320,8 +320,10 @@ void ScrollingTree::commitTreeState(std::unique_ptr<ScrollingStateTree>&& scroll
         if (auto node = m_nodeMap.take(nodeID))
             node->willBeDestroyed();
     }
+    
+    didCommitTree();
 
-    LOG_WITH_STREAM(ScrollingTree, stream << "committed ScrollingTree" << scrollingTreeAsText(ScrollingStateTreeAsTextBehaviorDebug));
+    LOG_WITH_STREAM(ScrollingTree, stream << "committed ScrollingTree" << scrollingTreeAsText(debugScrollingStateTreeAsTextBehaviors));
 }
 
 void ScrollingTree::updateTreeFromStateNodeRecursive(const ScrollingStateNode* stateNode, CommitTreeState& state)
@@ -581,6 +583,46 @@ void ScrollingTree::setNodeScrollSnapInProgress(ScrollingNodeID nodeID, bool isS
         m_treeState.nodesWithActiveScrollSnap.remove(nodeID);
 }
 
+bool ScrollingTree::isScrollAnimationInProgressForNode(ScrollingNodeID nodeID)
+{
+    if (!nodeID)
+        return false;
+
+    Locker locker { m_treeStateLock };
+    return m_treeState.nodesWithActiveScrollAnimations.contains(nodeID);
+}
+
+void ScrollingTree::setScrollAnimationInProgressForNode(ScrollingNodeID nodeID, bool isScrollAnimationInProgress)
+{
+    if (!nodeID)
+        return;
+
+    Locker locker { m_treeStateLock };
+    
+    bool hadAnyAnimatedScrollingNodes = !m_treeState.nodesWithActiveScrollAnimations.isEmpty();
+    
+    if (isScrollAnimationInProgress)
+        m_treeState.nodesWithActiveScrollAnimations.add(nodeID);
+    else
+        m_treeState.nodesWithActiveScrollAnimations.remove(nodeID);
+
+    bool hasAnyAnimatedScrollingNodes = !m_treeState.nodesWithActiveScrollAnimations.isEmpty();
+    if (hasAnyAnimatedScrollingNodes != hadAnyAnimatedScrollingNodes)
+        hasNodeWithAnimatedScrollChanged(hasAnyAnimatedScrollingNodes);
+}
+
+bool ScrollingTree::hasNodeWithActiveScrollAnimations()
+{
+    Locker locker { m_treeStateLock };
+    return !m_treeState.nodesWithActiveScrollAnimations.isEmpty();
+}
+
+HashSet<ScrollingNodeID> ScrollingTree::nodesWithActiveScrollAnimations()
+{
+    Locker locker { m_treeStateLock };
+    return m_treeState.nodesWithActiveScrollAnimations;
+}
+
 void ScrollingTree::setMainFramePinnedState(RectEdges<bool> edgePinningState)
 {
     Locker locker { m_swipeStateLock };
@@ -595,18 +637,10 @@ void ScrollingTree::setMainFrameCanRubberBand(RectEdges<bool> canRubberBand)
     m_swipeState.canRubberBand = canRubberBand;
 }
 
-bool ScrollingTree::mainFrameCanRubberBandInDirection(ScrollDirection direction)
+bool ScrollingTree::mainFrameCanRubberBandOnSide(BoxSide side)
 {
     Locker locker { m_swipeStateLock };
-
-    switch (direction) {
-    case ScrollUp: return m_swipeState.canRubberBand.top();
-    case ScrollDown: return m_swipeState.canRubberBand.bottom();
-    case ScrollLeft: return m_swipeState.canRubberBand.left();
-    case ScrollRight: return m_swipeState.canRubberBand.right();
-    };
-
-    return false;
+    return m_swipeState.canRubberBand.at(side);
 }
 
 void ScrollingTree::addPendingScrollUpdate(ScrollUpdate&& update)
@@ -622,7 +656,7 @@ void ScrollingTree::addPendingScrollUpdate(ScrollUpdate&& update)
     m_pendingScrollUpdates.append(WTFMove(update));
 }
 
-Vector<ScrollingTree::ScrollUpdate> ScrollingTree::takePendingScrollUpdates()
+Vector<ScrollUpdate> ScrollingTree::takePendingScrollUpdates()
 {
     Locker locker { m_pendingScrollUpdatesLock };
     return std::exchange(m_pendingScrollUpdates, { });
@@ -706,7 +740,7 @@ std::optional<unsigned> ScrollingTree::nominalFramesPerSecond()
     return m_treeState.nominalFramesPerSecond;
 }
 
-String ScrollingTree::scrollingTreeAsText(ScrollingStateTreeAsTextBehavior behavior)
+String ScrollingTree::scrollingTreeAsText(OptionSet<ScrollingStateTreeAsTextBehavior> behavior)
 {
     TextStream ts(TextStream::LineMode::MultipleLine);
 
@@ -724,10 +758,10 @@ String ScrollingTree::scrollingTreeAsText(ScrollingStateTreeAsTextBehavior behav
         
         if (m_rootNode) {
             TextStream::GroupScope scope(ts);
-            m_rootNode->dump(ts, behavior | ScrollingStateTreeAsTextBehaviorIncludeLayerPositions);
+            m_rootNode->dump(ts, behavior | ScrollingStateTreeAsTextBehavior::IncludeLayerPositions);
         }
         
-        if (behavior & ScrollingStateTreeAsTextBehaviorIncludeNodeIDs) {
+        if (behavior & ScrollingStateTreeAsTextBehavior::IncludeNodeIDs) {
             if (!m_overflowRelatedNodesMap.isEmpty()) {
                 TextStream::GroupScope scope(ts);
                 ts << "overflow related nodes";

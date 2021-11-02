@@ -51,6 +51,7 @@
 #import "WebPageProxyMessages.h"
 #import "WebPasteboardProxyMessages.h"
 #import "WebProcess.h"
+#import "WebWheelEvent.h"
 #import <JavaScriptCore/JSContextRef.h>
 #import <JavaScriptCore/JSObjectRef.h>
 #import <JavaScriptCore/OpaqueJSString.h>
@@ -180,7 +181,7 @@ static const uint32_t nonLinearizedPDFSentinel = std::numeric_limits<uint32_t>::
         return nil;
 
     _pdfPlugin = plugin;
-    _pluginElement = makeWeakPtr(element);
+    _pluginElement = element;
 
     return self;
 }
@@ -633,7 +634,7 @@ Ref<PDFPlugin> PDFPlugin::create(WebFrame& frame, HTMLPlugInElement* pluginEleme
 
 inline PDFPlugin::PDFPlugin(WebFrame& frame, HTMLPlugInElement* pluginElement)
     : Plugin(PDFPluginType)
-    , m_frame(makeWeakPtr(frame))
+    , m_frame(frame)
     , m_containerLayer(adoptNS([[CALayer alloc] init]))
     , m_contentLayer(adoptNS([[CALayer alloc] init]))
     , m_scrollCornerLayer(adoptNS([[WKPDFPluginScrollbarLayer alloc] initWithPDFPlugin:this]))

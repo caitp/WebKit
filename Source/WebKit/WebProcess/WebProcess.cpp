@@ -43,7 +43,6 @@
 #include "NetworkProcessConnectionInfo.h"
 #include "NetworkSession.h"
 #include "NetworkSessionCreationParameters.h"
-#include "PluginProcessConnectionManager.h"
 #include "ProcessAssertion.h"
 #include "RemoteAudioHardwareListener.h"
 #include "RemoteAudioSession.h"
@@ -224,6 +223,10 @@
 #include <WebCore/VP9UtilitiesCocoa.h>
 #endif
 
+#if OS(LINUX)
+#include <wtf/linux/RealTimeThreads.h>
+#endif
+
 #undef WEBPROCESS_RELEASE_LOG
 #define RELEASE_LOG_SESSION_ID (m_sessionID ? m_sessionID->toUInt64() : 0)
 #if RELEASE_LOG_DISABLED
@@ -278,9 +281,6 @@ WebProcess::WebProcess()
     , m_cookieJar(WebCookieJar::create())
     , m_reportingEndpointsCache(ReportingEndpointsCache::create())
     , m_dnsPrefetchHystereris([this](PAL::HysteresisState state) { if (state == PAL::HysteresisState::Stopped) m_dnsPrefetchedHosts.clear(); })
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    , m_pluginProcessConnectionManager(PluginProcessConnectionManager::create())
-#endif
     , m_nonVisibleProcessGraphicsCleanupTimer(*this, &WebProcess::nonVisibleProcessGraphicsCleanupTimerFired)
 #if ENABLE(NON_VISIBLE_WEBPROCESS_MEMORY_CLEANUP_TIMER)
     , m_nonVisibleProcessMemoryCleanupTimer(*this, &WebProcess::nonVisibleProcessMemoryCleanupTimerFired)
@@ -359,7 +359,7 @@ void WebProcess::initializeConnection(IPC::Connection* connection)
     // and AuxiliaryProcess::didClose() does not get called.
     connection->setDidCloseOnConnectionWorkQueueCallback(callExit);
 
-#if !PLATFORM(GTK) && !PLATFORM(WPE)
+#if !PLATFORM(GTK) && !PLATFORM(WPE) && !ENABLE(IPC_TESTING_API)
     connection->setShouldExitOnSyncMessageSendFailure(true);
 #endif
 
@@ -369,10 +369,6 @@ void WebProcess::initializeConnection(IPC::Connection* connection)
 #endif // PLATFORM(IOS_FAMILY)
 
     m_webInspectorInterruptDispatcher->initializeConnection(connection);
-
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    m_pluginProcessConnectionManager->initializeConnection(connection);
-#endif
 
     for (auto& supplement : m_supplements.values())
         supplement->initializeConnection(connection);
@@ -747,13 +743,6 @@ void WebProcess::fullKeyboardAccessModeChanged(bool fullKeyboardAccessEnabled)
     m_fullKeyboardAccessEnabled = fullKeyboardAccessEnabled;
 }
 
-#if ENABLE(NETSCAPE_PLUGIN_API)
-PluginProcessConnectionManager& WebProcess::pluginProcessConnectionManager()
-{
-    return *m_pluginProcessConnectionManager;
-}
-#endif
-
 void WebProcess::setCacheModel(CacheModel cacheModel)
 {
     if (m_hasSetCacheModel && (cacheModel == m_cacheModel))
@@ -809,6 +798,9 @@ void WebProcess::createWebPage(PageIdentifier pageID, WebPageCreationParameters&
         // Balanced by an enableTermination in removeWebPage.
         disableTermination();
         updateCPULimit();
+#if OS(LINUX)
+        RealTimeThreads::singleton().setEnabled(hasVisibleWebPage());
+#endif
     } else
         result.iterator->value->reinitializeWebPage(WTFMove(parameters));
 
@@ -826,6 +818,9 @@ void WebProcess::removeWebPage(PageIdentifier pageID)
 
     enableTermination();
     updateCPULimit();
+#if OS(LINUX)
+    RealTimeThreads::singleton().setEnabled(hasVisibleWebPage());
+#endif
 }
 
 bool WebProcess::shouldTerminate()
@@ -980,9 +975,6 @@ void WebProcess::isJITEnabled(CompletionHandler<void(bool)>&& completionHandler)
 
 void WebProcess::refreshPlugins()
 {
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    WebPluginInfoProvider::singleton().refresh(false);
-#endif
 }
 
 void WebProcess::garbageCollectJavaScriptObjects()
@@ -1300,7 +1292,7 @@ void WebProcess::gpuProcessConnectionClosed(GPUProcessConnection& connection)
 
 #if ENABLE(MEDIA_STREAM) && PLATFORM(COCOA)
     if (m_audioMediaStreamTrackRendererInternalUnitManager)
-        m_audioMediaStreamTrackRendererInternalUnitManager->gpuProcessConnectionClosed();
+        m_audioMediaStreamTrackRendererInternalUnitManager->restartAllUnits();
 #endif
 }
 
@@ -1466,10 +1458,6 @@ void WebProcess::initializeSandbox(const AuxiliaryProcessInitializationParameter
 {
 }
 
-void WebProcess::platformInitializeProcess(const AuxiliaryProcessInitializationParameters&)
-{
-}
-
 void WebProcess::updateActivePages(const String& overrideDisplayName)
 {
 }
@@ -1491,8 +1479,12 @@ void WebProcess::updateCPUMonitorState(CPUMonitorUpdateReason)
 
 void WebProcess::pageActivityStateDidChange(PageIdentifier, OptionSet<WebCore::ActivityState::Flag> changed)
 {
-    if (changed & WebCore::ActivityState::IsVisible)
+    if (changed & WebCore::ActivityState::IsVisible) {
         updateCPUMonitorState(CPUMonitorUpdateReason::VisibilityHasChanged);
+#if OS(LINUX)
+        RealTimeThreads::singleton().setEnabled(hasVisibleWebPage());
+#endif
+    }
 }
 
 #if PLATFORM(IOS_FAMILY)
@@ -1909,13 +1901,13 @@ LibWebRTCNetwork& WebProcess::libWebRTCNetwork()
 }
 
 #if ENABLE(SERVICE_WORKER)
-void WebProcess::establishWorkerContextConnectionToNetworkProcess(PageGroupIdentifier pageGroupID, WebPageProxyIdentifier webPageProxyID, PageIdentifier pageID, const WebPreferencesStore& store, RegistrableDomain&& registrableDomain, ServiceWorkerInitializationData&& initializationData, CompletionHandler<void()>&& completionHandler)
+void WebProcess::establishWorkerContextConnectionToNetworkProcess(PageGroupIdentifier pageGroupID, WebPageProxyIdentifier webPageProxyID, PageIdentifier pageID, const WebPreferencesStore& store, RegistrableDomain&& registrableDomain, std::optional<ServiceWorkerClientIdentifier> serviceWorkerPageIdentifier, ServiceWorkerInitializationData&& initializationData, CompletionHandler<void()>&& completionHandler)
 {
     // We are in the Service Worker context process and the call below establishes our connection to the Network Process
     // by calling ensureNetworkProcessConnection. SWContextManager needs to use the same underlying IPC::Connection as the
     // NetworkProcessConnection for synchronization purposes.
     auto& ipcConnection = ensureNetworkProcessConnection().connection();
-    SWContextManager::singleton().setConnection(makeUnique<WebSWContextManagerConnection>(ipcConnection, WTFMove(registrableDomain), pageGroupID, webPageProxyID, pageID, store, WTFMove(initializationData)));
+    SWContextManager::singleton().setConnection(makeUnique<WebSWContextManagerConnection>(ipcConnection, WTFMove(registrableDomain), serviceWorkerPageIdentifier, pageGroupID, webPageProxyID, pageID, store, WTFMove(initializationData)));
     SWContextManager::singleton().connection()->establishConnection(WTFMove(completionHandler));
 }
 

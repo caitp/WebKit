@@ -160,7 +160,6 @@
 #define ENABLE_META_VIEWPORT 0
 #endif
 
-
 #if !defined(ENABLE_FILE_REPLACEMENT)
 #define ENABLE_FILE_REPLACEMENT 0
 #endif
@@ -388,10 +387,6 @@
 #define ENABLE_MOUSE_FORCE_EVENTS 1
 #endif
 
-#if !defined(ENABLE_NETSCAPE_PLUGIN_API)
-#define ENABLE_NETSCAPE_PLUGIN_API 1
-#endif
-
 #if !defined(ENABLE_NETSCAPE_PLUGIN_METADATA_CACHE)
 #define ENABLE_NETSCAPE_PLUGIN_METADATA_CACHE 0
 #endif
@@ -545,6 +540,14 @@
 #define ENABLE_FILE_SHARE 1
 #endif
 
+#if !defined(ENABLE_WEBXR)
+#define ENABLE_WEBXR 0
+#endif
+
+#if !defined(ENABLE_WEBXR_HANDS)
+#define ENABLE_WEBXR_HANDS 0
+#endif
+
 /*
  * Enable this to put each IsoHeap and other allocation categories into their own malloc heaps, so that tools like vmmap can show how big each heap is.
  * Turn BENABLE_MALLOC_HEAP_BREAKDOWN on in bmalloc together when using this.
@@ -569,7 +572,7 @@
 #endif
 
 /* The JIT is enabled by default on all x86-64 & ARM64 platforms. */
-#if !defined(ENABLE_JIT) && (CPU(X86_64) || CPU(ARM64)) && !CPU(APPLE_ARMV7K)
+#if !defined(ENABLE_JIT) && (CPU(X86_64) || (CPU(ARM64) && CPU(ADDRESS64)))
 #define ENABLE_JIT 1
 #endif
 
@@ -593,7 +596,7 @@
 #endif
 
 #if !defined(ENABLE_C_LOOP)
-#if ENABLE(JIT) || CPU(X86_64) || (CPU(ARM64) && !defined(__ILP32__))
+#if ENABLE(JIT) || CPU(X86_64) || CPU(ARM64)
 #define ENABLE_C_LOOP 0
 #else
 #define ENABLE_C_LOOP 1
@@ -924,4 +927,8 @@
 
 #if ENABLE(PREDEFINED_COLOR_SPACE_DISPLAY_P3) && !ENABLE(DESTINATION_COLOR_SPACE_DISPLAY_P3)
 #error "ENABLE(PREDEFINED_COLOR_SPACE_DISPLAY_P3) requires ENABLE(DESTINATION_COLOR_SPACE_DISPLAY_P3)"
+#endif
+
+#if ENABLE(WEBXR_HANDS) && !ENABLE(WEBXR)
+#error "ENABLE(WEBXR_HANDS) requires ENABLE(WEBXR)"
 #endif

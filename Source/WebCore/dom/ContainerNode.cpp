@@ -53,7 +53,7 @@
 #include "RenderTreeUpdater.h"
 #include "RenderWidget.h"
 #include "SVGDocumentExtensions.h"
-#include "SVGElement.h"
+#include "SVGElementTypeHelpers.h"
 #include "SVGNames.h"
 #include "SVGUseElement.h"
 #include "ScriptDisallowedScope.h"
@@ -61,8 +61,8 @@
 #include "SlotAssignment.h"
 #include "TemplateContentDocumentFragment.h"
 #include <algorithm>
+#include <variant>
 #include <wtf/IsoMallocInlines.h>
-#include <wtf/Variant.h>
 
 namespace WebCore {
 
@@ -102,7 +102,7 @@ ALWAYS_INLINE NodeVector ContainerNode::removeAllChildrenWithScriptAssertion(Chi
     } else {
         ASSERT(source == ChildChange::Source::Parser);
         ScriptDisallowedScope::InMainThread scriptDisallowedScope;
-        if (UNLIKELY(document().hasMutationObserversOfType(MutationObserver::ChildList))) {
+        if (UNLIKELY(document().hasMutationObserversOfType(MutationObserverOptionType::ChildList))) {
             ChildListMutationScope mutation(*this);
             for (auto& child : children)
                 mutation.willRemoveChild(child.get());

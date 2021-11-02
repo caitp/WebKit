@@ -34,7 +34,7 @@
 #include "Document.h"
 #include "DocumentFragment.h"
 #include "Editor.h"
-#include "Element.h"
+#include "ElementInlines.h"
 #include "Frame.h"
 #include "HTMLNames.h"
 #include "HTMLParserIdioms.h"
@@ -1138,10 +1138,10 @@ void Pasteboard::writeCustomData(const Vector<PasteboardCustomData>& data)
     if (::OpenClipboard(m_owner)) {
         const auto& customData = data.first();
         customData.forEachPlatformStringOrBuffer([](auto& type, auto& stringOrBuffer) {
-            if (WTF::holds_alternative<String>(stringOrBuffer)) {
+            if (std::holds_alternative<String>(stringOrBuffer)) {
                 ClipboardDataType dataType = clipboardTypeFromMIMEType(type);
 
-                String str = WTF::get<String>(stringOrBuffer);
+                String str = std::get<String>(stringOrBuffer);
                 replaceNewlinesWithWindowsStyleNewlines(str);
                 HGLOBAL cbData = createGlobalData(str);
 

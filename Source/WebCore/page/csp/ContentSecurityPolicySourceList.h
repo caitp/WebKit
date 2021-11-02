@@ -44,7 +44,7 @@ public:
     void parse(const String&);
 
     bool matches(const URL&, bool didReceiveRedirectResponse) const;
-    bool matches(const ContentSecurityPolicyHash&) const;
+    bool matches(const Vector<ContentSecurityPolicyHash>&) const;
     bool matches(const String& nonce) const;
 
     OptionSet<ContentSecurityPolicyHashAlgorithm> hashAlgorithmsUsed() const { return m_hashAlgorithmsUsed; }
@@ -54,6 +54,7 @@ public:
     bool allowSelf() const { return m_allowSelf; }
     bool isNone() const { return m_isNone; }
     bool allowNonParserInsertedScripts() const { return m_allowNonParserInsertedScripts; }
+    bool allowUnsafeHashes() const { return m_allowUnsafeHashes; }
 
 private:
     struct Host {
@@ -94,6 +95,7 @@ private:
     bool m_allowEval { false };
     bool m_isNone { false };
     bool m_allowNonParserInsertedScripts { false };
+    bool m_allowUnsafeHashes { false };
 };
 
 } // namespace WebCore

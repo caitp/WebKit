@@ -36,9 +36,9 @@
 #include "ExceptionOr.h"
 #include "ScriptWrappable.h"
 #include <memory>
+#include <variant>
 #include <wtf/Forward.h>
 #include <wtf/IsoMalloc.h>
-#include <wtf/Variant.h>
 #include <wtf/WeakPtr.h>
 
 namespace WebCore {
@@ -68,9 +68,9 @@ public:
     WEBCORE_EXPORT virtual bool isNode() const;
     WEBCORE_EXPORT virtual bool isPaymentRequest() const;
 
-    using AddEventListenerOptionsOrBoolean = Variant<AddEventListenerOptions, bool>;
+    using AddEventListenerOptionsOrBoolean = std::variant<AddEventListenerOptions, bool>;
     WEBCORE_EXPORT void addEventListenerForBindings(const AtomString& eventType, RefPtr<EventListener>&&, AddEventListenerOptionsOrBoolean&&);
-    using EventListenerOptionsOrBoolean = Variant<EventListenerOptions, bool>;
+    using EventListenerOptionsOrBoolean = std::variant<EventListenerOptions, bool>;
     WEBCORE_EXPORT void removeEventListenerForBindings(const AtomString& eventType, RefPtr<EventListener>&&, EventListenerOptionsOrBoolean&&);
     WEBCORE_EXPORT ExceptionOr<bool> dispatchEventForBindings(Event&);
 
@@ -103,7 +103,7 @@ public:
     const EventTargetData* eventTargetData() const;
 
 protected:
-    virtual ~EventTarget() = default;
+    WEBCORE_EXPORT virtual ~EventTarget();
     
     virtual EventTargetData* eventTargetData() = 0;
     virtual EventTargetData* eventTargetDataConcurrently() = 0;

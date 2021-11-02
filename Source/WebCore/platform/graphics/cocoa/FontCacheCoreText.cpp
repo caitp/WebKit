@@ -443,54 +443,68 @@ struct FontType {
     bool aatShaping { false };
 };
 
+static void addLightPalette(CFMutableDictionaryRef attributes)
+{
+    CFIndex light = kCTFontPaletteLight;
+    auto number = adoptCF(CFNumberCreate(kCFAllocatorDefault, kCFNumberCFIndexType, &light));
+    CFDictionaryAddValue(attributes, kCTFontPaletteAttribute, number.get());
+}
+
+static void addDarkPalette(CFMutableDictionaryRef attributes)
+{
+    CFIndex dark = kCTFontPaletteDark;
+    auto number = adoptCF(CFNumberCreate(kCFAllocatorDefault, kCFNumberCFIndexType, &dark));
+    CFDictionaryAddValue(attributes, kCTFontPaletteAttribute, number.get());
+}
+
+static void addAttributesForCustomFontPalettes(CFMutableDictionaryRef attributes, std::optional<FontPaletteIndex> basePalette, const Vector<FontPaletteValues::OverriddenColor>& overrideColors)
+{
+    if (basePalette) {
+        switch (basePalette->type) {
+        case FontPaletteIndex::Type::Light:
+            addLightPalette(attributes);
+            break;
+        case FontPaletteIndex::Type::Dark:
+            addDarkPalette(attributes);
+            break;
+        case FontPaletteIndex::Type::Integer: {
+            int64_t rawIndex = basePalette->integer; // There is no kCFNumberUIntType.
+            auto number = adoptCF(CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &rawIndex));
+            CFDictionaryAddValue(attributes, kCTFontPaletteAttribute, number.get());
+            break;
+        }
+        }
+    }
+
+    if (!overrideColors.isEmpty()) {
+        auto overrideDictionary = adoptCF(CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+        for (const auto& pair : overrideColors) {
+            const auto& color = pair.second;
+            int64_t rawIndex = pair.first; // There is no kCFNumberUIntType.
+            auto number = adoptCF(CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &rawIndex));
+            auto colorObject = cachedCGColor(color);
+            CFDictionaryAddValue(overrideDictionary.get(), number.get(), colorObject.get());
+        }
+        if (CFDictionaryGetCount(overrideDictionary.get()))
+            CFDictionaryAddValue(attributes, kCTFontPaletteColorsAttribute, overrideDictionary.get());
+    }
+}
+
 static void addAttributesForFontPalettes(CFMutableDictionaryRef attributes, const FontPalette& fontPalette, const FontPaletteValues* fontPaletteValues)
 {
     switch (fontPalette.type) {
-    case FontPalette::Type::None:
-        // This is unimplementable in Core Text.
-        break;
     case FontPalette::Type::Normal:
         break;
-    case FontPalette::Type::Light: {
-        CFIndex light = kCTFontPaletteLight;
-        auto number = adoptCF(CFNumberCreate(kCFAllocatorDefault, kCFNumberCFIndexType, &light));
-        CFDictionaryAddValue(attributes, kCTFontPaletteAttribute, number.get());
+    case FontPalette::Type::Light:
+        addLightPalette(attributes);
         break;
-    }
-    case FontPalette::Type::Dark: {
-        CFIndex dark = kCTFontPaletteDark;
-        auto number = adoptCF(CFNumberCreate(kCFAllocatorDefault, kCFNumberCFIndexType, &dark));
-        CFDictionaryAddValue(attributes, kCTFontPaletteAttribute, number.get());
+    case FontPalette::Type::Dark:
+        addDarkPalette(attributes);
         break;
-    }
     case FontPalette::Type::Custom: {
-        if (!fontPaletteValues)
-            break; 
-        WTF::switchOn(fontPaletteValues->basePalette(), [&](int64_t index) {
-            int64_t rawIndex = index; // There is no kCFNumberUIntType.
-            auto number = adoptCF(CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &rawIndex));
-            CFDictionaryAddValue(attributes, kCTFontPaletteAttribute, number.get());
-        }, [](const AtomString&) {
-            // This is unimplementable in Core Text.
-        });
-
-        if (!fontPaletteValues->overrideColors().isEmpty()) {
-            auto overrideDictionary = adoptCF(CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
-            for (const auto& pair : fontPaletteValues->overrideColors()) {
-                const auto& paletteColorIndex = pair.first;
-                const auto& color = pair.second;
-                WTF::switchOn(paletteColorIndex, [](const AtomString&) {
-                    // This is unimplementable in Core Text.
-                }, [&](unsigned index) {
-                    int64_t rawIndex = index; // There is no kCFNumberUIntType.
-                    auto number = adoptCF(CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &rawIndex));
-                    auto colorObject = cachedCGColor(color);
-                    CFDictionaryAddValue(overrideDictionary.get(), number.get(), colorObject);
-                });
-            }
-            if (CFDictionaryGetCount(overrideDictionary.get()))
-                CFDictionaryAddValue(attributes, kCTFontPaletteColorsAttribute, overrideDictionary.get());
-        }
+        if (fontPaletteValues)
+            addAttributesForCustomFontPalettes(attributes, fontPaletteValues->basePalette(), fontPaletteValues->overrideColors());
+        break;
     }
     }
 }
@@ -802,16 +816,9 @@ SynthesisPair computeNecessarySynthesis(CTFontRef font, const FontDescription& f
 
     CTFontSymbolicTraits actualTraits = 0;
     if (isFontWeightBold(fontDescription.weight()) || isItalic(fontDescription.italic())) {
-        if (shouldComputePhysicalTraits == ShouldComputePhysicalTraits::Yes) {
-#if HAVE(CTFONTGETPHYSICALSYMBOLICTRAITS)
+        if (shouldComputePhysicalTraits == ShouldComputePhysicalTraits::Yes)
             actualTraits = CTFontGetPhysicalSymbolicTraits(font);
-#else
-            auto fontForSynthesisComputation = retainPtr(font);
-            if (auto physicalFont = adoptCF(CTFontCopyPhysicalFont(font)))
-                fontForSynthesisComputation = WTFMove(physicalFont);
-            actualTraits = CTFontGetSymbolicTraits(fontForSynthesisComputation.get());
-#endif
-        } else
+        else
             actualTraits = CTFontGetSymbolicTraits(font);
     }
 

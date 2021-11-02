@@ -285,8 +285,7 @@ public:
 
     void setPrivateClickMeasurementEnabled(bool);
     bool privateClickMeasurementEnabled() const;
-    void setPrivateClickMeasurementDebugMode(bool);
-    bool privateClickMeasurementDebugModeEnabled() const;
+    void setPrivateClickMeasurementDebugMode(PAL::SessionID, bool);
 
     using CacheStorageRootPathCallback = CompletionHandler<void(String&&)>;
     void cacheStorageRootPath(PAL::SessionID, CacheStorageRootPathCallback&&);
@@ -350,6 +349,7 @@ public:
     void setPrivateClickMeasurementAttributionReportURLsForTesting(PAL::SessionID, URL&& sourceURL, URL&& destinationURL, CompletionHandler<void()>&&);
     void markPrivateClickMeasurementsAsExpiredForTesting(PAL::SessionID, CompletionHandler<void()>&&);
     void setPCMFraudPreventionValuesForTesting(PAL::SessionID, String&& unlinkableToken, String&& secretToken, String&& signature, String&& keyID, CompletionHandler<void()>&&);
+    void setPrivateClickMeasurementAppBundleIDForTesting(PAL::SessionID, String&& appBundleIDForTesting, CompletionHandler<void()>&&);
 
     RefPtr<WebCore::StorageQuotaManager> storageQuotaManager(PAL::SessionID, const WebCore::ClientOrigin&);
 
@@ -395,6 +395,13 @@ public:
 #endif
 
     bool ftpEnabled() const { return m_ftpEnabled; }
+
+#if ENABLE(SERVICE_WORKER)
+    void processPushMessage(PAL::SessionID, const std::optional<IPC::DataReference>&, URL&&, CompletionHandler<void(bool)>&&);
+#endif
+
+    void deletePushAndNotificationRegistration(PAL::SessionID, const WebCore::SecurityOriginData&, CompletionHandler<void(const String&)>&&);
+    void getOriginsWithPushAndNotificationPermissions(PAL::SessionID, CompletionHandler<void(const Vector<WebCore::SecurityOriginData>&)>&&);
 
 private:
     void platformInitializeNetworkProcess(const NetworkProcessCreationParameters&);
@@ -619,7 +626,6 @@ private:
     HashMap<WebCore::PageIdentifier, Vector<WebCore::UserContentURLPattern>> m_extensionCORSDisablingPatterns;
 
     bool m_privateClickMeasurementEnabled { true };
-    bool m_privateClickMeasurementDebugModeEnabled { false };
     bool m_ftpEnabled { false };
 
     HashMap<PAL::SessionID, Ref<NetworkStorageManager>> m_storageManagers;

@@ -256,7 +256,7 @@ void MessagePort::dispatchMessages()
     if (!m_scriptExecutionContext || m_scriptExecutionContext->activeDOMObjectsAreSuspended() || !isEntangled())
         return;
 
-    auto messagesTakenHandler = [this, weakThis = makeWeakPtr(this)](Vector<MessageWithMessagePorts>&& messages, Function<void()>&& completionCallback) mutable {
+    auto messagesTakenHandler = [this, weakThis = WeakPtr { *this }](Vector<MessageWithMessagePorts>&& messages, Function<void()>&& completionCallback) mutable {
         auto scopeExit = makeScopeExit(WTFMove(completionCallback));
 
         if (!weakThis)
@@ -333,7 +333,7 @@ bool MessagePort::virtualHasPendingActivity() const
         if (is<WorkerOrWorkletGlobalScope>(*m_scriptExecutionContext))
             workerOrWorkletThread = downcast<WorkerOrWorkletGlobalScope>(*m_scriptExecutionContext).workerOrWorkletThread();
 
-        callOnMainThread([remoteIdentifier = m_remoteIdentifier, weakThis = makeWeakPtr(const_cast<MessagePort*>(this)), workerOrWorkletThread = WTFMove(workerOrWorkletThread)]() mutable {
+        callOnMainThread([remoteIdentifier = m_remoteIdentifier, weakThis = WeakPtr { *this }, workerOrWorkletThread = WTFMove(workerOrWorkletThread)]() mutable {
             MessagePortChannelProvider::singleton().checkRemotePortForActivity(remoteIdentifier, [weakThis = WTFMove(weakThis), workerOrWorkletThread = WTFMove(workerOrWorkletThread)](auto hasActivity) mutable {
                 if (!workerOrWorkletThread) {
                     if (weakThis)

@@ -104,9 +104,9 @@ void PageClientImpl::setViewNeedsDisplay(const Region&)
     ASSERT_NOT_REACHED();
 }
 
-void PageClientImpl::requestScroll(const FloatPoint& scrollPosition, const IntPoint& scrollOrigin)
+void PageClientImpl::requestScroll(const FloatPoint& scrollPosition, const IntPoint& scrollOrigin, ScrollIsAnimated animated)
 {
-    [m_webView _scrollToContentScrollPosition:scrollPosition scrollOrigin:scrollOrigin];
+    [m_webView _scrollToContentScrollPosition:scrollPosition scrollOrigin:scrollOrigin animated:animated == ScrollIsAnimated::Yes];
 }
 
 WebCore::FloatPoint PageClientImpl::viewScrollPosition()
@@ -508,7 +508,7 @@ void PageClientImpl::makeViewBlank(bool makeBlank)
     [m_contentView layer].opacity = makeBlank ? 0 : 1;
 }
 
-void PageClientImpl::showSafeBrowsingWarning(const SafeBrowsingWarning& warning, CompletionHandler<void(Variant<WebKit::ContinueUnsafeLoad, URL>&&)>&& completionHandler)
+void PageClientImpl::showSafeBrowsingWarning(const SafeBrowsingWarning& warning, CompletionHandler<void(std::variant<WebKit::ContinueUnsafeLoad, URL>&&)>&& completionHandler)
 {
     if (auto webView = m_webView.get())
         [webView _showSafeBrowsingWarning:warning completionHandler:WTFMove(completionHandler)];
@@ -1021,6 +1021,11 @@ WebCore::Color PageClientImpl::contentViewBackgroundColor()
 void PageClientImpl::requestScrollToRect(const FloatRect& targetRect, const FloatPoint& origin)
 {
     [m_contentView _scrollToRect:targetRect withOrigin:origin minimumScrollDistance:0];
+}
+
+String PageClientImpl::sceneID()
+{
+    return [m_contentView window].windowScene._sceneIdentifier;
 }
 
 } // namespace WebKit

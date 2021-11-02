@@ -70,7 +70,7 @@ static CalculationCategory determineCategory(const CSSCalcExpressionNode& leftSi
             return CalculationCategory::Other;
         return leftCategory == CalculationCategory::Number ? rightCategory : leftCategory;
     case CalcOperator::Divide:
-        if (rightCategory != CalculationCategory::Number || rightSide.isZero())
+        if (rightCategory != CalculationCategory::Number)
             return CalculationCategory::Other;
         return leftCategory;
     case CalcOperator::Sin:
@@ -94,6 +94,9 @@ static CalculationCategory determineCategory(const CSSCalcExpressionNode& leftSi
     case CalcOperator::Down:
     case CalcOperator::Nearest:
     case CalcOperator::ToZero:
+    case CalcOperator::Pow:
+    case CalcOperator::Sqrt:
+    case CalcOperator::Hypot:
         ASSERT_NOT_REACHED();
         return CalculationCategory::Other;
     }
@@ -155,7 +158,7 @@ static CalculationCategory determineCategory(const Vector<Ref<CSSCalcExpressionN
             // At a / sub-expression, let left type be the result of finding the types of its left argument,
             // and right type be the result of finding the types of its right argument and then inverting it.
             // The sub-expression’s type is the result of multiplying the left type and right type.
-            if (invertCategory != CalculationCategory::Number || node.isZero())
+            if (invertCategory != CalculationCategory::Number)
                 return CalculationCategory::Other;
             break;
         }
@@ -180,8 +183,12 @@ static CalculationCategory determineCategory(const Vector<Ref<CSSCalcExpressionN
         case CalcOperator::Down:
         case CalcOperator::Nearest:
         case CalcOperator::ToZero:
-            // The type of a min(), max(), or clamp() expression is the result of adding the types of its comma-separated calculations
+        case CalcOperator::Hypot:
             return CalculationCategory::Other;
+        case CalcOperator::Pow:
+        case CalcOperator::Sqrt:
+            // The type of pow() and sqrt() functions must evaluate to a number.
+            return CalculationCategory::Number;
         }
     }
 
@@ -276,7 +283,6 @@ static CSSCalcPrimitiveValueNode::UnitConversion conversionToAddValuesWithTypes(
     return CSSCalcPrimitiveValueNode::UnitConversion::Invalid;
 }
 
-
 static CSSValueID functionFromOperator(CalcOperator op)
 {
     switch (op) {
@@ -291,6 +297,12 @@ static CSSValueID functionFromOperator(CalcOperator op)
         return CSSValueMax;
     case CalcOperator::Clamp:
         return CSSValueClamp;
+    case CalcOperator::Pow:
+        return CSSValuePow;
+    case CalcOperator::Sqrt:
+        return CSSValueSqrt;
+    case CalcOperator::Hypot:
+        return CSSValueHypot;
     case CalcOperator::Sin:
         return CSSValueSin;
     case CalcOperator::Cos:
@@ -329,6 +341,20 @@ static CSSValueID functionFromOperator(CalcOperator op)
         return CSSValueToZero;
     }
     return CSSValueCalc;
+}
+
+static std::optional<CalculationCategory> commonCategory(const Vector<Ref<CSSCalcExpressionNode>>& values)
+{
+    if (values.isEmpty())
+        return std::nullopt;
+
+    auto expectedCategory = values[0]->category();
+    for (size_t i = 1; i < values.size(); ++i) {
+        if (values[i]->category() != expectedCategory)
+            return std::nullopt;
+    }
+
+    return expectedCategory;
 }
 
 RefPtr<CSSCalcOperationNode> CSSCalcOperationNode::create(CalcOperator op, RefPtr<CSSCalcExpressionNode>&& leftSide, RefPtr<CSSCalcExpressionNode>&& rightSide)
@@ -412,17 +438,10 @@ RefPtr<CSSCalcOperationNode> CSSCalcOperationNode::createLog(Vector<Ref<CSSCalcE
     if (values.size() != 1 && values.size() != 2)
         return nullptr;
     for (auto& value : values) {
-        // TODO: Support infinity
-        if (value->category() != CalculationCategory::Number || !value->doubleValue(value->primitiveType())) {
+        if (value->category() != CalculationCategory::Number) {
             LOG_WITH_STREAM(Calc, stream << "Failed to create log node because unable to determine category from " << prettyPrintNodes(values));
             return nullptr;
         }
-    }
-    
-    // TODO: Support infinity
-    if ((values.size() == 2 && values[1]->doubleValue(values[1]->primitiveType()) == 1)) {
-        LOG_WITH_STREAM(Calc, stream << "Failed to create log node because unable to determine category from " << prettyPrintNodes(values));
-        return nullptr;
     }
 
     return adoptRef(new CSSCalcOperationNode(CalculationCategory::Number, CalcOperator::Log, WTFMove(values)));
@@ -439,6 +458,34 @@ RefPtr<CSSCalcOperationNode> CSSCalcOperationNode::createExp(Vector<Ref<CSSCalcE
     }
 
     return adoptRef(new CSSCalcOperationNode(CalculationCategory::Number, CalcOperator::Exp, WTFMove(values)));
+}
+
+RefPtr<CSSCalcOperationNode> CSSCalcOperationNode::createPowOrSqrt(CalcOperator op, Vector<Ref<CSSCalcExpressionNode>>&& values)
+{
+    if (op == CalcOperator::Pow && values.size() != 2)
+        return nullptr;
+
+    if (op == CalcOperator::Sqrt && values.size() != 1)
+        return nullptr;
+
+    if (commonCategory(values) != CalculationCategory::Number) {
+        LOG_WITH_STREAM(Calc, stream << "Failed to create " << op << "node because unable to determine category from " << prettyPrintNodes(values));
+        return nullptr;
+    }
+
+    return adoptRef(new CSSCalcOperationNode(CalculationCategory::Number, op, WTFMove(values)));
+}
+
+RefPtr<CSSCalcOperationNode> CSSCalcOperationNode::createHypot(Vector<Ref<CSSCalcExpressionNode>>&& values)
+{
+    auto expectedCategory = commonCategory(values);
+
+    if (expectedCategory == CalculationCategory::Other) {
+        LOG_WITH_STREAM(Calc, stream << "Failed to create hypot node because unable to determine category from " << prettyPrintNodes(values));
+        return nullptr;
+    }
+
+    return adoptRef(new CSSCalcOperationNode(*expectedCategory, CalcOperator::Hypot, WTFMove(values)));
 }
 
 RefPtr<CSSCalcOperationNode> CSSCalcOperationNode::createMinOrMaxOrClamp(CalcOperator op, Vector<Ref<CSSCalcExpressionNode>>&& values, CalculationCategory destinationCategory)
@@ -513,12 +560,6 @@ RefPtr<CSSCalcOperationNode> CSSCalcOperationNode::createStep(CalcOperator op, V
         LOG_WITH_STREAM(Calc, stream << "Failed to create stepped value node because unable to determine category from " << prettyPrintNodes(values));
         return nullptr;
     }
-    
-    if (!values[1]->doubleValue(values[1]->primitiveType())) {
-        LOG_WITH_STREAM(Calc, stream << "Failed to create stepped value node because unable to determine category from " << prettyPrintNodes(values));
-        return nullptr;
-    }
-
     return adoptRef(new CSSCalcOperationNode(values[0]->category(), op, WTFMove(values)));
 }
 
@@ -554,10 +595,6 @@ RefPtr<CSSCalcOperationNode> CSSCalcOperationNode::createRound(Vector<Ref<CSSCal
     CalcOperator roundType = values.size() == 2 ?  CalcOperator::Nearest : downcast<CSSCalcOperationNode>(values[0].get()).calcOperator();
     if (values.size() == 3)
         values.remove(0);
-    if (!values[1]->doubleValue(values[1]->primitiveType())) {
-        LOG_WITH_STREAM(Calc, stream << "Failed to create round node because unable to determine category from " << prettyPrintNodes(values));
-        return nullptr;
-    }
     return adoptRef(new CSSCalcOperationNode(values.rbegin()[0]->category(), roundType, WTFMove(values)));
 }
 
@@ -597,7 +634,7 @@ void CSSCalcOperationNode::hoistChildrenWithOperator(CalcOperator op)
 
 bool CSSCalcOperationNode::canCombineAllChildren() const
 {
-    if (m_children.size() < 2)
+    if (isIdentity() || !m_children.size())
         return false;
 
     if (!is<CSSCalcPrimitiveValueNode>(m_children[0]))
@@ -630,6 +667,9 @@ bool CSSCalcOperationNode::canCombineAllChildren() const
 
 void CSSCalcOperationNode::combineChildren()
 {
+    if (isIdentity() || !m_children.size())
+        return;
+
     if (m_children.size() < 2) {
         if (m_children.size() == 1 && isTrigNode()) {
             double resolvedValue = doubleValue(m_children[0]->primitiveType());
@@ -644,14 +684,13 @@ void CSSCalcOperationNode::combineChildren()
             m_children.clear();
             m_children.append(WTFMove(newChild));
         }
-        
         if (m_children.size() == 1 && isInverseTrigNode()) {
             double resolvedValue = doubleValue(m_children[0]->primitiveType());
             auto newChild = CSSCalcPrimitiveValueNode::create(CSSPrimitiveValue::create(resolvedValue, CSSUnitType::CSS_DEG));
             m_children.clear();
             m_children.append(WTFMove(newChild));
         }
-        if (isSignNode()) {
+        if (isSignNode() || isHypotNode()) {
             auto combinedUnitType = m_children[0]->primitiveType();
             if (calcOperator() == CalcOperator::Sign)
                 combinedUnitType = CSSUnitType::CSS_NUMBER;
@@ -660,9 +699,15 @@ void CSSCalcOperationNode::combineChildren()
             m_children.clear();
             m_children.append(WTFMove(newChild));
         }
+        if (calcOperator() == CalcOperator::Sqrt) {
+            double resolvedValue = doubleValue(m_children[0]->primitiveType());
+            auto newChild = CSSCalcPrimitiveValueNode::create(CSSPrimitiveValue::create(resolvedValue, CSSUnitType::CSS_NUMBER));
+            m_children.clear();
+            m_children.append(WTFMove(newChild));
+        }
         return;
     }
-    
+
     if (shouldSortChildren()) {
         // <https://drafts.csswg.org/css-values-4/#sort-a-calculations-children>
         std::stable_sort(m_children.begin(), m_children.end(), [](const auto& first, const auto& second) {
@@ -781,7 +826,7 @@ void CSSCalcOperationNode::combineChildren()
         m_children = WTFMove(newChildren);
     }
 
-    if (isMinOrMaxNode() && canCombineAllChildren()) {
+    if ((isMinOrMaxNode() || isHypotNode()) && canCombineAllChildren()) {
         auto combinedUnitType = m_children[0]->primitiveType();
         auto category = calculationCategoryForCombination(combinedUnitType);
         if (category != CalculationCategory::Other)
@@ -793,7 +838,14 @@ void CSSCalcOperationNode::combineChildren()
         m_children.clear();
         m_children.append(WTFMove(newChild));
     }
-    
+
+    if (calcOperator() == CalcOperator::Pow) {
+        auto resolvedValue = doubleValue(m_children[0]->primitiveType());
+        auto newChild = CSSCalcPrimitiveValueNode::create(CSSPrimitiveValue::create(resolvedValue, CSSUnitType::CSS_NUMBER));
+        m_children.clear();
+        m_children.append(WTFMove(newChild));
+    }
+
     if (calcOperator() == CalcOperator::Atan2) {
         double resolvedValue = doubleValue(m_children[0]->primitiveType());
         auto newChild = CSSCalcPrimitiveValueNode::create(CSSPrimitiveValue::create(resolvedValue, CSSUnitType::CSS_DEG));
@@ -871,8 +923,8 @@ Ref<CSSCalcExpressionNode> CSSCalcOperationNode::simplifyNode(Ref<CSSCalcExpress
     // using its children, expressed in the result’s canonical unit.
     if (is<CSSCalcOperationNode>(rootNode)) {
         auto& calcOperationNode = downcast<CSSCalcOperationNode>(rootNode.get());
-        // Simplify operations with only one child node (other than root and operations that only need one node).
-        if (calcOperationNode.children().size() == 1 && depth && !calcOperationNode.isTrigNode() && !calcOperationNode.isExpNode() && !calcOperationNode.isInverseTrigNode() && !calcOperationNode.isSignNode())
+        // Identity nodes have only one child and perform no operation on their child.
+        if (calcOperationNode.isIdentity() && depth)
             return WTFMove(calcOperationNode.children()[0]);
         
         if (calcOperationNode.isCalcSumNode()) {
@@ -907,6 +959,13 @@ Ref<CSSCalcExpressionNode> CSSCalcOperationNode::simplifyNode(Ref<CSSCalcExpress
         
         if (calcOperationNode.isRoundOperation() && depth)
             calcOperationNode.combineChildren();
+
+        if (calcOperationNode.isHypotNode())
+            calcOperationNode.combineChildren();
+
+        if (calcOperationNode.isPowOrSqrtNode() && depth)
+            calcOperationNode.combineChildren();
+
         // If only one child remains, return the child (except at the root).
         auto shouldCombineParentWithOnlyChild = [](const CSSCalcOperationNode& parent, int depth)
         {
@@ -1119,6 +1178,9 @@ static const char* functionPrefixForOperator(CalcOperator op)
     case CalcOperator::Down: return "round(down, ";
     case CalcOperator::Nearest: return "round(nearest, ";
     case CalcOperator::ToZero: return "round(to-zero, ";
+    case CalcOperator::Pow: return "pow(";
+    case CalcOperator::Sqrt: return "sqrt(";
+    case CalcOperator::Hypot: return "hypot(";
     }
     
     return "";
@@ -1326,6 +1388,25 @@ double CSSCalcOperationNode::evaluateOperator(CalcOperator op, const Vector<doub
         double value = children[1];
         double max = children[2];
         return std::max(min, std::min(value, max));
+    }
+    case CalcOperator::Pow:
+        if (children.size() != 2)
+            return std::numeric_limits<double>::quiet_NaN();
+        return std::pow(children[0], children[1]);
+    case CalcOperator::Sqrt: {
+        if (children.size() != 1)
+            return std::numeric_limits<double>::quiet_NaN();
+        return std::sqrt(children[0]);
+    }
+    case CalcOperator::Hypot: {
+        if (children.isEmpty())
+            return std::numeric_limits<double>::quiet_NaN();
+        if (children.size() == 1)
+            return std::abs(children[0]);
+        double sum = 0;
+        for (auto child : children)
+            sum += (child * child);
+        return std::sqrt(sum);
     }
     case CalcOperator::Sin: {
         if (children.size() != 1)

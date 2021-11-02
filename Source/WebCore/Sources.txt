@@ -61,6 +61,8 @@ Modules/fetch/WindowOrWorkerGlobalScopeFetch.cpp
 Modules/filesystemaccess/FileSystemDirectoryHandle.cpp
 Modules/filesystemaccess/FileSystemFileHandle.cpp
 Modules/filesystemaccess/FileSystemHandle.cpp
+Modules/filesystemaccess/FileSystemSyncAccessHandle.cpp
+Modules/filesystemaccess/WorkerFileSystemStorageConnection.cpp
 Modules/geolocation/GeoNotifier.cpp
 Modules/geolocation/Geolocation.cpp
 Modules/geolocation/GeolocationController.cpp
@@ -129,6 +131,7 @@ Modules/indexeddb/shared/IDBTransactionInfo.cpp
 Modules/indexeddb/shared/IndexKey.cpp
 Modules/mediacapabilities/MediaCapabilities.cpp
 Modules/mediacapabilities/NavigatorMediaCapabilities.cpp
+Modules/mediacapabilities/WorkerNavigatorMediaCapabilities.cpp
 Modules/mediasession/MediaMetadata.cpp
 Modules/mediasession/MediaSession.cpp
 Modules/mediasession/MediaSessionCoordinator.cpp
@@ -218,6 +221,13 @@ Modules/pictureinpicture/DocumentPictureInPicture.cpp
 Modules/pictureinpicture/EnterPictureInPictureEvent.cpp
 Modules/pictureinpicture/HTMLVideoElementPictureInPicture.cpp
 Modules/pictureinpicture/PictureInPictureWindow.cpp
+Modules/push-api/PushEvent.cpp
+Modules/push-api/PushMessageData.cpp
+Modules/push-api/PushSubscription.cpp
+Modules/push-api/PushSubscriptionData.cpp
+Modules/push-api/PushSubscriptionOptions.cpp
+Modules/push-api/PushManager.cpp
+Modules/push-api/ServiceWorkerRegistrationPushAPI.cpp
 Modules/remoteplayback/RemotePlayback.cpp
 Modules/speech/SpeechRecognition.cpp
 Modules/speech/SpeechRecognitionAlternative.cpp
@@ -240,6 +250,8 @@ Modules/storage/WorkerStorageConnection.cpp
 Modules/streams/ReadableStreamSink.cpp
 Modules/streams/ReadableStreamSource.cpp
 Modules/streams/WritableStream.cpp
+Modules/web-locks/WebLock.cpp
+Modules/web-locks/WebLockManager.cpp
 Modules/webaudio/AnalyserNode.cpp
 Modules/webaudio/AsyncAudioDecoder.cpp
 Modules/webaudio/AudioBasicInspectorNode.cpp
@@ -354,9 +366,12 @@ Modules/webxr/NavigatorWebXR.cpp
 Modules/webxr/WebXRBoundedReferenceSpace.cpp
 Modules/webxr/WebXRFrame.cpp
 Modules/webxr/WebXRGamepad.cpp
+Modules/webxr/WebXRHand.cpp
 Modules/webxr/WebXRInputSource.cpp
 Modules/webxr/WebXRInputSourceArray.cpp
 Modules/webxr/WebXRInputSpace.cpp
+Modules/webxr/WebXRJointPose.cpp
+Modules/webxr/WebXRJointSpace.cpp
 Modules/webxr/WebXRLayer.cpp
 Modules/webxr/WebXROpaqueFramebuffer.cpp
 Modules/webxr/WebXRPose.cpp
@@ -439,6 +454,7 @@ bindings/js/JSAnimationEffectCustom.cpp
 bindings/js/JSAnimationTimelineCustom.cpp
 bindings/js/JSAttrCustom.cpp
 bindings/js/JSAudioBufferCustom.cpp
+bindings/js/JSAudioBufferSourceNodeCustom.cpp
 bindings/js/JSAudioNodeCustom.cpp
 bindings/js/JSAudioWorkletProcessorCustom.cpp
 bindings/js/JSAuthenticatorResponseCustom.cpp
@@ -489,6 +505,8 @@ bindings/js/JSExecState.cpp
 bindings/js/JSExtendableMessageEventCustom.cpp
 bindings/js/JSFetchEventCustom.cpp
 bindings/js/JSFileSystemEntryCustom.cpp
+bindings/js/JSFileSystemDirectoryHandleCustom.cpp
+bindings/js/JSFileSystemDirectoryHandleIterator.cpp
 bindings/js/JSFileSystemHandleCustom.cpp
 bindings/js/JSHTMLAllCollectionCustom.cpp
 bindings/js/JSHTMLCanvasElementCustom.cpp
@@ -551,6 +569,7 @@ bindings/js/JSUndoItemCustom.cpp
 bindings/js/JSWebAnimationCustom.cpp
 bindings/js/JSWebGL2RenderingContextCustom.cpp
 bindings/js/JSWebGLRenderingContextCustom.cpp
+bindings/js/JSWebXRSessionCustom.cpp
 bindings/js/JSWebXRReferenceSpaceCustom.cpp
 bindings/js/JSWebXRRigidTransformCustom.cpp
 bindings/js/JSWebXRSpaceCustom.cpp
@@ -579,14 +598,7 @@ bindings/js/WebCoreTypedArrayController.cpp
 bindings/js/WorkerModuleScriptLoader.cpp
 bindings/js/WindowProxy.cpp
 bridge/IdentifierRep.cpp
-bridge/NP_jsobject.cpp
-bridge/c/CRuntimeObject.cpp
-bridge/c/c_class.cpp
-bridge/c/c_instance.cpp
-bridge/c/c_runtime.cpp
-bridge/c/c_utility.cpp
 bridge/jsc/BridgeJSC.cpp
-bridge/npruntime.cpp
 bridge/runtime_array.cpp
 bridge/runtime_method.cpp
 bridge/runtime_object.cpp
@@ -1374,6 +1386,7 @@ html/shadow/DateTimeNumericFieldElement.cpp
 html/shadow/DateTimeSymbolicFieldElement.cpp
 html/shadow/MediaControlTextTrackContainerElement.cpp
 html/shadow/ProgressShadowElement.cpp
+html/shadow/ShadowPseudoIds.cpp
 html/shadow/SliderThumbElement.cpp
 html/shadow/SpinButtonElement.cpp
 html/shadow/TextControlInnerElements.cpp
@@ -1498,6 +1511,7 @@ layout/formattingContexts/inline/InlineFormattingGeometry.cpp
 layout/formattingContexts/inline/InlineFormattingQuirks.cpp
 layout/formattingContexts/inline/InlineFormattingState.cpp
 layout/formattingContexts/inline/InlineItem.cpp
+layout/formattingContexts/inline/InlineItemsBuilder.cpp
 layout/formattingContexts/inline/InlineLine.cpp
 layout/formattingContexts/inline/InlineLineBox.cpp
 layout/formattingContexts/inline/InlineLineBoxBuilder.cpp
@@ -1506,14 +1520,17 @@ layout/formattingContexts/inline/InlineLineBoxVerticalAligner.cpp
 layout/formattingContexts/inline/InlineTextItem.cpp
 layout/formattingContexts/inline/invalidation/InlineInvalidation.cpp
 layout/formattingContexts/inline/text/TextUtil.cpp
+layout/integration/InlineIteratorBox.cpp
+layout/integration/InlineIteratorInlineBox.cpp
+layout/integration/InlineIteratorLine.cpp
+layout/integration/InlineIteratorLogicalOrderTraversal.cpp
+layout/integration/InlineIteratorTextBox.cpp
 layout/integration/LayoutIntegrationBoxTree.cpp
 layout/integration/LayoutIntegrationCoverage.cpp
 layout/integration/LayoutIntegrationInlineContentBuilder.cpp
 layout/integration/LayoutIntegrationInlineContent.cpp
-layout/integration/LayoutIntegrationLineIterator.cpp
 layout/integration/LayoutIntegrationLineLayout.cpp
 layout/integration/LayoutIntegrationPagination.cpp
-layout/integration/LayoutIntegrationRunIterator.cpp
 layout/layouttree/LayoutBox.cpp
 layout/layouttree/LayoutContainerBox.cpp
 layout/layouttree/LayoutBoxGeometry.cpp
@@ -1528,7 +1545,6 @@ layout/formattingContexts/table/TableFormattingQuirks.cpp
 layout/formattingContexts/table/TableFormattingState.cpp
 layout/formattingContexts/table/TableGrid.cpp
 layout/formattingContexts/table/TableLayout.cpp
-loader/PrivateClickMeasurement.cpp
 loader/ApplicationManifestLoader.cpp
 loader/CanvasActivityRecord.cpp
 loader/ContentFilter.cpp
@@ -1567,6 +1583,7 @@ loader/NavigationScheduler.cpp
 loader/NetscapePlugInStreamLoader.cpp
 loader/PingLoader.cpp
 loader/PolicyChecker.cpp
+loader/PrivateClickMeasurement.cpp
 loader/ProgressTracker.cpp
 loader/ReportingEndpointsCache.cpp
 loader/ResourceCryptographicDigest.cpp
@@ -1671,7 +1688,6 @@ page/FrameView.cpp
 page/FrameViewLayoutContext.cpp
 page/History.cpp
 page/ImageOverlayController.cpp
-page/KeyboardScroll.cpp
 page/IntersectionObserver.cpp
 page/IntersectionObserverEntry.cpp
 page/Location.cpp
@@ -1779,6 +1795,7 @@ page/scrolling/ScrollingTreeNode.cpp
 page/scrolling/ScrollingTreeOverflowScrollingNode.cpp
 page/scrolling/ScrollingTreeScrollingNode.cpp
 page/scrolling/ScrollingTreeScrollingNodeDelegate.cpp
+page/scrolling/ScrollingTreeStickyNode.cpp
 page/scrolling/ThreadedScrollingTree.cpp
 platform/ContentType.cpp
 platform/ContextMenu.cpp
@@ -1794,6 +1811,7 @@ platform/FileHandle.cpp
 platform/FileMonitor.cpp
 platform/FileStream.cpp
 platform/FrameRateMonitor.cpp
+platform/KeyboardScroll.cpp
 platform/KeyboardScrollingAnimator.cpp
 platform/LayoutUnit.cpp
 platform/LegacySchemeRegistry.cpp
@@ -2021,6 +2039,7 @@ platform/graphics/displaylists/DisplayListItemBuffer.cpp
 platform/graphics/displaylists/DisplayListItemType.cpp
 platform/graphics/displaylists/DisplayListIterator.cpp
 platform/graphics/displaylists/DisplayListRecorder.cpp
+platform/graphics/displaylists/DisplayListRecorderImpl.cpp
 platform/graphics/displaylists/DisplayListReplayer.cpp
 platform/graphics/displaylists/InMemoryDisplayList.cpp
 platform/graphics/filters/DistantLightSource.cpp
@@ -2128,9 +2147,9 @@ platform/network/DNSResolveQueue.cpp
 platform/network/DataURLDecoder.cpp
 platform/network/FormData.cpp
 platform/network/FormDataBuilder.cpp
+platform/network/HTTPParsers.cpp
 platform/network/HTTPHeaderMap.cpp
 platform/network/HTTPHeaderValues.cpp
-platform/network/HTTPParsers.cpp
 platform/network/MIMEHeader.cpp
 platform/network/NetworkLoadMetrics.cpp
 platform/network/NetworkStateNotifier.cpp
@@ -2213,7 +2232,6 @@ rendering/HitTestResult.cpp
 rendering/HitTestingTransformState.cpp
 rendering/ImageQualityController.cpp
 rendering/InlineBoxPainter.cpp
-rendering/InlineIterator.cpp
 rendering/LayerAncestorClippingStack.cpp
 rendering/LayerOverlapMap.cpp
 rendering/LayoutDisallowedScope.cpp
@@ -2222,6 +2240,7 @@ rendering/LegacyEllipsisBox.cpp
 rendering/LegacyInlineBox.cpp
 rendering/LegacyInlineElementBox.cpp
 rendering/LegacyInlineFlowBox.cpp
+rendering/LegacyInlineIterator.cpp
 rendering/LegacyLineLayout.cpp
 rendering/LegacyRootInlineBox.cpp
 rendering/LegacyInlineTextBox.cpp
@@ -2470,11 +2489,13 @@ style/InlineTextBoxStyle.cpp
 style/InspectorCSSOMWrappers.cpp
 style/MatchedDeclarationsCache.cpp
 style/PageRuleCollector.cpp
+style/PropertyAllowlist.cpp
 style/PropertyCascade.cpp
 style/PseudoClassChangeInvalidation.cpp
 style/RuleData.cpp
 style/RuleFeature.cpp
 style/RuleSet.cpp
+style/RuleSetBuilder.cpp
 style/StyleAdjuster.cpp
 style/StyleBuilder.cpp
 style/StyleBuilderState.cpp
@@ -3039,6 +3060,7 @@ JSFileSystemEntryCallback.cpp
 JSFileSystemFileEntry.cpp
 JSFileSystemFileHandle.cpp
 JSFileSystemHandle.cpp
+JSFileSystemSyncAccessHandle.cpp
 JSFillMode.cpp
 JSFocusEvent.cpp
 JSFocusOptions.cpp
@@ -3207,6 +3229,8 @@ JSMediaError.cpp
 JSMediaImage.cpp
 JSMediaKeyEncryptionScheme.cpp
 JSMediaKeyMessageEvent.cpp
+JSMediaKeyMessageEventInit.cpp
+JSMediaKeyMessageType.cpp
 JSMediaKeySession.cpp
 JSMediaKeySessionType.cpp
 JSMediaKeyStatusMap.cpp
@@ -3351,6 +3375,16 @@ JSPublicKeyCredentialCreationOptions.cpp
 JSPublicKeyCredentialDescriptor.cpp
 JSPublicKeyCredentialRequestOptions.cpp
 JSPublicKeyCredentialType.cpp
+JSPushEncryptionKeyName.cpp
+JSPushEvent.cpp
+JSPushEventInit.cpp
+JSPushManager.cpp
+JSPushMessageData.cpp
+JSPushPermissionState.cpp
+JSPushSubscription.cpp
+JSPushSubscriptionJSON.cpp
+JSPushSubscriptionOptions.cpp
+JSPushSubscriptionOptionsInit.cpp
 JSRTCAnswerOptions.cpp
 JSRTCCertificate.cpp
 JSRTCConfiguration.cpp
@@ -3707,6 +3741,8 @@ JSVTTRegion.cpp
 JSVTTRegionList.cpp
 JSValidityState.cpp
 JSVideoConfiguration.cpp
+JSVideoFrameMetadata.cpp
+JSVideoFrameRequestCallback.cpp
 JSVideoPlaybackQuality.cpp
 JSVideoTrack.cpp
 JSVideoTrackList.cpp
@@ -3760,11 +3796,18 @@ JSWebKitNamespace.cpp
 JSWebKitPlaybackTargetAvailabilityEvent.cpp
 JSWebKitPoint.cpp
 JSWebKitTransitionEvent.cpp
+JSWebLock.cpp
+JSWebLockGrantedCallback.cpp
+JSWebLockManager.cpp
+JSWebLockMode.cpp
 JSWebSocket.cpp
 JSWebXRBoundedReferenceSpace.cpp
 JSWebXRFrame.cpp
+JSWebXRHand.cpp
 JSWebXRInputSource.cpp
 JSWebXRInputSourceArray.cpp
+JSWebXRJointPose.cpp
+JSWebXRJointSpace.cpp
 JSWebXRLayer.cpp
 JSWebXRPose.cpp
 JSWebXRReferenceSpace.cpp
@@ -3806,6 +3849,7 @@ JSXPathResult.cpp
 JSXREnvironmentBlendMode.cpp
 JSXREye.cpp
 JSXRFrameRequestCallback.cpp
+JSXRHandJoint.cpp
 JSXRHandedness.cpp
 JSXRInputSourceEvent.cpp
 JSXRInputSourcesChangeEvent.cpp

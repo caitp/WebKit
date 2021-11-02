@@ -49,13 +49,14 @@ PlatformLayerContainer MediaPlayerPrivateRemote::createVideoFullscreenLayer()
 RefPtr<NativeImage> MediaPlayerPrivateRemote::nativeImageForCurrentTime()
 {
     std::optional<MachSendRight> sendRight;
-    if (!connection().sendSync(Messages::RemoteMediaPlayerProxy::NativeImageForCurrentTime(), Messages::RemoteMediaPlayerProxy::NativeImageForCurrentTime::Reply(sendRight), m_id))
+    auto colorSpace = DestinationColorSpace::SRGB();
+    if (!connection().sendSync(Messages::RemoteMediaPlayerProxy::NativeImageForCurrentTime(), Messages::RemoteMediaPlayerProxy::NativeImageForCurrentTime::Reply(sendRight, colorSpace), m_id))
         return nullptr;
 
     if (!sendRight)
         return nullptr;
 
-    auto surface = WebCore::IOSurface::createFromSendRight(WTFMove(*sendRight), WebCore::DestinationColorSpace::SRGB());
+    auto surface = WebCore::IOSurface::createFromSendRight(WTFMove(*sendRight), colorSpace);
     if (!surface)
         return nullptr;
 
@@ -66,14 +67,24 @@ RefPtr<NativeImage> MediaPlayerPrivateRemote::nativeImageForCurrentTime()
     return NativeImage::create(WTFMove(platformImage));
 }
 
+WebCore::DestinationColorSpace MediaPlayerPrivateRemote::colorSpace()
+{
+    auto colorSpace = DestinationColorSpace::SRGB();
+    connection().sendSync(Messages::RemoteMediaPlayerProxy::ColorSpace(), Messages::RemoteMediaPlayerProxy::ColorSpace::Reply(colorSpace), m_id);
+    return colorSpace;
+}
+
+#if USE(AVFOUNDATION)
 RetainPtr<CVPixelBufferRef> MediaPlayerPrivateRemote::pixelBufferForCurrentTime()
 {
-
-    RetainPtr<CVPixelBufferRef> result;
-    if (!connection().sendSync(Messages::RemoteMediaPlayerProxy::PixelBufferForCurrentTime(), Messages::RemoteMediaPlayerProxy::PixelBufferForCurrentTime::Reply(result), m_id))
+    std::optional<RetainPtr<CVPixelBufferRef>> result;
+    if (!connection().sendSync(Messages::RemoteMediaPlayerProxy::PixelBufferForCurrentTimeIfChanged(), Messages::RemoteMediaPlayerProxy::PixelBufferForCurrentTimeIfChanged::Reply(result), m_id))
         return nullptr;
-    return result;
+    if (result)
+        m_pixelBufferForCurrentTime = WTFMove(*result);
+    return m_pixelBufferForCurrentTime;
 }
+#endif
 
 } // namespace WebKit
 

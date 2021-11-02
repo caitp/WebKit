@@ -28,7 +28,6 @@
 #if PLATFORM(MAC)
 
 #include "PDFPluginIdentifier.h"
-#include "PluginComplexTextInputState.h"
 #include "ShareableBitmap.h"
 #include "WKLayoutMode.h"
 #include <WebCore/DOMPasteAccess.h>
@@ -262,7 +261,7 @@ public:
     void setViewScale(CGFloat);
     CGFloat viewScale() const;
 
-    void showSafeBrowsingWarning(const SafeBrowsingWarning&, CompletionHandler<void(Variant<ContinueUnsafeLoad, URL>&&)>&&);
+    void showSafeBrowsingWarning(const SafeBrowsingWarning&, CompletionHandler<void(std::variant<ContinueUnsafeLoad, URL>&&)>&&);
     void clearSafeBrowsingWarning();
     void clearSafeBrowsingWarningIfForMainFrameNavigation();
 
@@ -315,8 +314,8 @@ public:
     WebCore::DestinationColorSpace colorSpace();
 
     void setUnderlayColor(NSColor *);
-    NSColor *underlayColor() const;
-    NSColor *pageExtendedBackgroundColor() const;
+    RetainPtr<NSColor> underlayColor() const;
+    RetainPtr<NSColor> pageExtendedBackgroundColor() const;
     
     _WKRectEdge pinnedState();
     _WKRectEdge rubberBandingEnabled();
@@ -341,13 +340,11 @@ public:
     void resetSecureInputState();
     bool inSecureInputState() const { return m_inSecureInputState; }
     void notifyInputContextAboutDiscardedComposition();
-    void setPluginComplexTextInputStateAndIdentifier(PluginComplexTextInputState, uint64_t identifier);
     void disableComplexTextInputIfNecessary();
     bool handlePluginComplexTextInputKeyDown(NSEvent *);
     bool tryHandlePluginComplexTextInputKeyDown(NSEvent *);
     void pluginFocusOrWindowFocusChanged(bool pluginHasFocusAndWindowHasFocus, uint64_t pluginComplexTextInputIdentifier);
     bool tryPostProcessPluginComplexTextInputKeyDown(NSEvent *);
-    PluginComplexTextInputState pluginComplexTextInputState() const { return m_pluginComplexTextInputState; }
     uint64_t pluginComplexTextInputIdentifier() const { return m_pluginComplexTextInputIdentifier; }
     
     void handleAcceptedAlternativeText(const String&);
@@ -717,8 +714,6 @@ private:
 
     void postFakeMouseMovedEventForFlagsChangedEvent(NSEvent *);
 
-    void setPluginComplexTextInputState(PluginComplexTextInputState);
-
     void sendToolTipMouseExited();
     void sendToolTipMouseEntered();
 
@@ -792,9 +787,6 @@ private:
 
     // The identifier of the plug-in we want to send complex text input to, or 0 if there is none.
     uint64_t m_pluginComplexTextInputIdentifier { 0 };
-
-    // The state of complex text input for the plug-in.
-    PluginComplexTextInputState m_pluginComplexTextInputState { PluginComplexTextInputDisabled };
 
 #if ENABLE(FULLSCREEN_API)
     RetainPtr<WKFullScreenWindowController> m_fullScreenWindowController;

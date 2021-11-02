@@ -69,10 +69,6 @@ static const char* serviceName(const ProcessLauncher::LaunchOptions& launchOptio
     case ProcessLauncher::ProcessType::WebAuthn:
         return "com.apple.WebKit.WebAuthn";
 #endif
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    case ProcessLauncher::ProcessType::Plugin:
-        return "com.apple.WebKit.Plugin.64";
-#endif
     }
 }
 
@@ -233,7 +229,7 @@ void ProcessLauncher::launchProcess()
 
     xpc_dictionary_set_value(bootstrapMessage.get(), "extra-initialization-data", extraInitializationData.get());
 
-    auto errorHandlerImpl = [weakProcessLauncher = makeWeakPtr(*this), listeningPort] (xpc_object_t event) {
+    auto errorHandlerImpl = [weakProcessLauncher = WeakPtr { *this }, listeningPort] (xpc_object_t event) {
         ASSERT(!event || xpc_get_type(event) == XPC_TYPE_ERROR);
         
         auto processLauncher = weakProcessLauncher.get();

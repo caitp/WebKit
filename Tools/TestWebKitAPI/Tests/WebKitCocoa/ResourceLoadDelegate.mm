@@ -27,7 +27,6 @@
 
 #import "HTTPServer.h"
 #import "PlatformUtilities.h"
-#import "TCPServer.h"
 #import "TestNavigationDelegate.h"
 #import "TestUIDelegate.h"
 #import "TestWKWebView.h"
@@ -249,6 +248,12 @@ TEST(ResourceLoadDelegate, ResourceType)
 
 TEST(ResourceLoadDelegate, LoadInfo)
 {
+    __block bool clearedStore = false;
+    [[WKWebsiteDataStore defaultDataStore] removeDataOfTypes:[WKWebsiteDataStore allWebsiteDataTypes] modifiedSince:[NSDate distantPast] completionHandler:^() {
+        clearedStore = true;
+    }];
+    TestWebKitAPI::Util::run(&clearedStore);
+
     TestWebKitAPI::HTTPServer server({
         { "/", { "<iframe src='iframeSrc'></iframe>" } },
         { "/iframeSrc", { "<script>fetch('fetchTarget', { body: 'a=b&c=d', method: 'post'})</script>" } },

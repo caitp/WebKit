@@ -37,6 +37,7 @@
 #include "Chrome.h"
 #include "ChromeClient.h"
 #include "DOMTokenList.h"
+#include "DocumentInlines.h"
 #include "Editing.h"
 #include "Editor.h"
 #include "ElementIterator.h"
@@ -83,6 +84,7 @@
 #include "TextIterator.h"
 #include "UserGestureIndicator.h"
 #include "VisibleUnits.h"
+#include <pal/SessionID.h>
 #include <wtf/NeverDestroyed.h>
 #include <wtf/RobinHoodHashSet.h>
 #include <wtf/StdLibExtras.h>
@@ -189,7 +191,39 @@ bool AccessibilityObject::accessibleNameDerivesFromContent() const
     
     return true;
 }
-    
+
+AXCoreObject::AXValue AccessibilityObject::value()
+{
+    if (supportsRangeValue())
+        return valueForRange();
+
+    if (roleValue() == AccessibilityRole::SliderThumb)
+        return parentObject()->valueForRange();
+
+    if (isHeading())
+        return headingLevel();
+
+    if (supportsCheckedState())
+        return checkboxOrRadioValue();
+
+    // Radio groups return the selected radio button as the AXValue.
+    if (isRadioGroup())
+        return selectedRadioButton();
+
+    if (isTabList())
+        return selectedTabItem();
+
+    if (isTabItem())
+        return isSelected();
+
+    if (isColorWell()) {
+        auto color = convertColor<SRGBA<float>>(colorValue());
+        return makeString("rgb ", String::numberToStringFixedPrecision(color.red, 6, KeepTrailingZeros), " ", String::numberToStringFixedPrecision(color.green, 6, KeepTrailingZeros), " ", String::numberToStringFixedPrecision(color.blue, 6, KeepTrailingZeros), " 1");
+    }
+
+    return stringValue();
+}
+
 String AccessibilityObject::computedLabel()
 {
     // This method is being called by WebKit inspector, which may happen at any time, so we need to update our backing store now.
@@ -399,7 +433,7 @@ AccessibilityObject* AccessibilityObject::firstAccessibleObjectFromNode(const No
     });
 }
 
-AccessibilityObject* firstAccessibleObjectFromNode(const Node* node, const WTF::Function<bool(const AccessibilityObject&)>& isAccessible)
+AccessibilityObject* firstAccessibleObjectFromNode(const Node* node, const Function<bool(const AccessibilityObject&)>& isAccessible)
 {
     if (!node)
         return nullptr;
@@ -449,8 +483,15 @@ static void appendAccessibilityObject(AXCoreObject* object, AccessibilityObject:
     if (object)
         results.append(object);
 }
-    
-void AccessibilityObject::insertChild(AXCoreObject* child, unsigned index)
+
+#ifndef NDEBUG
+static bool isTableComponent(AXCoreObject& axObject)
+{
+    return axObject.isTable() || axObject.isTableColumn() || axObject.isTableRow() || axObject.isTableCell();
+}
+#endif
+
+void AccessibilityObject::insertChild(AXCoreObject* child, unsigned index, DescendIfIgnored descendIfIgnored)
 {
     if (!child)
         return;
@@ -477,12 +518,16 @@ void AccessibilityObject::insertChild(AXCoreObject* child, unsigned index)
     
     setIsIgnoredFromParentDataForChild(child);
     if (child->accessibilityIsIgnored()) {
-        const auto& children = child->children();
-        size_t length = children.size();
-        for (size_t i = 0; i < length; ++i)
-            m_children.insert(index + i, children[i]);
+        if (descendIfIgnored == DescendIfIgnored::Yes) {
+            const auto& children = child->children();
+            size_t length = children.size();
+            for (size_t i = 0; i < length; ++i)
+                m_children.insert(index + i, children[i]);
+        }
     } else {
-        ASSERT(child->parentObject() == this);
+        // Table component child-parent relationships often don't line up properly, hence the need for methods
+        // like parentTable() and parentRow(). Exclude them from this ASSERT.
+        ASSERT((!isTableComponent(*child) && !isTableComponent(*this)) ? child->parentObject() == this : true);
         m_children.insert(index, child);
     }
     
@@ -490,9 +535,9 @@ void AccessibilityObject::insertChild(AXCoreObject* child, unsigned index)
     child->clearIsIgnoredFromParentData();
 }
     
-void AccessibilityObject::addChild(AXCoreObject* child)
+void AccessibilityObject::addChild(AXCoreObject* child, DescendIfIgnored descendIfIgnored)
 {
-    insertChild(child, m_children.size());
+    insertChild(child, m_children.size(), descendIfIgnored);
 }
     
 void AccessibilityObject::findMatchingObjects(AccessibilitySearchCriteria* criteria, AccessibilityChildrenVector& results)
@@ -1641,7 +1686,7 @@ const AccessibilityObject::AccessibilityChildrenVector& AccessibilityObject::chi
 
 void AccessibilityObject::updateChildrenIfNecessary()
 {
-    if (!hasChildren()) {
+    if (!childrenInitialized()) {
         // Enable the cache in case we end up adding a lot of children, we don't want to recompute axIsIgnored each time.
         AXAttributeCacheEnabler enableCache(axObjectCache());
         addChildren();
@@ -1655,7 +1700,7 @@ void AccessibilityObject::clearChildren()
         child->detachFromParent();
     
     m_children.clear();
-    m_haveChildren = false;
+    m_childrenInitialized = false;
 }
 
 AccessibilityObject* AccessibilityObject::anchorElementForNode(Node* node)
@@ -2074,8 +2119,8 @@ static void initializeRoleMap()
         { "deletion"_s, AccessibilityRole::Deletion },
         { "dialog"_s, AccessibilityRole::ApplicationDialog },
         { "directory"_s, AccessibilityRole::Directory },
-        // The 'doc-*' roles are defined the ARIA DPUB mobile: https://www.w3.org/TR/dpub-aam-1.0/ 
-        // Editor's draft is currently at https://rawgit.com/w3c/aria/master/dpub-aam/dpub-aam.html 
+        // The 'doc-*' roles are defined the ARIA DPUB mobile: https://www.w3.org/TR/dpub-aam-1.0
+        // Editor's draft is currently at https://w3c.github.io/dpub-aam
         { "doc-abstract"_s, AccessibilityRole::ApplicationTextGroup },
         { "doc-acknowledgments"_s, AccessibilityRole::LandmarkDocRegion },
         { "doc-afterword"_s, AccessibilityRole::LandmarkDocRegion },
@@ -2272,8 +2317,7 @@ bool AccessibilityObject::hasHighlighting() const
 #if !PLATFORM(MAC)
 String AccessibilityObject::rolePlatformString() const
 {
-    // FIXME: implement in other platforms.
-    return String();
+    return Accessibility::roleToPlatformString(roleValue());
 }
 
 String AccessibilityObject::rolePlatformDescription() const
@@ -3118,6 +3162,26 @@ IntRect AccessibilityObject::scrollVisibleContentRect() const
     
     return IntRect();
 }
+
+AXCoreObject::AccessibilityChildrenVector AccessibilityObject::contents()
+{
+    if (isTabList()) {
+        AccessibilityChildrenVector tabs;
+        tabChildren(tabs);
+        return tabs;
+    }
+    
+    if (isScrollView()) {
+        // A scroll view's contents are everything except the scroll bars.
+        AccessibilityChildrenVector nonScrollbarChildren;
+        for (auto* child = firstChild(); child; child = child->nextSibling()) {
+            if (child && !child->isScrollbar())
+                nonScrollbarChildren.append(child);
+        }
+        return nonScrollbarChildren;
+    }
+    return { };
+}
     
 IntSize AccessibilityObject::scrollContentsSize() const
 {
@@ -3193,14 +3257,14 @@ void AccessibilityObject::setLastKnownIsIgnoredValue(bool isIgnored)
     m_lastKnownIsIgnoredValue = isIgnored ? AccessibilityObjectInclusion::IgnoreObject : AccessibilityObjectInclusion::IncludeObject;
 }
 
-void AccessibilityObject::notifyIfIgnoredValueChanged()
+bool AccessibilityObject::hasIgnoredValueChanged()
 {
     bool isIgnored = accessibilityIsIgnored();
     if (lastKnownIsIgnoredValue() != isIgnored) {
-        if (AXObjectCache* cache = axObjectCache())
-            cache->childrenChanged(parentObject());
         setLastKnownIsIgnoredValue(isIgnored);
+        return true;
     }
+    return false;
 }
 
 bool AccessibilityObject::pressedIsPresent() const
@@ -3211,8 +3275,8 @@ bool AccessibilityObject::pressedIsPresent() const
 TextIteratorBehaviors AccessibilityObject::textIteratorBehaviorForTextRange() const
 {
     TextIteratorBehaviors behaviors { TextIteratorBehavior::IgnoresStyleVisibility };
-    
-#if USE(ATK)
+
+#if USE(ATK) || USE(ATSPI)
     // We need to emit replaced elements for GTK, and present
     // them with the 'object replacement character' (0xFFFC).
     behaviors.add(TextIteratorBehavior::EmitsObjectReplacementCharacters);
@@ -3224,7 +3288,7 @@ TextIteratorBehaviors AccessibilityObject::textIteratorBehaviorForTextRange() co
 AccessibilityRole AccessibilityObject::buttonRoleType() const
 {
     // If aria-pressed is present, then it should be exposed as a toggle button.
-    // http://www.w3.org/TR/wai-aria/states_and_properties#aria-pressed
+    // https://www.w3.org/TR/wai-aria#aria-pressed
     if (pressedIsPresent())
         return AccessibilityRole::ToggleButton;
     if (hasPopup())
@@ -3248,7 +3312,7 @@ bool AccessibilityObject::accessibilityIsIgnoredByDefault() const
 }
 
 // ARIA component of hidden definition.
-// http://www.w3.org/TR/wai-aria/terms#def_hidden
+// https://www.w3.org/TR/wai-aria/#dfn-hidden
 bool AccessibilityObject::isAXHidden() const
 {
     if (isFocused())
@@ -3260,7 +3324,7 @@ bool AccessibilityObject::isAXHidden() const
 }
 
 // DOM component of hidden definition.
-// http://www.w3.org/TR/wai-aria/terms#def_hidden
+// https://www.w3.org/TR/wai-aria/#dfn-hidden
 bool AccessibilityObject::isDOMHidden() const
 {
     RenderObject* renderer = this->renderer();
@@ -3417,13 +3481,13 @@ String AccessibilityObject::documentEncoding() const
     return String();
 }
 
-uint64_t AccessibilityObject::sessionID() const
+PAL::SessionID AccessibilityObject::sessionID() const
 {
     if (auto* document = topDocument()) {
         if (auto* page = document->page())
-            return page->sessionID().toUInt64();
+            return page->sessionID();
     }
-    return 0;
+    return PAL::SessionID(PAL::SessionID::SessionConstants::HashTableEmptyValueID);
 }
 
 String AccessibilityObject::tagName() const
@@ -3649,7 +3713,7 @@ String AccessibilityObject::outerHTML() const
 
 namespace Accessibility {
 
-#if !PLATFORM(MAC)
+#if !PLATFORM(MAC) && !USE(ATSPI)
 // FIXME: implement in other platforms.
 PlatformRoleMap createPlatformRoleMap() { return PlatformRoleMap(); }
 #endif
@@ -3852,9 +3916,9 @@ static void appendChildrenToArray(AXCoreObject* object, bool isForward, AXCoreOb
             startObject = isForward ? startObject->previousSibling() : startObject->nextSibling();
     }
 
-    size_t searchPosition = startObject ? searchChildren.find(startObject) : WTF::notFound;
+    size_t searchPosition = startObject ? searchChildren.find(startObject) : notFound;
 
-    if (searchPosition != WTF::notFound) {
+    if (searchPosition != notFound) {
         if (isForward)
             endIndex = searchPosition + 1;
         else

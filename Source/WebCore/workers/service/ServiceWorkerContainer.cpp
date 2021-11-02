@@ -34,14 +34,18 @@
 #include "EventLoop.h"
 #include "EventNames.h"
 #include "Exception.h"
+#include "FrameLoader.h"
+#include "FrameLoaderClient.h"
 #include "IDLTypes.h"
 #include "JSDOMPromiseDeferred.h"
+#include "JSPushSubscription.h"
 #include "JSServiceWorkerRegistration.h"
 #include "LegacySchemeRegistry.h"
 #include "Logging.h"
 #include "MessageEvent.h"
 #include "NavigatorBase.h"
 #include "Page.h"
+#include "PushSubscriptionOptions.h"
 #include "ResourceError.h"
 #include "ScriptExecutionContext.h"
 #include "SecurityOrigin.h"
@@ -147,7 +151,9 @@ void ServiceWorkerContainer::addRegistration(const String& relativeScriptURL, co
         return;
     }
 
-    if (!jobData.scriptURL.protocolIsInHTTPFamily()) {
+    Page* page = is<Document>(context) ? downcast<Document>(context)->page() : nullptr;
+    jobData.isFromServiceWorkerPage = page && page->isServiceWorkerPage();
+    if (!jobData.scriptURL.protocolIsInHTTPFamily() && !jobData.isFromServiceWorkerPage) {
         CONTAINER_RELEASE_LOG_ERROR("addRegistration: Invalid scriptURL scheme is not HTTP or HTTPS");
         promise->reject(Exception { TypeError, "serviceWorker.register() must be called with a script URL whose protocol is either HTTP or HTTPS"_s });
         return;
@@ -165,7 +171,7 @@ void ServiceWorkerContainer::addRegistration(const String& relativeScriptURL, co
     else
         jobData.scopeURL = URL(jobData.scriptURL, "./");
 
-    if (!jobData.scopeURL.isNull() && !jobData.scopeURL.protocolIsInHTTPFamily()) {
+    if (!jobData.scopeURL.isNull() && !jobData.scopeURL.protocolIsInHTTPFamily() && !jobData.isFromServiceWorkerPage) {
         CONTAINER_RELEASE_LOG_ERROR("addRegistration: scopeURL scheme is not HTTP or HTTPS");
         promise->reject(Exception { TypeError, "Scope URL provided to serviceWorker.register() must be either HTTP or HTTPS"_s });
         return;
@@ -187,6 +193,16 @@ void ServiceWorkerContainer::addRegistration(const String& relativeScriptURL, co
     jobData.registrationOptions = options;
 
     scheduleJob(makeUnique<ServiceWorkerJob>(*this, WTFMove(promise), WTFMove(jobData)));
+}
+
+void ServiceWorkerContainer::willSettleRegistrationPromise(bool success)
+{
+    auto* context = scriptExecutionContext();
+    Page* page = is<Document>(context) ? downcast<Document>(*context).page() : nullptr;
+    if (!page || !page->isServiceWorkerPage())
+        return;
+
+    page->mainFrame().loader().client().didFinishServiceWorkerPageRegistration(success);
 }
 
 void ServiceWorkerContainer::unregisterRegistration(ServiceWorkerRegistrationIdentifier registrationIdentifier, DOMPromiseDeferred<IDLBoolean>&& promise)
@@ -326,11 +342,14 @@ void ServiceWorkerContainer::jobFailedWithException(ServiceWorkerJob& job, const
     ASSERT(m_creationThread.ptr() == &Thread::current());
     ASSERT_WITH_MESSAGE(job.hasPromise() || job.data().type == ServiceWorkerJobType::Update, "Only soft updates have no promise");
 
-    auto guard = WTF::makeScopeExit([this, &job] {
+    auto guard = makeScopeExit([this, &job] {
         destroyJob(job);
     });
 
     CONTAINER_RELEASE_LOG_ERROR("jobFailedWithException: Job %" PRIu64 " failed with error %s", job.identifier().toUInt64(), exception.message().utf8().data());
+
+    if (job.data().type == ServiceWorkerJobType::Register)
+        willSettleRegistrationPromise(false);
 
     auto promise = job.takePromise();
     if (!promise)
@@ -354,18 +373,19 @@ void ServiceWorkerContainer::jobResolvedWithRegistration(ServiceWorkerJob& job, 
     ASSERT(m_creationThread.ptr() == &Thread::current());
     ASSERT_WITH_MESSAGE(job.hasPromise() || job.data().type == ServiceWorkerJobType::Update, "Only soft updates have no promise");
 
-    if (job.data().type == ServiceWorkerJobType::Register)
+    if (job.data().type == ServiceWorkerJobType::Register) {
         CONTAINER_RELEASE_LOG("jobResolvedWithRegistration: Registration job %" PRIu64 " succeeded", job.identifier().toUInt64());
-    else {
+        willSettleRegistrationPromise(true);
+    } else {
         ASSERT(job.data().type == ServiceWorkerJobType::Update);
         CONTAINER_RELEASE_LOG("jobResolvedWithRegistration: Update job %" PRIu64 " succeeded", job.identifier().toUInt64());
     }
 
-    auto guard = WTF::makeScopeExit([this, &job] {
+    auto guard = makeScopeExit([this, &job] {
         destroyJob(job);
     });
 
-    auto notifyIfExitEarly = WTF::makeScopeExit([this, protectedThis = Ref { *this }, key = data.key, shouldNotifyWhenResolved] {
+    auto notifyIfExitEarly = makeScopeExit([this, protectedThis = Ref { *this }, key = data.key, shouldNotifyWhenResolved] {
         if (shouldNotifyWhenResolved == ShouldNotifyWhenResolved::Yes)
             notifyRegistrationIsSettled(key);
     });
@@ -423,7 +443,7 @@ void ServiceWorkerContainer::jobResolvedWithUnregistrationResult(ServiceWorkerJo
     ASSERT(m_creationThread.ptr() == &Thread::current());
     ASSERT(job.hasPromise());
 
-    auto guard = WTF::makeScopeExit([this, &job] {
+    auto guard = makeScopeExit([this, &job] {
         destroyJob(job);
     });
 
@@ -472,6 +492,9 @@ void ServiceWorkerContainer::jobFailedLoadingScript(ServiceWorkerJob& job, const
     ASSERT_WITH_MESSAGE(job.hasPromise() || job.data().type == ServiceWorkerJobType::Update, "Only soft updates have no promise");
 
     CONTAINER_RELEASE_LOG_ERROR("jobFinishedLoadingScript: Failed to fetch script for job %" PRIu64 ", error: %s", job.identifier().toUInt64(), error.localizedDescription().utf8().data());
+
+    if (job.data().type == ServiceWorkerJobType::Register)
+        willSettleRegistrationPromise(false);
 
     if (auto promise = job.takePromise()) {
         queueTaskKeepingObjectAlive(*this, TaskSource::DOMManipulation, [promise = WTFMove(promise), exception = WTFMove(exception)]() mutable {
@@ -527,6 +550,55 @@ void ServiceWorkerContainer::removeRegistration(ServiceWorkerRegistration& regis
 
     m_swConnection->removeServiceWorkerRegistrationInServer(registration.identifier());
     m_registrations.remove(registration.identifier());
+}
+
+static Ref<PushSubscription> createPushSubscriptionFromData(Ref<ServiceWorkerRegistration> registration, PushSubscriptionData&& data)
+{
+    return PushSubscription::create(WTFMove(registration), WTFMove(data.endpoint), data.expirationTime, WTFMove(data.serverVAPIDPublicKey), WTFMove(data.clientECDHPublicKey), WTFMove(data.sharedAuthenticationSecret));
+}
+
+void ServiceWorkerContainer::subscribeToPushService(ServiceWorkerRegistration& registration, const Vector<uint8_t>& applicationServerKey, DOMPromiseDeferred<IDLInterface<PushSubscription>>&& promise)
+{
+    ensureSWClientConnection().subscribeToPushService(registration.identifier(), applicationServerKey, [protectedRegistration = Ref { registration }, promise = WTFMove(promise)](auto&& result) mutable {
+        if (result.hasException()) {
+            promise.reject(result.releaseException());
+            return;
+        }
+        
+        promise.resolve(createPushSubscriptionFromData(WTFMove(protectedRegistration), result.releaseReturnValue()));
+    });
+}
+
+void ServiceWorkerContainer::unsubscribeFromPushService(ServiceWorkerRegistrationIdentifier identifier, DOMPromiseDeferred<IDLBoolean>&& promise)
+{
+    ensureSWClientConnection().unsubscribeFromPushService(identifier, [promise = WTFMove(promise)](auto&& result) mutable {
+        promise.settle(WTFMove(result));
+    });
+}
+
+void ServiceWorkerContainer::getPushSubscription(ServiceWorkerRegistration& registration, DOMPromiseDeferred<IDLNullable<IDLInterface<PushSubscription>>>&& promise)
+{
+    ensureSWClientConnection().getPushSubscription(registration.identifier(), [protectedRegistration = Ref { registration }, promise = WTFMove(promise)](auto&& result) mutable {
+        if (result.hasException()) {
+            promise.reject(result.releaseException());
+            return;
+        }
+
+        auto optionalPushSubscriptionData = result.releaseReturnValue();
+        if (!optionalPushSubscriptionData) {
+            promise.resolve(nullptr);
+            return;
+        }
+
+        promise.resolve(createPushSubscriptionFromData(WTFMove(protectedRegistration), WTFMove(*optionalPushSubscriptionData)).ptr());
+    });
+}
+
+void ServiceWorkerContainer::getPushPermissionState(ServiceWorkerRegistrationIdentifier identifier, DOMPromiseDeferred<IDLEnumeration<PushPermissionState>>&& promise)
+{
+    ensureSWClientConnection().getPushPermissionState(identifier, [promise = WTFMove(promise)](auto&& result) mutable {
+        promise.settle(WTFMove(result));
+    });
 }
 
 void ServiceWorkerContainer::queueTaskToDispatchControllerChangeEvent()

@@ -25,6 +25,7 @@ GPUProcess/GPUProcess.cpp
 GPUProcess/GPUConnectionToWebProcess.cpp
 GPUProcess/GPUProcessCreationParameters.cpp
 GPUProcess/graphics/DisplayListReaderHandle.cpp
+GPUProcess/graphics/RemoteDisplayListRecorder.cpp
 GPUProcess/graphics/RemoteRenderingBackend.cpp
 GPUProcess/graphics/RemoteGraphicsContextGL.cpp
 GPUProcess/graphics/RemoteResourceCache.cpp
@@ -96,6 +97,9 @@ NetworkProcess/Downloads/PendingDownload.cpp
 NetworkProcess/IndexedDB/WebIDBConnectionToClient.cpp
 NetworkProcess/IndexedDB/WebIDBServer.cpp
 
+NetworkProcess/Notifications/NetworkNotificationManager.cpp
+NetworkProcess/Notifications/WebPushDaemonConnection.cpp
+
 NetworkProcess/PrivateClickMeasurement/PrivateClickMeasurementClientImpl.cpp
 NetworkProcess/PrivateClickMeasurement/PrivateClickMeasurementDatabase.cpp
 NetworkProcess/PrivateClickMeasurement/PrivateClickMeasurementDebugInfo.cpp
@@ -105,8 +109,6 @@ NetworkProcess/PrivateClickMeasurement/PrivateClickMeasurementNetworkLoader.cpp
 NetworkProcess/PrivateClickMeasurement/PrivateClickMeasurementStore.cpp
 NetworkProcess/PrivateClickMeasurement/PrivateClickMeasurementConnection.cpp
 NetworkProcess/PrivateClickMeasurement/PrivateClickMeasurementDaemonClient.cpp
-NetworkProcess/PrivateClickMeasurement/PrivateClickMeasurementDecoder.cpp
-NetworkProcess/PrivateClickMeasurement/PrivateClickMeasurementEncoder.cpp
 NetworkProcess/PrivateClickMeasurement/PrivateClickMeasurementManagerProxy.cpp
 
 NetworkProcess/ServiceWorker/ServiceWorkerFetchTask.cpp @no-unify
@@ -161,6 +163,9 @@ Platform/SharedMemory.cpp @no-unify
 Platform/IPC/ArgumentCoders.cpp @no-unify
 Platform/IPC/Attachment.cpp @no-unify
 Platform/IPC/Connection.cpp @no-unify
+Platform/IPC/DaemonConnection.cpp
+Platform/IPC/DaemonDecoder.cpp
+Platform/IPC/DaemonEncoder.cpp
 Platform/IPC/Decoder.cpp @no-unify
 Platform/IPC/Encoder.cpp @no-unify
 Platform/IPC/JSIPCBinding.cpp @no-unify
@@ -172,13 +177,9 @@ Platform/IPC/SharedBufferDataReference.cpp @no-unify
 Platform/IPC/StreamClientConnection.cpp @no-unify
 Platform/IPC/StreamConnectionBuffer.cpp @no-unify
 Platform/IPC/StreamConnectionWorkQueue.cpp @no-unify
+Platform/IPC/SharedFileHandle.cpp @no-unify
 Platform/IPC/StreamServerConnection.cpp @no-unify
 Platform/IPC/StringReference.cpp @no-unify
-
-PluginProcess/PluginControllerProxy.cpp @no-unify
-PluginProcess/PluginCreationParameters.cpp @no-unify
-PluginProcess/PluginProcess.cpp @no-unify
-PluginProcess/WebProcessConnection.cpp @no-unify
 
 // TODO: The files here marked @no-unify should be unified once GTK's PluginProcess2 is removed.
 Shared/AccessibilityPreferences.cpp
@@ -290,18 +291,6 @@ Shared/Databases/IndexedDB/IDBUtilities.cpp
 Shared/Databases/IndexedDB/WebIDBResult.cpp
 
 Shared/Gamepad/GamepadData.cpp
-
-// TODO: These files should be unified once GTK's PluginProcess2 is removed.
-Shared/Plugins/NPIdentifierData.cpp @no-unify
-Shared/Plugins/NPObjectMessageReceiver.cpp @no-unify
-Shared/Plugins/NPObjectProxy.cpp @no-unify
-Shared/Plugins/NPRemoteObjectMap.cpp @no-unify
-Shared/Plugins/NPVariantData.cpp @no-unify
-Shared/Plugins/PluginProcessCreationParameters.cpp @no-unify
-
-// TODO: These files should be unified once GTK's PluginProcess2 is removed.
-Shared/Plugins/Netscape/NetscapePluginModule.cpp  @no-unify
-Shared/Plugins/Netscape/PluginInformation.cpp @no-unify
 
 Shared/WebsiteData/WebsiteData.cpp
 
@@ -491,12 +480,9 @@ UIProcess/Media/MediaUsageManager.cpp
 UIProcess/Media/RemoteMediaSessionCoordinatorProxy.cpp
 
 UIProcess/Notifications/WebNotification.cpp
+UIProcess/Notifications/WebNotificationManagerMessageHandler.cpp
 UIProcess/Notifications/WebNotificationManagerProxy.cpp
 UIProcess/Notifications/WebNotificationProvider.cpp
-
-UIProcess/Plugins/PluginInfoStore.cpp
-UIProcess/Plugins/PluginProcessManager.cpp
-UIProcess/Plugins/PluginProcessProxy.cpp
 
 UIProcess/UserContent/WebScriptMessageHandler.cpp
 UIProcess/UserContent/WebUserContentControllerProxy.cpp
@@ -611,6 +597,7 @@ WebProcess/GPU/graphics/DisplayListWriterHandle.cpp
 WebProcess/GPU/graphics/ImageBufferShareableBitmapBackend.cpp
 WebProcess/GPU/graphics/RemoteGraphicsContextGLProxyFunctionsGenerated.cpp
 WebProcess/GPU/graphics/RemoteGraphicsContextGLProxy.cpp
+WebProcess/GPU/graphics/RemoteDisplayListRecorderProxy.cpp
 WebProcess/GPU/graphics/RemoteRenderingBackendProxy.cpp
 WebProcess/GPU/graphics/RemoteResourceCacheProxy.cpp
 WebProcess/GPU/media/AudioTrackPrivateRemote.cpp
@@ -666,21 +653,8 @@ WebProcess/Notifications/WebNotificationManager.cpp
 
 // TODO: These files should be unified once GTK's PluginProcess2 is removed.
 WebProcess/Plugins/Plugin.cpp @no-unify
-WebProcess/Plugins/PluginProcessConnection.cpp @no-unify
-WebProcess/Plugins/PluginProcessConnectionManager.cpp @no-unify
-WebProcess/Plugins/PluginProxy.cpp @no-unify
 WebProcess/Plugins/PluginView.cpp @no-unify
 WebProcess/Plugins/WebPluginInfoProvider.cpp @no-unify
-
-// TODO: These files should be unified once GTK's PluginProcess2 is removed.
-WebProcess/Plugins/Netscape/JSNPMethod.cpp @no-unify
-WebProcess/Plugins/Netscape/JSNPObject.cpp @no-unify
-WebProcess/Plugins/Netscape/NPJSObject.cpp @no-unify
-WebProcess/Plugins/Netscape/NPRuntimeObjectMap.cpp @no-unify
-WebProcess/Plugins/Netscape/NPRuntimeUtilities.cpp @no-unify
-WebProcess/Plugins/Netscape/NetscapeBrowserFuncs.cpp @no-unify
-WebProcess/Plugins/Netscape/NetscapePlugin.cpp @no-unify
-WebProcess/Plugins/Netscape/NetscapePluginStream.cpp @no-unify
 
 WebProcess/Speech/SpeechRecognitionRealtimeMediaSourceManager.cpp
 
@@ -755,6 +729,7 @@ NetworkBroadcastChannelRegistryMessageReceiver.cpp
 RTCDataChannelRemoteManagerMessageReceiver.cpp
 RTCDataChannelRemoteManagerProxyMessageReceiver.cpp
 RemoteAudioMediaStreamTrackRendererInternalUnitManagerMessageReceiver.cpp
+RemoteDisplayListRecorderMessageReceiver.cpp
 RemoteGraphicsContextGLMessageReceiver.cpp
 RemoteGraphicsContextGLProxyMessageReceiver.cpp
 PlatformXRSystemMessageReceiver.cpp

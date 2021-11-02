@@ -78,7 +78,9 @@
 #import "TextIterator.h"
 #import "VisibleUnits.h"
 #import "WebCoreFrameView.h"
+#import <pal/SessionID.h>
 #import <pal/spi/cocoa/NSAccessibilitySPI.h>
+#import <wtf/cocoa/TypeCastsCocoa.h>
 #import <wtf/cocoa/VectorCocoa.h>
 
 using namespace WebCore;
@@ -853,8 +855,8 @@ static void AXAttributeStringSetStyle(NSMutableAttributedString* attrString, Ren
     AXAttributeStringSetFont(attrString, NSAccessibilityFontTextAttribute, style.fontCascade().primaryFont().getCTFont(), range);
     
     // set basic colors
-    AXAttributeStringSetColor(attrString, NSAccessibilityForegroundColorTextAttribute, nsColor(style.visitedDependentColor(CSSPropertyColor)), range);
-    AXAttributeStringSetColor(attrString, NSAccessibilityBackgroundColorTextAttribute, nsColor(style.visitedDependentColor(CSSPropertyBackgroundColor)), range);
+    AXAttributeStringSetColor(attrString, NSAccessibilityForegroundColorTextAttribute, cocoaColor(style.visitedDependentColor(CSSPropertyColor)).get(), range);
+    AXAttributeStringSetColor(attrString, NSAccessibilityBackgroundColorTextAttribute, cocoaColor(style.visitedDependentColor(CSSPropertyBackgroundColor)).get(), range);
     
     // set super/sub scripting
     VerticalAlign alignment = style.verticalAlign();
@@ -889,12 +891,12 @@ static void AXAttributeStringSetStyle(NSMutableAttributedString* attrString, Ren
 
         if (decor & TextDecoration::Underline) {
             AXAttributeStringSetNumber(attrString, NSAccessibilityUnderlineTextAttribute, @YES, range);
-            AXAttributeStringSetColor(attrString, NSAccessibilityUnderlineColorTextAttribute, nsColor(decorationStyles.underlineColor), range);
+            AXAttributeStringSetColor(attrString, NSAccessibilityUnderlineColorTextAttribute, cocoaColor(decorationStyles.underlineColor).get(), range);
         }
         
         if (decor & TextDecoration::LineThrough) {
             AXAttributeStringSetNumber(attrString, NSAccessibilityStrikethroughTextAttribute, @YES, range);
-            AXAttributeStringSetColor(attrString, NSAccessibilityStrikethroughColorTextAttribute, nsColor(decorationStyles.linethroughColor), range);
+            AXAttributeStringSetColor(attrString, NSAccessibilityStrikethroughColorTextAttribute, cocoaColor(decorationStyles.linethroughColor).get(), range);
         }
     }
     
@@ -1571,6 +1573,12 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
         [tempArray addObject:NSAccessibilityURLAttribute];
         return tempArray;
     }());
+    static auto videoAttrs = makeNeverDestroyed([] {
+        auto tempArray = adoptNS([[NSMutableArray alloc] initWithArray:attributes.get().get()]);
+        // This should represent the URL of the video content, not the poster.
+        [tempArray addObject:NSAccessibilityURLAttribute];
+        return tempArray;
+    }());
 
     NSArray *objectAttributes = attributes.get().get();
 
@@ -1636,6 +1644,8 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
         objectAttributes = menuButtonAttrs.get().get();
     else if (backingObject->isMenuItem())
         objectAttributes = menuItemAttrs.get().get();
+    else if (backingObject->isVideo())
+        objectAttributes = videoAttrs.get().get();
 
     NSArray *additionalAttributes = [self additionalAccessibilityAttributeNames];
     if ([additionalAttributes count])
@@ -1651,15 +1661,23 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
     return objectAttributes;
 }
 
-- (NSArray*)renderWidgetChildren
+- (NSArray *)renderWidgetChildren
 {
     auto* backingObject = self.axBackingObject;
-    if (!backingObject)
+    if (!backingObject || !backingObject->isWidget())
         return nil;
 
-    auto* widget = backingObject->widget();
-    if (widget && widget->accessibilityObject())
-        return @[widget->accessibilityObject()];
+    id child = Accessibility::retrieveAutoreleasedValueFromMainThread<id>([protectedSelf = retainPtr(self)] () -> RetainPtr<id> {
+        auto* backingObject = protectedSelf.get().axBackingObject;
+        if (!backingObject)
+            return nil;
+
+        auto* widget = backingObject->widget();
+        return widget ? widget->accessibilityObject() : nil;
+    });
+
+    if (child)
+        return @[child];
 
     ALLOW_DEPRECATED_DECLARATIONS_BEGIN
     return [backingObject->platformWidget() accessibilityAttributeValue:NSAccessibilityChildrenAttribute];
@@ -1824,6 +1842,10 @@ ALLOW_DEPRECATED_DECLARATIONS_BEGIN
 
     if (backingObject->isMeter())
         return @"AXMeter";
+
+    // Treat any group without exposed children as empty.
+    if ([[self role] isEqual:NSAccessibilityGroupRole] && !backingObject->children().size())
+        return @"AXEmptyGroup";
 
     AccessibilityRole role = backingObject->roleValue();
     if (role == AccessibilityRole::HorizontalRule)
@@ -2159,10 +2181,9 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
         return parent->wrapper();
     }
 
-    if ([attributeName isEqualToString: NSAccessibilityChildrenAttribute] || [attributeName isEqualToString: NSAccessibilityChildrenInNavigationOrderAttribute]) {
+    if ([attributeName isEqualToString:NSAccessibilityChildrenAttribute] || [attributeName isEqualToString:NSAccessibilityChildrenInNavigationOrderAttribute]) {
         if (!self.childrenVectorSize) {
-            NSArray* children = [self renderWidgetChildren];
-            if (children != nil)
+            if (NSArray *children = [self renderWidgetChildren])
                 return children;
         }
 
@@ -2219,7 +2240,7 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
         if ([attributeName isEqualToString:NSAccessibilityCaretBrowsingEnabledAttribute])
             return [NSNumber numberWithBool:backingObject->caretBrowsingEnabled()];
         if ([attributeName isEqualToString:NSAccessibilityWebSessionIDAttribute])
-            return @(backingObject->sessionID());
+            return @(backingObject->sessionID().toUInt64());
     }
 
     if (backingObject->isTextControl()) {
@@ -2291,48 +2312,17 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
             if ([[[self attachmentView] accessibilityAttributeNames] containsObject:NSAccessibilityValueAttribute])
                 return [[self attachmentView] accessibilityAttributeValue:NSAccessibilityValueAttribute];
         }
-        if (backingObject->supportsRangeValue())
-            return [NSNumber numberWithFloat:backingObject->valueForRange()];
-        if (backingObject->roleValue() == AccessibilityRole::SliderThumb)
-            return [NSNumber numberWithFloat:backingObject->parentObject()->valueForRange()];
-        if (backingObject->isHeading())
-            return @(backingObject->headingLevel());
 
-        if (backingObject->supportsCheckedState()) {
-            switch (backingObject->checkboxOrRadioValue()) {
-            case AccessibilityButtonState::Off:
-                return @(0);
-            case AccessibilityButtonState::On:
-                return @(1);
-            case AccessibilityButtonState::Mixed:
-                return @(2);
-            }
-        }
-
-        // radio groups return the selected radio button as the AXValue
-        if (backingObject->isRadioGroup()) {
-            AXCoreObject* radioButton = backingObject->selectedRadioButton();
-            if (!radioButton)
-                return nil;
-            return radioButton->wrapper();
-        }
-
-        if (backingObject->isTabList()) {
-            AXCoreObject* tabItem = backingObject->selectedTabItem();
-            if (!tabItem)
-                return nil;
-            return tabItem->wrapper();
-        }
-
-        if (backingObject->isTabItem())
-            return @(backingObject->isSelected());
-
-        if (backingObject->isColorWell()) {
-            auto color = convertColor<SRGBA<float>>(backingObject->colorValue());
-            return [NSString stringWithFormat:@"rgb %7.5f %7.5f %7.5f 1", color.red, color.green, color.blue];
-        }
-
-        return backingObject->stringValue();
+        auto value = backingObject->value();
+        return WTF::switchOn(value,
+            [] (bool& typedValue) -> id { return @(typedValue); },
+            [] (unsigned& typedValue) -> id { return @(typedValue); },
+            [] (float& typedValue) -> id { return @(typedValue); },
+            [] (String& typedValue) -> id { return (NSString *)typedValue; },
+            [] (AccessibilityButtonState& typedValue) -> id { return @((unsigned)typedValue); },
+            [] (AXCoreObject*& typedValue) { return typedValue ? (id)typedValue->wrapper() : nil; },
+            [] (auto&) { return nil; }
+        );
     }
 
     if ([attributeName isEqualToString:(NSString *)kAXMenuItemMarkCharAttribute]) {
@@ -2411,36 +2401,8 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
         }
     }
 
-    if ([attributeName isEqualToString:NSAccessibilityContentsAttribute]) {
-        // The contents of a tab list are all the children except the tabs.
-        if (backingObject->isTabList()) {
-            auto children = self.childrenVectorArray;
-            AccessibilityObject::AccessibilityChildrenVector tabs;
-            backingObject->tabChildren(tabs);
-            auto tabsChildren = convertToNSArray(tabs);
-
-            NSMutableArray *contents = [NSMutableArray array];
-            for (id childWrapper in children) {
-                if ([tabsChildren containsObject:childWrapper])
-                    [contents addObject:childWrapper];
-            }
-            return contents;
-        }
-
-        if (backingObject->isScrollView()) {
-            // A scrollView's contents are everything except the scroll bars.
-            auto children = self.childrenVectorArray;
-            NSMutableArray *contents = [NSMutableArray array];
-
-            for (WebAccessibilityObjectWrapper *childWrapper in children) {
-                if (auto backingObject = [childWrapper axBackingObject]) {
-                    if (!backingObject->isScrollbar())
-                        [contents addObject:childWrapper];
-                }
-            }
-            return contents;
-        }
-    }
+    if ([attributeName isEqualToString:NSAccessibilityContentsAttribute])
+        return convertToNSArray(backingObject->contents());
 
     if (backingObject->isTable() && backingObject->isExposable()) {
         if ([attributeName isEqualToString:NSAccessibilityRowsAttribute])
@@ -2775,10 +2737,16 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
 
     // MathML Attributes.
     if (backingObject->isMathElement()) {
-        if ([attributeName isEqualToString:NSAccessibilityMathRootIndexAttribute])
-            return (backingObject->mathRootIndexObject()) ? backingObject->mathRootIndexObject()->wrapper() : 0;
-        if ([attributeName isEqualToString:NSAccessibilityMathRootRadicandAttribute])
-            return (backingObject->mathRadicandObject()) ? backingObject->mathRadicandObject()->wrapper() : 0;
+        if ([attributeName isEqualToString:NSAccessibilityMathRootIndexAttribute]) {
+            auto* rootIndex = backingObject->mathRootIndexObject();
+            return rootIndex ? rootIndex->wrapper() : nil;
+        }
+
+        if ([attributeName isEqualToString:NSAccessibilityMathRootRadicandAttribute]) {
+            auto radicand = backingObject->mathRadicand();
+            return radicand ? convertToNSArray(*radicand) : nil;
+        }
+
         if ([attributeName isEqualToString:NSAccessibilityMathFractionNumeratorAttribute])
             return (backingObject->mathNumeratorObject()) ? backingObject->mathNumeratorObject()->wrapper() : 0;
         if ([attributeName isEqualToString:NSAccessibilityMathFractionDenominatorAttribute])
@@ -3698,14 +3666,19 @@ enum class TextUnit {
     });
 }
 
-static BOOL isMatchingPlugin(AXCoreObject* axObject, const AccessibilitySearchCriteria& criteria)
+static bool isMatchingPlugin(AXCoreObject* axObject, const AccessibilitySearchCriteria& criteria)
 {
-    auto* widget = axObject->widget();
-    if (!is<PluginViewBase>(widget))
+    if (!axObject->isWidget())
         return false;
 
-    return criteria.searchKeys.contains(AccessibilitySearchKey::AnyType)
-        && (!criteria.visibleOnly || downcast<PluginViewBase>(widget)->isVisible());
+    return Accessibility::retrieveValueFromMainThread<bool>([&axObject, &criteria] () -> bool {
+        auto* widget = axObject->widget();
+        if (!is<PluginViewBase>(widget))
+            return false;
+
+        return criteria.searchKeys.contains(AccessibilitySearchKey::AnyType)
+            && (!criteria.visibleOnly || downcast<PluginViewBase>(widget)->isVisible());
+    });
 }
 
 ALLOW_DEPRECATED_IMPLEMENTATIONS_BEGIN
@@ -4130,7 +4103,7 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
                 return nil;
 
             CharacterOffset characterOffset = characterOffsetForTextMarker(cache, textMarker);
-            return [protectedSelf nextTextMarkerForCharacterOffset:characterOffset].bridgingAutorelease();
+            return bridge_id_cast([protectedSelf nextTextMarkerForCharacterOffset:characterOffset]);
         });
     }
 
@@ -4145,7 +4118,7 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
                 return nil;
 
             CharacterOffset characterOffset = characterOffsetForTextMarker(cache, textMarker);
-            return [protectedSelf previousTextMarkerForCharacterOffset:characterOffset].bridgingAutorelease();
+            return bridge_id_cast([protectedSelf previousTextMarkerForCharacterOffset:characterOffset]);
         });
     }
 

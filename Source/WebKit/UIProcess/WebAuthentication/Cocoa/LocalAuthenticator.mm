@@ -127,11 +127,7 @@ static std::optional<Vector<Ref<AuthenticatorAssertionResponse>>> getExistingCre
         (id)kSecAttrLabel: rpId,
         (id)kSecReturnAttributes: @YES,
         (id)kSecMatchLimit: (id)kSecMatchLimitAll,
-#if HAVE(DATA_PROTECTION_KEYCHAIN)
         (id)kSecUseDataProtectionKeychain: @YES
-#else
-        (id)kSecAttrNoLegacy: @YES
-#endif
     }];
     updateQueryIfNecessary(query.get());
 
@@ -182,11 +178,7 @@ void LocalAuthenticator::clearAllCredentials()
     [query setDictionary:@{
         (id)kSecClass: (id)kSecClassKey,
         (id)kSecAttrAccessGroup: (id)String(LocalAuthenticatiorAccessGroup),
-#if HAVE(DATA_PROTECTION_KEYCHAIN)
         (id)kSecUseDataProtectionKeychain: @YES
-#else
-        (id)kSecAttrNoLegacy: @YES
-#endif
     }];
     updateQueryIfNecessary(query.get());
 
@@ -205,7 +197,7 @@ void LocalAuthenticator::makeCredential()
     using namespace LocalAuthenticatorInternal;
     ASSERT(m_state == State::Init);
     m_state = State::RequestReceived;
-    auto& creationOptions = WTF::get<PublicKeyCredentialCreationOptions>(requestData().options);
+    auto& creationOptions = std::get<PublicKeyCredentialCreationOptions>(requestData().options);
 
     // The following implements https://www.w3.org/TR/webauthn/#op-make-cred as of 5 December 2017.
     // Skip Step 4-5 as requireResidentKey and requireUserVerification are enforced.
@@ -235,7 +227,18 @@ void LocalAuthenticator::makeCredential()
             ASSERT(rawId);
             return excludeCredentialIds.contains(base64EncodeToString(rawId->data(), rawId->byteLength()));
         })) {
-            receiveException({ NotAllowedError, "At least one credential matches an entry of the excludeCredentials list in the platform attached authenticator."_s }, WebAuthenticationStatus::LAExcludeCredentialsMatched);
+            // Obtain consent per Step 3.1
+            auto callback = [weakThis = WeakPtr { *this }] (LocalAuthenticatorPolicy policy) {
+                ASSERT(RunLoop::isMain());
+                if (!weakThis)
+                    return;
+
+                if (policy == LocalAuthenticatorPolicy::Allow)
+                    weakThis->receiveException({ InvalidStateError, "At least one credential matches an entry of the excludeCredentials list in the platform attached authenticator."_s }, WebAuthenticationStatus::LAExcludeCredentialsMatched);
+                else
+                    weakThis->receiveException({ NotAllowedError, "This request has been cancelled by the user."_s });
+            };
+            observer()->decidePolicyForLocalAuthenticator(WTFMove(callback));
             return;
         }
     }
@@ -244,7 +247,7 @@ void LocalAuthenticator::makeCredential()
     // Get user consent.
     if (webAuthenticationModernEnabled()) {
         if (auto* observer = this->observer()) {
-            auto callback = [weakThis = makeWeakPtr(*this)] (LAContext *context) {
+            auto callback = [weakThis = WeakPtr { *this }] (LAContext *context) {
                 ASSERT(RunLoop::isMain());
                 if (!weakThis)
                     return;
@@ -258,7 +261,7 @@ void LocalAuthenticator::makeCredential()
     }
 
     if (auto* observer = this->observer()) {
-        auto callback = [weakThis = makeWeakPtr(*this)] (LocalAuthenticatorPolicy policy) {
+        auto callback = [weakThis = WeakPtr { *this }] (LocalAuthenticatorPolicy policy) {
             ASSERT(RunLoop::isMain());
             if (!weakThis)
                 return;
@@ -274,7 +277,7 @@ void LocalAuthenticator::continueMakeCredentialAfterDecidePolicy(LocalAuthentica
     ASSERT(m_state == State::RequestReceived);
     m_state = State::PolicyDecided;
 
-    auto& creationOptions = WTF::get<PublicKeyCredentialCreationOptions>(requestData().options);
+    auto& creationOptions = std::get<PublicKeyCredentialCreationOptions>(requestData().options);
 
     if (policy == LocalAuthenticatorPolicy::Disallow) {
         receiveRespond(ExceptionData { UnknownError, "Disallow local authenticator."_s });
@@ -293,7 +296,7 @@ void LocalAuthenticator::continueMakeCredentialAfterDecidePolicy(LocalAuthentica
     }
 
     SecAccessControlRef accessControlRef = accessControl.get();
-    auto callback = [accessControl = WTFMove(accessControl), weakThis = makeWeakPtr(*this)] (LocalConnection::UserVerification verification, LAContext *context) {
+    auto callback = [accessControl = WTFMove(accessControl), weakThis = WeakPtr { *this }] (LocalConnection::UserVerification verification, LAContext *context) {
         ASSERT(RunLoop::isMain());
         if (!weakThis)
             return;
@@ -320,7 +323,7 @@ void LocalAuthenticator::continueMakeCredentialAfterReceivingLAContext(LAContext
     }
 
     SecAccessControlRef accessControlRef = accessControl.get();
-    auto callback = [accessControl = WTFMove(accessControl), context = retainPtr(context), weakThis = makeWeakPtr(*this)] (LocalConnection::UserVerification verification) {
+    auto callback = [accessControl = WTFMove(accessControl), context = retainPtr(context), weakThis = WeakPtr { *this }] (LocalConnection::UserVerification verification) {
         ASSERT(RunLoop::isMain());
         if (!weakThis)
             return;
@@ -336,7 +339,7 @@ void LocalAuthenticator::continueMakeCredentialAfterUserVerification(SecAccessCo
 
     ASSERT(m_state == State::PolicyDecided);
     m_state = State::UserVerified;
-    auto& creationOptions = WTF::get<PublicKeyCredentialCreationOptions>(requestData().options);
+    auto& creationOptions = std::get<PublicKeyCredentialCreationOptions>(requestData().options);
 
     if (!validateUserVerification(verification))
         return;
@@ -394,11 +397,7 @@ void LocalAuthenticator::continueMakeCredentialAfterUserVerification(SecAccessCo
             (id)kSecAttrKeyClass: (id)kSecAttrKeyClassPrivate,
             (id)kSecAttrLabel: secAttrLabel,
             (id)kSecAttrApplicationLabel: m_provisionalCredentialId.get(),
-#if HAVE(DATA_PROTECTION_KEYCHAIN)
             (id)kSecUseDataProtectionKeychain: @YES
-#else
-            (id)kSecAttrNoLegacy: @YES
-#endif
         }];
         updateQueryIfNecessary(query.get());
 
@@ -434,7 +433,7 @@ void LocalAuthenticator::continueMakeCredentialAfterUserVerification(SecAccessCo
     // Step 13. Apple Attestation
     auto authData = buildAuthData(creationOptions.rp.id, flags, counter, buildAttestedCredentialData(aaguidVector(), credentialId, cosePublicKey));
     auto nsAuthData = toNSData(authData);
-    auto callback = [credentialId = WTFMove(credentialId), authData = WTFMove(authData), weakThis = makeWeakPtr(*this)] (NSArray * _Nullable certificates, NSError * _Nullable error) mutable {
+    auto callback = [credentialId = WTFMove(credentialId), authData = WTFMove(authData), weakThis = WeakPtr { *this }] (NSArray * _Nullable certificates, NSError * _Nullable error) mutable {
         ASSERT(RunLoop::isMain());
         if (!weakThis)
             return;
@@ -449,7 +448,7 @@ void LocalAuthenticator::continueMakeCredentialAfterAttested(Vector<uint8_t>&& c
 
     ASSERT(m_state == State::UserVerified);
     m_state = State::Attested;
-    auto& creationOptions = WTF::get<PublicKeyCredentialCreationOptions>(requestData().options);
+    auto& creationOptions = std::get<PublicKeyCredentialCreationOptions>(requestData().options);
 
     if (error) {
         receiveException({ UnknownError, makeString("Couldn't attest: ", String(error.localizedDescription)) });
@@ -479,7 +478,7 @@ void LocalAuthenticator::getAssertion()
     using namespace LocalAuthenticatorInternal;
     ASSERT(m_state == State::Init);
     m_state = State::RequestReceived;
-    auto& requestOptions = WTF::get<PublicKeyCredentialRequestOptions>(requestData().options);
+    auto& requestOptions = std::get<PublicKeyCredentialRequestOptions>(requestData().options);
 
     // The following implements https://www.w3.org/TR/webauthn/#op-get-assertion as of 5 December 2017.
     // Skip Step 2 as requireUserVerification is enforced.
@@ -522,7 +521,7 @@ void LocalAuthenticator::getAssertion()
     m_connection->filterResponses(assertionResponses);
 
     if (auto* observer = this->observer()) {
-        auto callback = [this, weakThis = makeWeakPtr(*this)] (AuthenticatorAssertionResponse* response) {
+        auto callback = [this, weakThis = WeakPtr { *this }] (AuthenticatorAssertionResponse* response) {
             ASSERT(RunLoop::isMain());
             if (!weakThis)
                 return;
@@ -547,7 +546,7 @@ void LocalAuthenticator::continueGetAssertionAfterResponseSelected(Ref<WebCore::
         auto accessControlRef = response->accessControl();
         LAContext *context = response->laContext();
         auto callback = [
-            weakThis = makeWeakPtr(*this),
+            weakThis = WeakPtr { *this },
             response = WTFMove(response)
         ] (LocalConnection::UserVerification verification) mutable {
             ASSERT(RunLoop::isMain());
@@ -561,11 +560,11 @@ void LocalAuthenticator::continueGetAssertionAfterResponseSelected(Ref<WebCore::
         return;
     }
 
-    auto& requestOptions = WTF::get<PublicKeyCredentialRequestOptions>(requestData().options);
+    auto& requestOptions = std::get<PublicKeyCredentialRequestOptions>(requestData().options);
 
     auto accessControlRef = response->accessControl();
     auto callback = [
-        weakThis = makeWeakPtr(*this),
+        weakThis = WeakPtr { *this },
         response = WTFMove(response)
     ] (LocalConnection::UserVerification verification, LAContext *context) mutable {
         ASSERT(RunLoop::isMain());
@@ -587,7 +586,7 @@ void LocalAuthenticator::continueGetAssertionAfterUserVerification(Ref<WebCore::
         return;
 
     // Step 10.
-    auto requestOptions = WTF::get<PublicKeyCredentialRequestOptions>(requestData().options);
+    auto requestOptions = std::get<PublicKeyCredentialRequestOptions>(requestData().options);
     auto authData = buildAuthData(requestOptions.rpId, verification == LocalConnection::UserVerification::Presence ? otherGetAssertionFlags : getAssertionFlags, counter, { });
 
     // Step 11.
@@ -599,11 +598,7 @@ void LocalAuthenticator::continueGetAssertionAfterUserVerification(Ref<WebCore::
             (id)kSecAttrKeyClass: (id)kSecAttrKeyClassPrivate,
             (id)kSecAttrApplicationLabel: nsCredentialId.get(),
             (id)kSecReturnRef: @YES,
-#if HAVE(DATA_PROTECTION_KEYCHAIN)
             (id)kSecUseDataProtectionKeychain: @YES
-#else
-            (id)kSecAttrNoLegacy: @YES
-#endif
         } mutableCopy];
 
         if (context)
@@ -640,11 +635,7 @@ void LocalAuthenticator::continueGetAssertionAfterUserVerification(Ref<WebCore::
         (id)kSecClass: (id)kSecClassKey,
         (id)kSecAttrKeyClass: (id)kSecAttrKeyClassPrivate,
         (id)kSecAttrApplicationLabel: nsCredentialId.get(),
-#if HAVE(DATA_PROTECTION_KEYCHAIN)
         (id)kSecUseDataProtectionKeychain: @YES
-#else
-        (id)kSecAttrNoLegacy: @YES
-#endif
     }];
     updateQueryIfNecessary(query.get());
 
@@ -671,11 +662,7 @@ void LocalAuthenticator::receiveException(ExceptionData&& exception, WebAuthenti
         [query setDictionary:@{
             (id)kSecClass: (id)kSecClassKey,
             (id)kSecAttrApplicationLabel: m_provisionalCredentialId.get(),
-#if HAVE(DATA_PROTECTION_KEYCHAIN)
             (id)kSecUseDataProtectionKeychain: @YES
-#else
-            (id)kSecAttrNoLegacy: @YES
-#endif
         }];
         updateQueryIfNecessary(query.get());
 
@@ -695,7 +682,7 @@ void LocalAuthenticator::deleteDuplicateCredential() const
 {
     using namespace LocalAuthenticatorInternal;
 
-    auto& creationOptions = WTF::get<PublicKeyCredentialCreationOptions>(requestData().options);
+    auto& creationOptions = std::get<PublicKeyCredentialCreationOptions>(requestData().options);
     m_existingCredentials.findMatching([creationOptions] (auto& credential) {
         auto* userHandle = credential->userHandle();
         ASSERT(userHandle);
@@ -708,11 +695,7 @@ void LocalAuthenticator::deleteDuplicateCredential() const
         [query setDictionary:@{
             (id)kSecClass: (id)kSecClassKey,
             (id)kSecAttrApplicationLabel: toNSData(credential->rawId()).get(),
-#if HAVE(DATA_PROTECTION_KEYCHAIN)
             (id)kSecUseDataProtectionKeychain: @YES
-#else
-            (id)kSecAttrNoLegacy: @YES
-#endif
         }];
         updateQueryIfNecessary(query.get());
 

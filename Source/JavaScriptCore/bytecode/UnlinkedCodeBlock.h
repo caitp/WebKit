@@ -141,6 +141,8 @@ public:
 
     enum { CallFunction, ApplyFunction };
 
+    void initializeLoopHintExecutionCounter();
+
     bool isConstructor() const { return m_isConstructor; }
     bool usesCallEval() const { return m_usesCallEval; }
     void setUsesCallEval() { m_usesCallEval = true; }
@@ -355,6 +357,8 @@ public:
     void allocateSharedProfiles(unsigned numBinaryArithProfiles, unsigned numUnaryArithProfiles);
     UnlinkedValueProfile& unlinkedValueProfile(unsigned index) { return m_valueProfiles[index]; }
     UnlinkedArrayProfile& unlinkedArrayProfile(unsigned index) { return m_arrayProfiles[index]; }
+    unsigned numberOfValueProfiles() const { return m_valueProfiles.size(); }
+    unsigned numberOfArrayProfiles() const { return m_arrayProfiles.size(); }
 
 #if ASSERT_ENABLED
     bool hasIdentifier(UniquedStringImpl*);

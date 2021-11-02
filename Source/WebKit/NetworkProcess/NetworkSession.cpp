@@ -34,6 +34,7 @@
 #include "NetworkResourceLoadParameters.h"
 #include "NetworkResourceLoader.h"
 #include "NetworkSessionCreationParameters.h"
+#include "NotificationManagerMessageHandlerMessages.h"
 #include "PingLoad.h"
 #include "PrivateClickMeasurementClientImpl.h"
 #include "PrivateClickMeasurementManager.h"
@@ -44,8 +45,10 @@
 #include "WebSocketTask.h"
 #include <WebCore/CookieJar.h>
 #include <WebCore/ResourceRequest.h>
+#include <WebCore/RuntimeApplicationChecks.h>
 
 #if PLATFORM(COCOA)
+#include "DefaultWebBrowserChecks.h"
 #include "NetworkSessionCocoa.h"
 #endif
 #if USE(SOUP)
@@ -96,7 +99,7 @@ static String pcmStoreDirectory(const NetworkSession& session, const String& res
 static UniqueRef<PCM::ManagerInterface> managerOrProxy(NetworkSession& networkSession, NetworkProcess& networkProcess, const NetworkSessionCreationParameters& parameters)
 {
     if (!parameters.pcmMachServiceName.isEmpty())
-        return makeUniqueRef<PCM::ManagerProxy>(parameters.pcmMachServiceName);
+        return makeUniqueRef<PCM::ManagerProxy>(parameters.pcmMachServiceName, networkSession);
     return makeUniqueRef<PrivateClickMeasurementManager>(makeUniqueRef<PCM::ClientImpl>(networkSession, networkProcess), pcmStoreDirectory(networkSession, parameters.resourceLoadStatisticsParameters.directory, parameters.resourceLoadStatisticsParameters.privateClickMeasurementStorageDirectory));
 }
 
@@ -115,9 +118,14 @@ NetworkSession::NetworkSession(NetworkProcess& networkProcess, const NetworkSess
     , m_standaloneApplicationDomain(parameters.resourceLoadStatisticsParameters.standaloneApplicationDomain)
 #endif
     , m_privateClickMeasurement(managerOrProxy(*this, networkProcess, parameters))
+    , m_privateClickMeasurementDebugModeEnabled(parameters.enablePrivateClickMeasurementDebugMode)
     , m_broadcastChannelRegistry(makeUniqueRef<NetworkBroadcastChannelRegistry>())
     , m_testSpeedMultiplier(parameters.testSpeedMultiplier)
     , m_allowsServerPreconnect(parameters.allowsServerPreconnect)
+    , m_shouldRunServiceWorkersOnMainThreadForTesting(parameters.shouldRunServiceWorkersOnMainThreadForTesting)
+#if ENABLE(BUILT_IN_NOTIFICATIONS)
+    , m_notificationManager(*this, parameters.webPushMachServiceName)
+#endif
 {
     if (!m_sessionID.isEphemeral()) {
         String networkCacheDirectory = parameters.networkCacheDirectory;
@@ -149,6 +157,10 @@ NetworkSession::NetworkSession(NetworkProcess& networkProcess, const NetworkSess
 #if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
     setResourceLoadStatisticsEnabled(parameters.resourceLoadStatisticsParameters.enabled);
 #endif
+
+#if ENABLE(BUILT_IN_NOTIFICATIONS)
+    m_networkProcess->addMessageReceiver(Messages::NotificationManagerMessageHandler::messageReceiverName(), m_sessionID.toUInt64(), m_notificationManager);
+#endif
 }
 
 NetworkSession::~NetworkSession()
@@ -158,6 +170,10 @@ NetworkSession::~NetworkSession()
 #endif
     for (auto& loader : std::exchange(m_keptAliveLoads, { }))
         loader->abort();
+
+#if ENABLE(BUILT_IN_NOTIFICATIONS)
+    m_networkProcess->removeMessageReceiver(Messages::NotificationManagerMessageHandler::messageReceiverName(), m_sessionID.toUInt64());
+#endif
 }
 
 #if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
@@ -318,12 +334,45 @@ void NetworkSession::resetCNAMEDomainData()
 
 void NetworkSession::storePrivateClickMeasurement(WebCore::PrivateClickMeasurement&& unattributedPrivateClickMeasurement)
 {
-    privateClickMeasurement().storeUnattributed(WTFMove(unattributedPrivateClickMeasurement));
+    if (m_isRunningEphemeralMeasurementTest)
+        unattributedPrivateClickMeasurement.setEphemeral(PrivateClickMeasurement::AttributionEphemeral::Yes);
+    if (unattributedPrivateClickMeasurement.isEphemeral()) {
+        m_ephemeralMeasurement = WTFMove(unattributedPrivateClickMeasurement);
+        return;
+    }
+    privateClickMeasurement().storeUnattributed(WTFMove(unattributedPrivateClickMeasurement), [] { });
 }
 
-void NetworkSession::handlePrivateClickMeasurementConversion(PrivateClickMeasurement::AttributionTriggerData&& attributionTriggerData, const URL& requestURL, const WebCore::ResourceRequest& redirectRequest)
+void NetworkSession::handlePrivateClickMeasurementConversion(PrivateClickMeasurement::AttributionTriggerData&& attributionTriggerData, const URL& requestURL, const WebCore::ResourceRequest& redirectRequest, String&& attributedBundleIdentifier)
 {
-    privateClickMeasurement().handleAttribution(WTFMove(attributionTriggerData), requestURL, RegistrableDomain(redirectRequest.url()), redirectRequest.firstPartyForCookies());
+    String appBundleID = WTFMove(attributedBundleIdentifier);
+#if PLATFORM(COCOA)
+    if (appBundleID.isEmpty())
+        appBundleID = WebCore::applicationBundleIdentifier();
+#endif
+
+    if (m_ephemeralMeasurement) {
+        auto ephemeralMeasurement = *std::exchange(m_ephemeralMeasurement, std::nullopt);
+
+        auto redirectDomain = RegistrableDomain(redirectRequest.url());
+        auto firstPartyForCookies = redirectRequest.firstPartyForCookies();
+
+        // Ephemeral measurement can only have one pending click.
+        if (ephemeralMeasurement.sourceSite().registrableDomain != redirectDomain)
+            return;
+        if (ephemeralMeasurement.destinationSite().registrableDomain != RegistrableDomain(firstPartyForCookies))
+            return;
+
+        // Insert ephemeral measurement right before attribution.
+        privateClickMeasurement().storeUnattributed(WTFMove(ephemeralMeasurement), [this, weakThis = WeakPtr { *this }, attributionTriggerData = WTFMove(attributionTriggerData), requestURL, redirectDomain = WTFMove(redirectDomain), firstPartyForCookies = WTFMove(firstPartyForCookies), appBundleID = WTFMove(appBundleID)] () mutable {
+            if (!weakThis)
+                return;
+            privateClickMeasurement().handleAttribution(WTFMove(attributionTriggerData), requestURL, WTFMove(redirectDomain), firstPartyForCookies, appBundleID);
+        });
+        return;
+    }
+
+    privateClickMeasurement().handleAttribution(WTFMove(attributionTriggerData), requestURL, RegistrableDomain(redirectRequest.url()), redirectRequest.firstPartyForCookies(), appBundleID);
 }
 
 void NetworkSession::dumpPrivateClickMeasurement(CompletionHandler<void(String)>&& completionHandler)
@@ -334,6 +383,8 @@ void NetworkSession::dumpPrivateClickMeasurement(CompletionHandler<void(String)>
 void NetworkSession::clearPrivateClickMeasurement(CompletionHandler<void()>&& completionHandler)
 {
     privateClickMeasurement().clear(WTFMove(completionHandler));
+    m_ephemeralMeasurement = std::nullopt;
+    m_isRunningEphemeralMeasurementTest = false;
 }
 
 void NetworkSession::clearPrivateClickMeasurementForRegistrableDomain(WebCore::RegistrableDomain&& domain, CompletionHandler<void()>&& completionHandler)
@@ -373,13 +424,22 @@ void NetworkSession::markPrivateClickMeasurementsAsExpiredForTesting()
 
 void NetworkSession::setPrivateClickMeasurementEphemeralMeasurementForTesting(bool value)
 {
-    privateClickMeasurement().setEphemeralMeasurementForTesting(value);
+    m_isRunningEphemeralMeasurementTest = value;
 }
 
 // FIXME: Switch to non-mocked test data once the right cryptography library is available in open source.
 void NetworkSession::setPCMFraudPreventionValuesForTesting(String&& unlinkableToken, String&& secretToken, String&& signature, String&& keyID)
 {
     privateClickMeasurement().setPCMFraudPreventionValuesForTesting(WTFMove(unlinkableToken), WTFMove(secretToken), WTFMove(signature), WTFMove(keyID));
+}
+
+void NetworkSession::setPrivateClickMeasurementDebugMode(bool enabled)
+{
+    if (m_privateClickMeasurementDebugModeEnabled == enabled)
+        return;
+
+    m_privateClickMeasurementDebugModeEnabled = enabled;
+    m_privateClickMeasurement->setDebugModeIsEnabled(enabled);
 }
 
 void NetworkSession::firePrivateClickMeasurementTimerImmediatelyForTesting()
@@ -390,6 +450,17 @@ void NetworkSession::firePrivateClickMeasurementTimerImmediatelyForTesting()
 void NetworkSession::allowTLSCertificateChainForLocalPCMTesting(const WebCore::CertificateInfo& certificateInfo)
 {
     privateClickMeasurement().allowTLSCertificateChainForLocalPCMTesting(certificateInfo);
+}
+
+void NetworkSession::setPrivateClickMeasurementAppBundleIDForTesting(String&& appBundleIDForTesting)
+{
+#if PLATFORM(COCOA)
+    auto appBundleID = WebCore::applicationBundleIdentifier();
+    if (!isRunningTest(appBundleID))
+        WTFLogAlways("isRunningTest() returned false. appBundleID is %s.", appBundleID.isEmpty() ? "empty" : appBundleID.utf8().data());
+    RELEASE_ASSERT(isRunningTest(WebCore::applicationBundleIdentifier()));
+#endif
+    privateClickMeasurement().setPrivateClickMeasurementAppBundleIDForTesting(WTFMove(appBundleIDForTesting));
 }
 
 void NetworkSession::addKeptAliveLoad(Ref<NetworkResourceLoader>&& loader)

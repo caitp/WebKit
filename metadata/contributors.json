@@ -1,8 +1,10 @@
 [
    {
       "emails" : [
-         "aakash_jain@apple.com"
+         "aakash_jain@apple.com",
+         "aj355@cornell.edu"
       ],
+      "github" : "aakashja",
       "name" : "Aakash Jain",
       "nicks" : [
          "aakash_jain"
@@ -164,11 +166,12 @@
          "akeerthi@apple.com",
          "pxlcoder@gmail.com"
       ],
+      "github" : "pxlcoder",
       "name" : "Aditya Keerthi",
       "nicks" : [
          "akeerthi"
       ],
-      "status" : "committer"
+      "status" : "reviewer"
    },
    {
       "emails" : [
@@ -181,6 +184,7 @@
       "emails" : [
          "aperez@igalia.com"
       ],
+      "github" : "aperezdc",
       "name" : "Adrian Perez de Castro",
       "nicks" : [
          "aperezdc"
@@ -229,6 +233,7 @@
       "emails" : [
          "alancoon@apple.com"
       ],
+      "github" : "alancoon",
       "name" : "Alan Coon",
       "nicks" : [
          "alancoon"
@@ -263,6 +268,7 @@
          "berto@igalia.com",
          "agarcia@igalia.com"
       ],
+      "github" : "bertogg",
       "name" : "Alberto Garcia",
       "nicks" : [
          "bertogg",
@@ -400,6 +406,7 @@
          "ap@webkit.org",
          "ap@apple.com"
       ],
+      "github" : "aproskuryakov",
       "name" : "Alexey Proskuryakov",
       "nicks" : [
          "ap"
@@ -408,11 +415,14 @@
    },
    {
       "emails" : [
+         "ashvayka@apple.com",
          "shvaikalesh@gmail.com"
       ],
       "expertise" : "JavaScript/ECMAScript, JavaScript DOM Bindings",
+      "github" : "shvaikalesh",
       "name" : "Alexey Shvayka",
       "nicks" : [
+         "ashvayka",
          "shvaikalesh"
       ],
       "status" : "reviewer"
@@ -434,6 +444,7 @@
       "emails" : [
          "ajuma@chromium.org"
       ],
+      "github" : "alijuma",
       "name" : "Ali Juma",
       "nicks" : [
          "ajuma"
@@ -614,11 +625,12 @@
          "andresg_22@apple.com"
       ],
       "expertise" : "Accessibility",
+      "github" : "AndresGonzalezApple",
       "name" : "Andres Gonzalez",
       "nicks" : [
          "andresg"
       ],
-      "status" : "committer"
+      "status" : "reviewer"
    },
    {
       "emails" : [
@@ -721,6 +733,7 @@
          "angelos@igalia.com"
       ],
       "expertise" : "JavaScriptCore",
+      "github" : "aoikonomopoulos",
       "name" : "Angelos Oikonomopoulos",
       "nicks" : [
          "angelos"
@@ -778,6 +791,7 @@
          "graouts@webkit.org",
          "graouts@apple.com"
       ],
+      "github" : "graouts",
       "name" : "Antoine Quint",
       "nicks" : [
          "graouts"
@@ -841,6 +855,7 @@
          "antti.j.koivisto@nokia.com"
       ],
       "expertise" : "HTML DOM, Core DOM, Loader, Cache, CSS OM, style resolve, performance",
+      "github" : "anttijk",
       "name" : "Antti Koivisto",
       "nicks" : [
          "anttik"
@@ -924,6 +939,7 @@
          "burg@cs.washington.edu"
       ],
       "expertise" : "Developer Tools, Web Inspector, WebDriver, Cocoa API",
+      "github" : "burg",
       "name" : "BJ Burg",
       "nicks" : [
          "bburg",
@@ -964,6 +980,7 @@
       "emails" : [
          "basuke.suzuki@sony.com"
       ],
+      "github" : "basuke",
       "name" : "Basuke Suzuki",
       "nicks" : [
          "basuke"
@@ -1072,6 +1089,7 @@
          "bdakin@apple.com"
       ],
       "expertise" : "CSS (Cascading Style Sheets), Layout and Rendering, Resolution-Independence, HTML Parsing, Tables, Web Accessibility",
+      "github" : "dethbakin",
       "name" : "Beth Dakin",
       "nicks" : [
          "dethbakin"
@@ -1093,6 +1111,7 @@
          "beidson@apple.com"
       ],
       "expertise" : "Networking, Storage, WebCore icon database, Back/forward cache, History",
+      "github" : "beidson",
       "name" : "Brady Eidson",
       "nicks" : [
          "bradee-oh"
@@ -1219,6 +1238,7 @@
       "emails" : [
          "caitp@igalia.com"
       ],
+      "github" : "caitp",
       "name" : "Caitlin Potter",
       "nicks" : [
          "caitp"
@@ -1231,6 +1251,7 @@
          "cam@mcc.id.au",
          "cam@webkit.org"
       ],
+      "github" : "heycam",
       "name" : "Cameron McCormack",
       "nicks" : [
          "heycam"
@@ -1273,7 +1294,8 @@
          "carlosgc@gnome.org",
          "carlosgc@webkit.org"
       ],
-      "expertise" : "The WebKitGTK Port, WebKit2, Glib unicode backend, GTK contributor, Epiphany contributor",
+      "expertise" : "WebKitGTK, WPE, WebDriver, networking",
+      "github" : "carlosgcampos",
       "name" : "Carlos Garcia Campos",
       "nicks" : [
          "KaL"
@@ -1384,6 +1406,7 @@
          "christophe.dumez@intel.com"
       ],
       "expertise" : "Performance, DOM, HTML, Bindings generator, EFLWebKit Port",
+      "github" : "cdumez",
       "name" : "Chris Dumez",
       "nicks" : [
          "cdumez"
@@ -1403,6 +1426,7 @@
          "cfleizach@apple.com"
       ],
       "expertise" : "Accessibility",
+      "github" : "fleizach",
       "name" : "Chris Fleizach",
       "nicks" : [
          "cfleizach"
@@ -1512,6 +1536,7 @@
          "chris.reid@sony.com",
          "christopher.reid@am.sony.com"
       ],
+      "github" : "c29reid",
       "name" : "Christopher Reid",
       "nicks" : [
          "creid"
@@ -1523,6 +1548,7 @@
          "csaavedra@igalia.com"
       ],
       "expertise" : "WebKitGTK port, Epiphany developer, HTML Editing",
+      "github" : "csaavedra",
       "name" : "Claudio Saavedra",
       "nicks" : [
          "claudio___"
@@ -1662,6 +1688,7 @@
          "darin@apple.com"
       ],
       "expertise" : "HTML Forms, WebKit API (Mac, Win), HTML Editing, Performance, JavaScript/ECMAScript, Text Encoding, Core DOM, HTML DOM, Canvas, JavaScript DOM Bindings, ObjC DOM Bindings, Basic types and data structures, Tools, New Features / Standards Support, General (probably a good backup on most topics even if not specifically an expert)",
+      "github" : "darinadler",
       "name" : "Darin Adler",
       "nicks" : [
          "darin"
@@ -1782,6 +1809,7 @@
          "ddkilzer@apple.com"
       ],
       "expertise" : "iPhone port, Xcode build system, Tools, Perl, git, WebArchive",
+      "github" : "ddkilzer",
       "name" : "David Kilzer",
       "nicks" : [
          "ddkilzer"
@@ -1870,7 +1898,8 @@
          "dcrousso@apple.com",
          "webkit@devinrousso.com"
       ],
-      "expertise" : "Web Inspector",
+      "expertise" : "Web Inspector, Media Controls, Payment Request",
+      "github" : "dcrousso",
       "name" : "Devin Rousso",
       "nicks" : [
          "drousso",
@@ -1883,6 +1912,7 @@
          "dewei_zhu@apple.com"
       ],
       "expertise" : "Performance, Tools",
+      "github" : "dewei-zhu",
       "name" : "Dewei Zhu",
       "nicks" : [
          "Dewei"
@@ -1913,6 +1943,7 @@
       "emails" : [
          "dpino@igalia.com"
       ],
+      "github" : "dpino",
       "name" : "Diego Pino Garcia",
       "nicks" : [
          "dpino"
@@ -2058,6 +2089,7 @@
          "don.olmstead@sony.com",
          "don.olmstead@am.sony.com"
       ],
+      "github" : "donny-dont",
       "name" : "Don Olmstead",
       "nicks" : [
          "dolmstead"
@@ -2197,6 +2229,7 @@
       "emails" : [
          "emilio@crisal.io"
       ],
+      "github" : "emilio",
       "name" : "Emilio Cobos Alvarez",
       "nicks" : [
          "emilio",
@@ -2220,6 +2253,7 @@
          "eocanha@gmail.com"
       ],
       "expertise" : "GStreamer, Media Source Extensions",
+      "github" : "eocanha",
       "name" : "Enrique Oca\u00f1a Gonz\u00e1lez",
       "nicks" : [
          "eocanha"
@@ -2231,6 +2265,7 @@
          "eric.carlson@apple.com"
       ],
       "expertise" : "HTML5 Media Elements",
+      "github" : "eric-carlson",
       "name" : "Eric Carlson",
       "nicks" : [
          "eric_carlson"
@@ -2409,6 +2444,12 @@
    },
    {
       "emails" : [
+         "fgriessh@adobe.com"
+      ],
+      "name" : "Frank Grie\u00dfhammer"
+   },
+   {
+      "emails" : [
          "fred.wang@free.fr",
          "fwang@igalia.com"
       ],
@@ -2423,6 +2464,7 @@
          "Hironori.Fujii@sony.com",
          "fujii.hironori@gmail.com"
       ],
+      "github" : "fujii",
       "name" : "Fujii Hironori",
       "nicks" : [
          "fujihiro"
@@ -2616,6 +2658,7 @@
          "guijemont@igalia.com"
       ],
       "expertise" : "JavaScriptCore",
+      "github" : "guijemont",
       "name" : "Guillaume Emont",
       "nicks" : [
          "guijemont"
@@ -3173,6 +3216,7 @@
          "jean-yves.avenard@apple.com",
          "jya@apple.com"
       ],
+      "github" : "jyavenard",
       "name" : "Jean-Yves Avenard",
       "nicks" : [
          "jya"
@@ -3529,6 +3573,7 @@
          "jbedard@webkit.org"
       ],
       "expertise" : "webkitpy, Python, testing",
+      "github" : "JonWBedard",
       "name" : "Jonathan Bedard",
       "nicks" : [
          "jbedard",
@@ -3588,6 +3633,7 @@
          "jh718.park@gmail.com",
          "pjh0718@gmail.com"
       ],
+      "github" : "joonghunpark",
       "name" : "Joonghun Park",
       "nicks" : [
          "joonghunpark"
@@ -3900,7 +3946,8 @@
          "kbr@google.com",
          "kbr@chromium.org"
       ],
-      "expertise" : " WebGL (Chromium and Safari ports), Canvas",
+      "expertise" : " WebGL (Chromium and Safari ports), ANGLE, Canvas",
+      "github" : "kenrussell",
       "name" : "Kenneth Russell",
       "nicks" : [
          "kbr_google",
@@ -3996,7 +4043,7 @@
       "nicks" : [
          "kimmok"
       ],
-      "status" : "committer"
+      "status" : "reviewer"
    },
    {
       "emails" : [
@@ -4020,6 +4067,7 @@
       "emails" : [
          "kocsen_chung@apple.com"
       ],
+      "github" : "kocsenc",
       "name" : "Kocsen Chung",
       "status" : "committer"
    },
@@ -4359,7 +4407,8 @@
       "emails" : [
          "rego@igalia.com"
       ],
-      "expertise" : "Layout, CSS, Selection, WebKitGTK port",
+      "expertise" : "Layout, CSS",
+      "github" : "mrego",
       "name" : "Manuel Rego Casasnovas",
       "nicks" : [
          "rego",
@@ -4463,6 +4512,7 @@
          "martin.james.robinson@gmail.com"
       ],
       "expertise" : "The WebKitGTK port, scroll snap, position:sticky",
+      "github" : "mrobinson",
       "name" : "Martin Robinson",
       "nicks" : [
          "mrobinson"
@@ -4527,6 +4577,7 @@
       "emails" : [
          "jlewis3@apple.com"
       ],
+      "github" : "rancored-mongoose",
       "name" : "Matt Lewis",
       "nicks" : [
          "mattlewis"
@@ -4627,6 +4678,7 @@
          "mcatanzaro@igalia.com"
       ],
       "expertise" : "The WebKitGTK Port, Epiphany, Soup HTTP Backend",
+      "github" : "mcatanzaro",
       "name" : "Michael Catanzaro",
       "nicks" : [
          "mcatanzaro"
@@ -4686,7 +4738,8 @@
       "emails" : [
          "magomez@igalia.com"
       ],
-      "expertise" : "The WebKitGTK port, Accelerated Compositing, HW acceleration",
+      "expertise" : "WebKitGTK, WPE, Accelerated Compositing, HW acceleration",
+      "github" : "magomez",
       "name" : "Miguel Gomez",
       "nicks" : [
          "magomez"
@@ -4823,6 +4876,7 @@
          "Ms2ger@igalia.com",
          "Ms2ger@gmail.com"
       ],
+      "github" : "Ms2ger",
       "name" : "Ms2ger",
       "nicks" : [
          "Ms2ger"
@@ -4837,6 +4891,7 @@
          "mmaxfield@apple.com"
       ],
       "expertise" : "Text layout and rendering",
+      "github" : "litherum",
       "name" : "Myles C. Maxfield",
       "nicks" : [
          "litherum"
@@ -4998,7 +5053,8 @@
          "noam@webkit.org",
          "noam.rosenthal@nokia.com"
       ],
-      "expertise" : "TextureMapper, coordinated graphics, images",
+      "expertise" : "TextureMapper, coordinated graphics, images, paint timing API",
+      "github" : "noamr",
       "name" : "Noam Rosenthal",
       "nicks" : [
          "noamr"
@@ -5050,6 +5106,7 @@
       "emails" : [
          "obrufau@igalia.com"
       ],
+      "github" : "Loirooriol",
       "name" : "Oriol Brufau",
       "nicks" : [
          "obrufau"
@@ -5070,6 +5127,7 @@
       "emails" : [
          "psaavedra@igalia.com"
       ],
+      "github" : "psaavedra",
       "name" : "Pablo Saavedra",
       "nicks" : [
          "psaavedra"
@@ -5112,6 +5170,7 @@
       "emails" : [
          "pgriffis@igalia.com"
       ],
+      "github" : "TingPing",
       "name" : "Patrick Griffis",
       "nicks" : [
          "pgriffis",
@@ -5262,7 +5321,8 @@
          "philn@webkit.org",
          "philn@igalia.com"
       ],
-      "expertise" : "WebKitGTK, Media support (focused on the GStreamer implementation)",
+      "expertise" : "WebKitGTK, WPE, Media support (focused on the GStreamer implementation)",
+      "github" : "philn",
       "name" : "Philippe Normand",
       "nicks" : [
          "philn"
@@ -5483,6 +5543,7 @@
          "rbuis@rim.com"
       ],
       "expertise" : "KDE contributor, The QtWebKit Port, SVG (Scalable Vector Graphics)",
+      "github" : "rwlbuis",
       "name" : "Rob Buis",
       "nicks" : [
          "rwlbuis"
@@ -5504,6 +5565,7 @@
       "emails" : [
          "jenner@apple.com"
       ],
+      "github" : "robert-jenner",
       "name" : "Robert Jenner",
       "status" : "committer"
    },
@@ -5564,14 +5626,28 @@
    },
    {
       "emails" : [
-         "ross.kirsling@sony.com"
+         "ross.kirsling@sony.com",
+         "rkirsling@gmail.com"
       ],
       "expertise" : "JavaScript/ECMAScript, PlayStation port, WinCairo port",
+      "github" : "rkirsling",
       "name" : "Ross Kirsling",
       "nicks" : [
          "rkirsling"
       ],
       "status" : "reviewer"
+   },
+   {
+      "emails" : [
+         "rreapor@apple.com",
+         "roynos@gmail.com"
+      ],
+      "github" : "roynos",
+      "name" : "Roy Reapor",
+      "nicks" : [
+         "rreapor",
+         "roynos"
+      ]
    },
    {
       "emails" : [
@@ -5601,6 +5677,7 @@
       "emails" : [
          "ryanhaddad@apple.com"
       ],
+      "github" : "ryanhaddad",
       "name" : "Ryan Haddad",
       "nicks" : [
          "ryanhaddad"
@@ -5612,6 +5689,7 @@
          "rniwa@webkit.org"
       ],
       "expertise" : "HTML Editing, Core DOM, HTML DOM, Event Handling",
+      "github" : "rniwa",
       "name" : "Ryosuke Niwa",
       "nicks" : [
          "rniwa"
@@ -5670,6 +5748,7 @@
          "me@gsnedders.com"
       ],
       "expertise" : "Web Standards, WPT, webkitpy",
+      "github" : "gsnedders",
       "name" : "Sam Sneddon",
       "nicks" : [
          "gsnedders"
@@ -5682,6 +5761,7 @@
          "weinig@apple.com"
       ],
       "expertise" : "HTML DOM, Core DOM, DOM Bindings (JavaScript, Objective-C and COM), Security, DumpRenderTree",
+      "github" : "weinig",
       "name" : "Sam Weinig",
       "nicks" : [
          "weinig"
@@ -5781,7 +5861,8 @@
          "svillar@igalia.com",
          "sergio@webkit.org"
       ],
-      "expertise" : "WebKitGTK port, WebKit2, CSS Grid Layout, libsoup",
+      "expertise" : "WebKitGTK port, CSS Grid Layout, Flexbox",
+      "github" : "svillar",
       "name" : "Sergio Villar Senin",
       "nicks" : [
          "svillar"
@@ -5869,6 +5950,7 @@
          "simon.fraser@apple.com"
       ],
       "expertise" : "Accelerated Compositing, Transitions and Animations, CSS Transforms",
+      "github" : "smfr",
       "name" : "Simon Fraser",
       "nicks" : [
          "smfr"
@@ -5902,6 +5984,7 @@
       "emails" : [
          "stephan.szabo@sony.com"
       ],
+      "github" : "foopoiuyt",
       "name" : "Stephan Szabo",
       "nicks" : [
          "szabos1"
@@ -5910,9 +5993,11 @@
    },
    {
       "emails" : [
-         "slewis@apple.com"
+         "slewis@apple.com",
+         "stephanielewis@gmail.com"
       ],
       "expertise" : "Performance Testing, Tools",
+      "github" : "sundiamonde",
       "name" : "Stephanie Lewis",
       "nicks" : [
          "sundiamonde"
@@ -6044,6 +6129,7 @@
       "emails" : [
          "Takashi.Komori@sony.com"
       ],
+      "github" : "tKnmori",
       "name" : "Takashi Komori",
       "nicks" : [
          "takashi_knmori_j"
@@ -6103,6 +6189,7 @@
       "emails" : [
          "tetsuharu.ohzeki@gmail.com"
       ],
+      "github" : "tetsuharuohzeki",
       "name" : "Tetsuharu Ohzeki",
       "nicks" : [
          "tetsuharuohzeki"
@@ -6110,13 +6197,14 @@
    },
    {
       "aliases" : [
-         "Edward O'Connor",
-         "Ted O'Connor",
          "Tess O'Connor"
       ],
       "emails" : [
-         "eoconnor@apple.com"
+         "eoconnor@apple.com",
+         "hober@apple.com"
       ],
+      "expertise" : "Web Standards",
+      "github" : "hober",
       "name" : "Theresa O'Connor",
       "nicks" : [
          "hober"
@@ -6215,6 +6303,7 @@
          "timothy_horton@apple.com"
       ],
       "expertise" : "SVG/Canvas/Graphics, WebKit2",
+      "github" : "hortont424",
       "name" : "Tim Horton",
       "nicks" : [
          "thorton"
@@ -6226,6 +6315,7 @@
          "ntim@apple.com",
          "ntim.bugs@gmail.com"
       ],
+      "github" : "nt1m",
       "name" : "Tim Nguyen",
       "nicks" : [
          "ntim"
@@ -6305,6 +6395,7 @@
       "emails" : [
          "Tomoki.Imai@sony.com"
       ],
+      "github" : "tomoki",
       "name" : "Tomoki Imai",
       "nicks" : [
          "tomoki_imai"
@@ -6378,6 +6469,21 @@
    },
    {
       "emails" : [
+         "tyler.wilcock@protonmail.com",
+         "twilco.o@protonmail.com",
+         "tyler.l.wilcock@gmail.com",
+         "tyler_w@apple.com",
+         "tylerw_22@apple.com"
+      ],
+      "expertise" : "Accessibility",
+      "github" : "twilco",
+      "name" : "Tyler Wilcock",
+      "nicks" : [
+         "twilco"
+      ]
+   },
+   {
+      "emails" : [
          "ich@liebefonts.com"
       ],
       "name" : "Ulrike Rausch"
@@ -6423,6 +6529,8 @@
       "emails" : [
          "vjaquez@igalia.com"
       ],
+      "expertise" : "WebKitGTK, WPE, GStreamer",
+      "github" : "ceyusa",
       "name" : "Victor Jaquez",
       "nicks" : [
          "vjaquez",
@@ -6580,7 +6688,8 @@
          "calvaris@igalia.com",
          "xrcalvar@igalia.com"
       ],
-      "expertise" : "WebKitGTK, GStreamer, Streams API",
+      "expertise" : "WebKitGTK, WPE, GStreamer",
+      "github" : "calvaris",
       "name" : "Xabier Rodriguez-Calvar",
       "nicks" : [
          "calvaris"
@@ -6590,11 +6699,12 @@
    {
       "emails" : [
          "xan.lopez@gmail.com",
-         "xan@gnome.org",
+         "xan@igalia.com",
          "xan@webkit.org",
          "xlopez@igalia.com"
       ],
-      "expertise" : "WebKitGTK, Soup HTTP Backend, libsoup Contributor, WebKit a11y (focused on the ATK implementation), Epiphany/WebKit maintainer",
+      "expertise" : "JSC, WebKitGTK/WPE",
+      "github" : "xanlpz",
       "name" : "Xan Lopez",
       "nicks" : [
          "xan"
@@ -6705,6 +6815,7 @@
       "emails" : [
          "yoshiaki.jitsukawa@sony.com"
       ],
+      "github" : "unicodon",
       "name" : "Yoshiaki Jitsukawa",
       "nicks" : [
          "yjitsukawa"
@@ -6727,6 +6838,7 @@
          "youenn@apple.com",
          "yfablet@apple.com"
       ],
+      "github" : "youennf",
       "name" : "Youenn Fablet",
       "nicks" : [
          "youenn"
@@ -6737,6 +6849,7 @@
       "emails" : [
          "yousuke.kimoto@sony.com"
       ],
+      "github" : "ykimot",
       "name" : "Yousuke Kimoto",
       "nicks" : [
          "ykimoto"
@@ -6768,6 +6881,7 @@
          "utatane.tea@gmail.com"
       ],
       "expertise" : "JIT Compilers, CSS JIT, JavaScript/ECMAScript",
+      "github" : "Constellation",
       "name" : "Yusuke Suzuki",
       "nicks" : [
          "yusukesuzuki"
@@ -6904,6 +7018,7 @@
          "zan@falconsigh.net",
          "zandobersek@gmail.com"
       ],
+      "github" : "zdobersek",
       "name" : "\u017dan Dober\u0161ek",
       "nicks" : [
          "zdobersek"

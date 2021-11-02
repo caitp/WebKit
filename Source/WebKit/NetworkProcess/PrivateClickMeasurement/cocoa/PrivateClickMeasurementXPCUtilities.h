@@ -25,14 +25,11 @@
 
 #pragma once
 
+#include <wtf/Vector.h>
 #include <wtf/spi/darwin/XPCSPI.h>
 
-namespace WebKit {
-
-namespace PCM {
+namespace WebKit::PCM {
 
 void addVersionAndEncodedMessageToDictionary(Vector<uint8_t>&&, xpc_object_t);
 
-} // namespace PCM
-
-} // namespace WebKit
+} // namespace WebKit::PCM

@@ -69,15 +69,21 @@ public:
     bool operator!() const { return m_gpr == InvalidGPRReg; }
     explicit operator bool() const { return m_gpr != InvalidGPRReg; }
 
-    bool operator==(JSValueRegs other) { return m_gpr == other.m_gpr; }
-    bool operator!=(JSValueRegs other) { return !(*this == other); }
+    constexpr bool operator==(JSValueRegs other) const { return m_gpr == other.m_gpr; }
+    constexpr bool operator!=(JSValueRegs other) const { return !(*this == other); }
     
     GPRReg gpr() const { return m_gpr; }
-    GPRReg tagGPR() const { return InvalidGPRReg; }
-    GPRReg payloadGPR() const { return m_gpr; }
+    constexpr GPRReg tagGPR() const { return InvalidGPRReg; }
+    constexpr GPRReg payloadGPR() const { return m_gpr; }
     
-    bool uses(GPRReg gpr) const { return m_gpr == gpr; }
-    
+    constexpr bool uses(GPRReg gpr) const
+    {
+        if (gpr == InvalidGPRReg)
+            return false;
+        return m_gpr == gpr;
+    }
+    constexpr bool overlaps(JSValueRegs other) const { return uses(other.payloadGPR()); }
+
     void dump(PrintStream&) const;
     
 private:
@@ -166,7 +172,7 @@ public:
     {
     }
     
-    JSValueRegs(GPRReg tagGPR, GPRReg payloadGPR)
+    constexpr JSValueRegs(GPRReg tagGPR, GPRReg payloadGPR)
         : m_tagGPR(tagGPR)
         , m_payloadGPR(payloadGPR)
     {
@@ -177,7 +183,7 @@ public:
         return JSValueRegs(gpr1, gpr2);
     }
     
-    static JSValueRegs payloadOnly(GPRReg gpr)
+    static constexpr JSValueRegs payloadOnly(GPRReg gpr)
     {
         return JSValueRegs(InvalidGPRReg, gpr);
     }
@@ -189,15 +195,15 @@ public:
             || static_cast<GPRReg>(m_payloadGPR) != InvalidGPRReg;
     }
 
-    bool operator==(JSValueRegs other) const
+    constexpr bool operator==(JSValueRegs other) const
     {
         return m_tagGPR == other.m_tagGPR
             && m_payloadGPR == other.m_payloadGPR;
     }
-    bool operator!=(JSValueRegs other) const { return !(*this == other); }
+    constexpr bool operator!=(JSValueRegs other) const { return !(*this == other); }
     
-    GPRReg tagGPR() const { return m_tagGPR; }
-    GPRReg payloadGPR() const { return m_payloadGPR; }
+    constexpr GPRReg tagGPR() const { return m_tagGPR; }
+    constexpr GPRReg payloadGPR() const { return m_payloadGPR; }
     GPRReg gpr(WhichValueWord which) const
     {
         switch (which) {
@@ -210,8 +216,17 @@ public:
         return tagGPR();
     }
 
-    bool uses(GPRReg gpr) const { return m_tagGPR == gpr || m_payloadGPR == gpr; }
-    
+    constexpr bool uses(GPRReg gpr) const
+    {
+        if (gpr == InvalidGPRReg)
+            return false;
+        return m_tagGPR == gpr || m_payloadGPR == gpr;
+    }
+    constexpr bool overlaps(JSValueRegs other) const
+    {
+        return uses(other.payloadGPR()) || uses(other.tagGPR());
+    }
+
     void dump(PrintStream&) const;
     
 private:
@@ -538,7 +553,7 @@ public:
 class GPRInfo {
 public:
     typedef GPRReg RegisterType;
-    static constexpr unsigned numberOfRegisters = 9;
+    static constexpr unsigned numberOfRegisters = 10;
     static constexpr unsigned numberOfArgumentRegisters = NUMBER_OF_ARGUMENT_REGISTERS;
 
     // Temporary registers.
@@ -567,7 +582,7 @@ public:
     static GPRReg toRegister(unsigned index)
     {
         ASSERT(index < numberOfRegisters);
-        static const GPRReg registerForIndex[numberOfRegisters] = { regT0, regT1, regT2, regT3, regT4, regT5, regT6, regT7, regCS1 };
+        static const GPRReg registerForIndex[numberOfRegisters] = { regT0, regT1, regT2, regT3, regT4, regT5, regT6, regT7, regCS0, regCS1 };
         return registerForIndex[index];
     }
 
@@ -583,7 +598,7 @@ public:
         ASSERT(reg != InvalidGPRReg);
         ASSERT(static_cast<int>(reg) < 16);
         static const unsigned indexForRegister[16] =
-            { 0, 1, 2, 3, 7, 6, InvalidIndex, InvalidIndex, 4, 5, 8, InvalidIndex, InvalidIndex, InvalidIndex, InvalidIndex, InvalidIndex };
+            { 0, 1, 2, 3, 7, 6, InvalidIndex, InvalidIndex, 4, 5, 9, 8, InvalidIndex, InvalidIndex, InvalidIndex, InvalidIndex };
         unsigned result = indexForRegister[reg];
         return result;
     }

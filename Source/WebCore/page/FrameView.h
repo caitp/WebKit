@@ -128,7 +128,7 @@ public:
     FrameViewLayoutContext& layoutContext() { return m_layoutContext; }
 
     WEBCORE_EXPORT bool didFirstLayout() const;
-    void queuePostLayoutCallback(WTF::Function<void ()>&&);
+    void queuePostLayoutCallback(Function<void()>&&);
 
     WEBCORE_EXPORT bool needsLayout() const;
     WEBCORE_EXPORT void setNeedsLayoutAfterViewConfigurationChange();
@@ -228,9 +228,17 @@ public:
 
     WEBCORE_EXPORT void adjustViewSize();
 
-    WEBCORE_EXPORT void setViewportSizeForCSSViewportUnits(IntSize);
-    void clearViewportSizeOverrideForCSSViewportUnits();
-    IntSize viewportSizeForCSSViewportUnits() const;
+    WEBCORE_EXPORT void setSizeForCSSSmallViewportUnits(IntSize);
+    void clearSizeOverrideForCSSSmallViewportUnits();
+    IntSize sizeForCSSSmallViewportUnits() const;
+
+    WEBCORE_EXPORT void setSizeForCSSLargeViewportUnits(IntSize);
+    void clearSizeOverrideForCSSLargeViewportUnits();
+    IntSize sizeForCSSLargeViewportUnits() const;
+
+    IntSize sizeForCSSDynamicViewportUnits() const;
+
+    IntSize sizeForCSSDefaultViewportUnits() const;
 
     IntRect windowClipRect() const final;
     WEBCORE_EXPORT IntRect windowClipRectForFrameOwner(const HTMLFrameOwnerElement*, bool clipToLayerContents) const;
@@ -246,7 +254,11 @@ public:
     void scrollToFocusedElementImmediatelyIfNeeded();
     void updateLayerPositionsAfterScrolling() final;
     void updateCompositingLayersAfterScrolling() final;
+
     bool requestScrollPositionUpdate(const ScrollPosition&, ScrollType = ScrollType::User, ScrollClamping = ScrollClamping::Clamped) final;
+    bool requestAnimatedScrollToPosition(const ScrollPosition&, ScrollClamping = ScrollClamping::Clamped) final;
+    void stopAsyncAnimatedScroll() final;
+
     bool isUserScrollInProgress() const final;
     bool isRubberBandInProgress() const final;
     WEBCORE_EXPORT ScrollPosition minimumScrollPosition() const final;
@@ -538,7 +550,7 @@ public:
     bool shouldSetCursor() const;
 
     WEBCORE_EXPORT bool useDarkAppearance() const final;
-    OptionSet<StyleColor::Options> styleColorOptions() const;
+    OptionSet<StyleColorOptions> styleColorOptions() const;
 
     // FIXME: Remove this method once plugin loading is decoupled from layout.
     void flushAnyPendingPostLayoutTasks();
@@ -683,6 +695,8 @@ public:
 
     String debugDescription() const final;
 
+    void willBeDestroyed() final;
+
     // ScrollView
     void updateScrollbarSteps() override;
 
@@ -740,7 +754,7 @@ private:
     void performFixedWidthAutoSize();
     void performSizeToContentAutoSize();
 
-    void applyRecursivelyWithVisibleRect(const WTF::Function<void (FrameView& frameView, const IntRect& visibleRect)>&);
+    void applyRecursivelyWithVisibleRect(const Function<void(FrameView& frameView, const IntRect& visibleRect)>&);
     void resumeVisibleImageAnimations(const IntRect& visibleRect);
     void updateScriptedAnimationsAndTimersThrottlingState(const IntRect& visibleRect);
 
@@ -848,9 +862,15 @@ private:
 
         bool operator==(const OverrideViewportSize& rhs) const { return rhs.width == width && rhs.height == height; }
     };
-    void overrideViewportSizeForCSSViewportUnits(OverrideViewportSize);
-    void overrideViewportWidthForCSSViewportUnits(int);
-    void resetOverriddenViewportWidthForCSSViewportUnits();
+    IntSize calculateSizeForCSSViewportUnitsOverride(std::optional<OverrideViewportSize>) const;
+
+    void overrideSizeForCSSSmallViewportUnits(OverrideViewportSize);
+    void overrideWidthForCSSSmallViewportUnits(int);
+    void resetOverriddenWidthForCSSSmallViewportUnits();
+
+    void overrideSizeForCSSLargeViewportUnits(OverrideViewportSize);
+    void overrideWidthForCSSLargeViewportUnits(int);
+    void resetOverriddenWidthForCSSLargeViewportUnits();
 
     void didFinishProhibitingScrollingWhenChangingContentSize() final;
 
@@ -895,7 +915,7 @@ private:
     Vector<FloatRect> m_trackedRepaintRects;
     
     IntRect* m_cachedWindowClipRect { nullptr };
-    Vector<WTF::Function<void ()>> m_postLayoutCallbackQueue;
+    Vector<Function<void()>> m_postLayoutCallbackQueue;
 
     LayoutPoint m_layoutViewportOrigin;
     std::optional<LayoutRect> m_layoutViewportOverrideRect;
@@ -919,7 +939,8 @@ private:
     std::optional<IntSize> m_customSizeForResizeEvent;
 #endif
 
-    std::optional<OverrideViewportSize> m_overrideViewportSize;
+    std::optional<OverrideViewportSize> m_smallViewportSizeOverride;
+    std::optional<OverrideViewportSize> m_largeViewportSizeOverride;
 
     // The view size when autosizing.
     IntSize m_autoSizeConstraint;
@@ -955,7 +976,7 @@ private:
 
     bool m_isTransparent { false };
 #if ENABLE(DARK_MODE_CSS)
-    OptionSet<StyleColor::Options> m_styleColorOptions;
+    OptionSet<StyleColorOptions> m_styleColorOptions;
 #endif
 
     bool m_isTrackingRepaints { false }; // Used for testing.

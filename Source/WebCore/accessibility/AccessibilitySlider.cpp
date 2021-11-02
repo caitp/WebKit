@@ -86,9 +86,9 @@ AccessibilityOrientation AccessibilitySlider::orientation() const
     
 void AccessibilitySlider::addChildren()
 {
-    ASSERT(!m_haveChildren); 
+    ASSERT(!m_childrenInitialized); 
     
-    m_haveChildren = true;
+    m_childrenInitialized = true;
 
     AXObjectCache* cache = m_renderer->document().axObjectCache();
 
@@ -100,7 +100,7 @@ void AccessibilitySlider::addChildren()
     if (thumb.accessibilityIsIgnored())
         cache->remove(thumb.objectID());
     else
-        m_children.append(&thumb);
+        addChild(&thumb);
 }
 
 const AtomString& AccessibilitySlider::getAttribute(const QualifiedName& attribute) const

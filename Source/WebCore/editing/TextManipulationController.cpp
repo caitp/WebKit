@@ -51,7 +51,7 @@ namespace WebCore {
 
 inline bool TextManipulationController::ExclusionRule::match(const Element& element) const
 {
-    return switchOn(rule, [&element] (ElementRule rule) {
+    return WTF::switchOn(rule, [&element] (ElementRule rule) {
         return rule.localName == element.localName();
     }, [&element] (AttributeRule rule) {
         return equalIgnoringASCIICase(element.getAttribute(rule.name), rule.value);
@@ -117,7 +117,7 @@ private:
 };
 
 TextManipulationController::TextManipulationController(Document& document)
-    : m_document(makeWeakPtr(document))
+    : m_document(document)
 {
 }
 
@@ -388,13 +388,13 @@ void TextManipulationController::parse(ManipulationUnit& unit, const String& tex
 {
     ExclusionRuleMatcher exclusionRuleMatcher(m_exclusionRules);
     bool isNodeExcluded = exclusionRuleMatcher.isExcluded(&textNode) || shouldExcludeNodeBasedOnStyle(textNode);
-    size_t positionOfLastNonHTMLSpace = WTF::notFound;
+    size_t positionOfLastNonHTMLSpace = notFound;
     size_t startPositionOfCurrentToken = 0;
     size_t index = 0;
     for (; index < text.length(); ++index) {
         auto character = text[index];
         if (isTokenDelimiter(character)) {
-            if (positionOfLastNonHTMLSpace != WTF::notFound && startPositionOfCurrentToken <= positionOfLastNonHTMLSpace) {
+            if (positionOfLastNonHTMLSpace != notFound && startPositionOfCurrentToken <= positionOfLastNonHTMLSpace) {
                 auto stringForToken = text.substring(startPositionOfCurrentToken, positionOfLastNonHTMLSpace + 1 - startPositionOfCurrentToken);
                 unit.tokens.append(ManipulationToken { m_tokenIdentifier.generate(), stringForToken, tokenInfo(&textNode), isNodeExcluded });
                 startPositionOfCurrentToken = positionOfLastNonHTMLSpace + 1;
@@ -483,19 +483,19 @@ void TextManipulationController::observeParagraphs(const Position& start, const 
         if (is<Element>(*contentNode)) {
             auto& currentElement = downcast<Element>(*contentNode);
             if (!content.isTextContent && canPerformTextManipulationByReplacingEntireTextContent(currentElement))
-                addItem(ManipulationItemData { Position(), Position(), makeWeakPtr(currentElement), nullQName(), { ManipulationToken { m_tokenIdentifier.generate(), currentElement.textContent(), tokenInfo(&currentElement) } } });
+                addItem(ManipulationItemData { Position(), Position(), currentElement, nullQName(), { ManipulationToken { m_tokenIdentifier.generate(), currentElement.textContent(), tokenInfo(&currentElement) } } });
 
             if (currentElement.hasAttributes()) {
                 for (auto& attribute : currentElement.attributesIterator()) {
                     if (isAttributeForTextManipulation(attribute.name()))
-                        addItem(ManipulationItemData { Position(), Position(), makeWeakPtr(currentElement), attribute.name(), { ManipulationToken { m_tokenIdentifier.generate(), attribute.value(), tokenInfo(&currentElement) } } });
+                        addItem(ManipulationItemData { Position(), Position(), currentElement, attribute.name(), { ManipulationToken { m_tokenIdentifier.generate(), attribute.value(), tokenInfo(&currentElement) } } });
                 }
             }
 
             if (is<HTMLInputElement>(currentElement)) {
                 auto& input = downcast<HTMLInputElement>(currentElement);
                 if (shouldExtractValueForTextManipulation(input))
-                    addItem(ManipulationItemData { { }, { }, makeWeakPtr(currentElement), HTMLNames::valueAttr, { ManipulationToken { m_tokenIdentifier.generate(), input.value(), tokenInfo(&currentElement) } } });
+                    addItem(ManipulationItemData { { }, { }, currentElement, HTMLNames::valueAttr, { ManipulationToken { m_tokenIdentifier.generate(), input.value(), tokenInfo(&currentElement) } } });
             }
 
             if (isEnclosingItemBoundaryElement(currentElement)) {
@@ -574,7 +574,7 @@ void TextManipulationController::scheduleObservationUpdate()
 
     m_didScheduleObservationUpdate = true;
 
-    m_document->eventLoop().queueTask(TaskSource::InternalAsyncTask, [weakThis = makeWeakPtr(*this)] {
+    m_document->eventLoop().queueTask(TaskSource::InternalAsyncTask, [weakThis = WeakPtr { *this }] {
         auto* controller = weakThis.get();
         if (!controller)
             return;
@@ -620,7 +620,7 @@ void TextManipulationController::scheduleObservationUpdate()
         controller->observeParagraphs(start, end);
 
         if (controller->m_items.isEmpty() && commonAncestor) {
-            controller->m_manipulatedNodes.add(commonAncestor.get());
+            controller->m_manipulatedNodes.add(*commonAncestor);
             return;
         }
 

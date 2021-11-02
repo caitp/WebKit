@@ -1,3 +1,4 @@
 partial interface WorkletGlobalScope {
+    attribute ExposedStarConstructor ExposedStar;
     attribute WorkletGlobalScopeConstructor WorkletGlobalScope;
 };

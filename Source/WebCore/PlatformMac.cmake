@@ -55,8 +55,6 @@ list(APPEND WebCore_LIBRARIES
     ${SYSTEMCONFIGURATION_LIBRARY}
     ${VIDEOTOOLBOX_LIBRARY}
     ${XML2_LIBRARY}
-    WTF
-    bmalloc
     opus
     usrsctp
     vpx
@@ -89,18 +87,17 @@ list(APPEND WebCore_PRIVATE_INCLUDE_DIRECTORIES
     "${CMAKE_BINARY_DIR}/libwebrtc/PrivateHeaders"
     "${CMAKE_SOURCE_DIR}/Source/ThirdParty/libwebrtc/Source"
     "${WEBCORE_DIR}/Modules/webauthn/apdu"
-    "${WEBCORE_DIR}/Modules/webgpu/WHLSL/Metal"
     "${WEBCORE_DIR}/accessibility/isolatedtree/mac"
     "${WEBCORE_DIR}/accessibility/mac"
     "${WEBCORE_DIR}/bridge/objc"
     "${WEBCORE_DIR}/crypto/mac"
     "${WEBCORE_DIR}/editing/cocoa"
-    "${WEBCORE_DIR}/editing/ios"
     "${WEBCORE_DIR}/editing/mac"
     "${WEBCORE_DIR}/html/shadow/cocoa"
     "${WEBCORE_DIR}/layout/tableformatting"
     "${WEBCORE_DIR}/loader/archive/cf"
     "${WEBCORE_DIR}/loader/cf"
+    "${WEBCORE_DIR}/loader/cocoa"
     "${WEBCORE_DIR}/loader/mac"
     "${WEBCORE_DIR}/page/cocoa"
     "${WEBCORE_DIR}/page/mac"
@@ -135,7 +132,6 @@ list(APPEND WebCore_PRIVATE_INCLUDE_DIRECTORIES
     "${WEBCORE_DIR}/platform/mediastream/mac"
     "${WEBCORE_DIR}/platform/network/cocoa"
     "${WEBCORE_DIR}/platform/network/cf"
-    "${WEBCORE_DIR}/platform/network/ios"
     "${WEBCORE_DIR}/platform/network/mac"
     "${WEBCORE_DIR}/platform/text/cf"
     "${WEBCORE_DIR}/platform/text/cocoa"
@@ -143,7 +139,6 @@ list(APPEND WebCore_PRIVATE_INCLUDE_DIRECTORIES
     "${WEBCORE_DIR}/platform/spi/cf"
     "${WEBCORE_DIR}/platform/spi/cg"
     "${WEBCORE_DIR}/platform/spi/cocoa"
-    "${WEBCORE_DIR}/platform/spi/ios"
     "${WEBCORE_DIR}/platform/spi/mac"
     "${WEBCORE_DIR}/plugins/mac"
     "${WebCore_PRIVATE_FRAMEWORK_HEADERS_DIR}"
@@ -186,6 +181,8 @@ list(APPEND WebCore_SOURCES
     editing/mac/UniversalAccessZoom.mm
 
     html/HTMLSlotElement.cpp
+
+    loader/cocoa/PrivateClickMeasurementCocoa.mm
 
     page/PageDebuggable.cpp
 
@@ -332,6 +329,7 @@ list(APPEND WebCore_SOURCES
     platform/graphics/cocoa/WebCoreDecompressionSession.mm
     platform/graphics/cocoa/WebGLLayer.mm
     platform/graphics/cocoa/WebMAudioUtilitiesCocoa.mm
+    platform/graphics/cocoa/WebProcessGraphicsContextGLOpenGLCocoa.mm
 
     platform/graphics/coretext/FontCascadeCoreText.cpp
     platform/graphics/coretext/FontCoreText.cpp
@@ -528,6 +526,8 @@ list(APPEND WebCore_PRIVATE_FRAMEWORK_HEADERS
 
     loader/archive/cf/LegacyWebArchive.h
 
+    loader/cache/CachedRawResource.h
+
     loader/mac/LoaderNSURLExtras.h
 
     Modules/webauthn/AuthenticatorAssertionResponse.h
@@ -551,8 +551,9 @@ list(APPEND WebCore_PRIVATE_FRAMEWORK_HEADERS
     page/scrolling/cocoa/ScrollingTreeFixedNode.h
     page/scrolling/cocoa/ScrollingTreeOverflowScrollProxyNode.h
     page/scrolling/cocoa/ScrollingTreePositionedNode.h
-    page/scrolling/cocoa/ScrollingTreeStickyNode.h
+    page/scrolling/cocoa/ScrollingTreeStickyNodeCocoa.h
 
+    page/scrolling/mac/ScrollingCoordinatorMac.h
     page/scrolling/mac/ScrollingTreeFrameScrollingNodeMac.h
     page/scrolling/mac/ScrollingTreeOverflowScrollingNodeMac.h
     page/scrolling/mac/ScrollingTreeScrollingNodeDelegateMac.h
@@ -577,8 +578,6 @@ list(APPEND WebCore_PRIVATE_FRAMEWORK_HEADERS
     platform/audio/cocoa/CARingBuffer.h
     platform/audio/cocoa/MediaSessionManagerCocoa.h
     platform/audio/cocoa/WebAudioBufferList.h
-
-    platform/audio/ios/MediaSessionManagerIOS.h
 
     platform/audio/mac/SharedRoutingArbitrator.h
 
@@ -614,7 +613,7 @@ list(APPEND WebCore_PRIVATE_FRAMEWORK_HEADERS
     platform/graphics/MIMETypeCache.h
     platform/graphics/Model.h
 
-    platform/graphics/angle/GraphicsContextGLANGLEEGLUtilities.h
+    platform/graphics/angle/ANGLEUtilities.h
 
     platform/graphics/avfoundation/AudioSourceProviderAVFObjC.h
     platform/graphics/avfoundation/MediaPlaybackTargetCocoa.h
@@ -660,6 +659,7 @@ list(APPEND WebCore_PRIVATE_FRAMEWORK_HEADERS
     platform/graphics/cocoa/VP9UtilitiesCocoa.h
     platform/graphics/cocoa/WebActionDisablingCALayerDelegate.h
     platform/graphics/cocoa/WebCoreCALayerExtras.h
+    platform/graphics/cocoa/WebGLLayer.h
     platform/graphics/cocoa/WebMAudioUtilitiesCocoa.h
 
     platform/graphics/cv/CVUtilities.h
@@ -673,13 +673,6 @@ list(APPEND WebCore_PRIVATE_FRAMEWORK_HEADERS
     platform/graphics/mac/ScopedHighPerformanceGPURequest.h
     platform/graphics/mac/SwitchingGPUClient.h
     platform/graphics/mac/WebLayer.h
-
-    platform/ios/LocalizedDeviceModel.h
-    platform/ios/PlaybackSessionInterfaceAVKit.h
-    platform/ios/WebAVPlayerController.h
-
-    platform/ios/wak/FloatingPointEnvironment.h
-    platform/ios/wak/WebCoreThreadRun.h
 
     platform/mac/DynamicLinkerInterposing.h
     platform/mac/HIDDevice.h
@@ -937,8 +930,6 @@ list(APPEND WebCoreTestSupport_IDL_FILES
     testing/MockPaymentError.idl
     testing/MockWebAuthenticationConfiguration.idl
 )
-
-set(CMAKE_SHARED_LINKER_FLAGS ${CMAKE_SHARED_LINKER_FLAGS} "-compatibility_version 1 -current_version ${WEBKIT_MAC_VERSION} -force_load ${CMAKE_BINARY_DIR}/lib/libPAL.a")
 
 if (NOT EXISTS ${CMAKE_BINARY_DIR}/WebCore/WebKitAvailability.h)
     file(COPY platform/cocoa/WebKitAvailability.h DESTINATION ${CMAKE_BINARY_DIR}/WebCore)

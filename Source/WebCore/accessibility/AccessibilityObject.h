@@ -263,7 +263,7 @@ public:
     String validationMessage() const override;
 
     unsigned blockquoteLevel() const override;
-    int headingLevel() const override { return 0; }
+    unsigned headingLevel() const override { return 0; }
     AccessibilityButtonState checkboxOrRadioValue() const override;
     String valueDescription() const override { return String(); }
     float valueForRange() const override { return 0.0f; }
@@ -373,6 +373,8 @@ public:
     bool ariaRoleHasPresentationalChildren() const override { return false; }
     bool inheritsPresentationalRole() const override { return false; }
 
+    AXValue value() override;
+
     // Accessibility Text
     void accessibilityText(Vector<AccessibilityText>&) const override { };
     // A single method for getting a computed label for an AXObject. It condenses the nuances of accessibilityText. Used by Inspector.
@@ -440,13 +442,16 @@ public:
     String selectedText() const override { return String(); }
     String accessKey() const override { return nullAtom(); }
     String actionVerb() const override;
+
+    bool isWidget() const override { return false; }
     Widget* widget() const override { return nullptr; }
     PlatformWidget platformWidget() const override { return nullptr; }
+    Widget* widgetForAttachmentView() const override { return nullptr; }
+
 #if PLATFORM(COCOA)
     RemoteAXObjectRef remoteParentObject() const override;
     FloatRect convertRectToPlatformSpace(const FloatRect&, AccessibilityConversionSpace) const override;
 #endif
-    Widget* widgetForAttachmentView() const override { return nullptr; }
     Page* page() const override;
     Document* document() const override;
     FrameView* documentFrameView() const override;
@@ -482,15 +487,13 @@ public:
     void increment() override { }
     void decrement() override { }
 
-    void childrenChanged() override { }
-    void updateAccessibilityRole() override { }
+    virtual void updateAccessibilityRole() { }
     const AccessibilityChildrenVector& children(bool updateChildrenIfNeeded = true) override;
     void addChildren() override { }
-    void addChild(AXCoreObject*) override;
-    void insertChild(AXCoreObject*, unsigned) override;
+    void addChild(AXCoreObject*, DescendIfIgnored = DescendIfIgnored::Yes) override;
+    void insertChild(AXCoreObject*, unsigned, DescendIfIgnored = DescendIfIgnored::Yes) override;
 
     bool canHaveChildren() const override { return true; }
-    bool hasChildren() const override { return m_haveChildren; }
     void updateChildrenIfNecessary() override;
     void setNeedsToUpdateChildren() override { }
     void setNeedsToUpdateSubtree() override { }
@@ -638,15 +641,14 @@ public:
 
     bool scrollByPage(ScrollByPageDirection) const override;
     IntPoint scrollPosition() const override;
+    AccessibilityChildrenVector contents() override;
     IntSize scrollContentsSize() const override;
     IntRect scrollVisibleContentRect() const override;
     void scrollToMakeVisible(const ScrollRectToVisibleOptions&) const override;
 
-    bool lastKnownIsIgnoredValue() override;
-    void setLastKnownIsIgnoredValue(bool) override;
-
-    // Fires a children changed notification on the parent if the isIgnored value changed.
-    void notifyIfIgnoredValueChanged() override;
+    bool lastKnownIsIgnoredValue();
+    void setLastKnownIsIgnoredValue(bool);
+    bool hasIgnoredValueChanged();
 
     // All math elements return true for isMathElement().
     bool isMathElement() const override { return false; }
@@ -672,7 +674,7 @@ public:
     bool isMathMultiscriptObject(AccessibilityMathMultiscriptObjectType) const override { return false; }
 
     // Root components.
-    AXCoreObject* mathRadicandObject() override { return nullptr; }
+    std::optional<AccessibilityChildrenVector> mathRadicand() override { return std::nullopt; }
     AXCoreObject* mathRootIndexObject() override { return nullptr; }
 
     // Under over components.
@@ -755,7 +757,7 @@ public:
     void clearIsIgnoredFromParentData() override { m_isIgnoredFromParentData = { }; }
     void setIsIgnoredFromParentDataForChild(AXCoreObject*) override;
 
-    uint64_t sessionID() const override;
+    PAL::SessionID sessionID() const override;
     String documentURI() const override;
     String documentEncoding() const override;
     AccessibilityChildrenVector documentLinks() override { return AccessibilityChildrenVector(); }
@@ -804,8 +806,9 @@ private:
 
     AXID m_id { 0 };
 protected: // FIXME: Make the data members private.
+    bool childrenInitialized() const { return m_childrenInitialized; }
     AccessibilityChildrenVector m_children;
-    mutable bool m_haveChildren { false };
+    mutable bool m_childrenInitialized { false };
     AccessibilityRole m_role { AccessibilityRole::Unknown };
 private:
     AccessibilityObjectInclusion m_lastKnownIsIgnoredValue { AccessibilityObjectInclusion::DefaultBehavior };
@@ -827,12 +830,12 @@ inline void AccessibilityObject::updateBackingStore() { }
 inline void AccessibilityObject::detachPlatformWrapper(AccessibilityDetachmentType) { }
 #endif
 
-#if !(ENABLE(ACCESSIBILITY) && USE(ATK))
+#if !(ENABLE(ACCESSIBILITY) && (USE(ATK) || USE(ATSPI)))
 inline bool AccessibilityObject::allowsTextRanges() const { return true; }
 inline unsigned AccessibilityObject::getLengthForTextRange() const { return text().length(); }
 #endif
 
-AccessibilityObject* firstAccessibleObjectFromNode(const Node*, const WTF::Function<bool(const AccessibilityObject&)>& isAccessible);
+AccessibilityObject* firstAccessibleObjectFromNode(const Node*, const Function<bool(const AccessibilityObject&)>& isAccessible);
 
 namespace Accessibility {
 

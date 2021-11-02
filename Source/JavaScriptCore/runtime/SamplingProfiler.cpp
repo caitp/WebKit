@@ -918,7 +918,7 @@ unsigned SamplingProfiler::StackFrame::functionStartColumn()
     return std::numeric_limits<unsigned>::max();
 }
 
-intptr_t SamplingProfiler::StackFrame::sourceID()
+SourceID SamplingProfiler::StackFrame::sourceID()
 {
     switch (frameType) {
     case FrameType::Unknown:
@@ -1074,7 +1074,7 @@ void SamplingProfiler::reportTopFunctions(PrintStream& out)
             hash = stream.toString();
         } else
             hash = "<nil>"_s;
-        intptr_t sourceID = frame.sourceID();
+        SourceID sourceID = frame.sourceID();
         if (Options::samplingProfilerIgnoreExternalSourceID()) {
             if (sourceID != internalSourceID)
                 sourceID = aggregatedExternalSourceID;

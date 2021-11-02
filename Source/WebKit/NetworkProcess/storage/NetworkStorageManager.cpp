@@ -171,6 +171,14 @@ void NetworkStorageManager::fileSystemGetDirectory(IPC::Connection& connection, 
     completionHandler(localOriginStorageManager(origin).fileSystemStorageManager(*m_fileSystemStorageHandleRegistry).getDirectory(connection.uniqueID()));
 }
 
+void NetworkStorageManager::closeHandle(WebCore::FileSystemHandleIdentifier identifier)
+{
+    ASSERT(!RunLoop::isMain());
+
+    if (auto handle = m_fileSystemStorageHandleRegistry->getHandle(identifier))
+        handle->close();
+}
+
 void NetworkStorageManager::isSameEntry(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemHandleIdentifier targetIdentifier, CompletionHandler<void(bool)>&& completionHandler)
 {
     ASSERT(!RunLoop::isMain());
@@ -180,6 +188,17 @@ void NetworkStorageManager::isSameEntry(WebCore::FileSystemHandleIdentifier iden
         return completionHandler(false);
 
     completionHandler(handle->isSameEntry(targetIdentifier));
+}
+
+void NetworkStorageManager::move(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemHandleIdentifier destinationIdentifier, const String& newName, CompletionHandler<void(std::optional<FileSystemStorageError>)>&& completionHandler)
+{
+    ASSERT(!RunLoop::isMain());
+
+    auto handle = m_fileSystemStorageHandleRegistry->getHandle(identifier);
+    if (!handle)
+        return completionHandler(FileSystemStorageError::Unknown);
+
+    completionHandler(handle->move(destinationIdentifier, newName));
 }
 
 void NetworkStorageManager::getFileHandle(IPC::Connection& connection, WebCore::FileSystemHandleIdentifier identifier, String&& name, bool createIfNecessary, CompletionHandler<void(Expected<WebCore::FileSystemHandleIdentifier, FileSystemStorageError>)>&& completionHandler)
@@ -224,6 +243,83 @@ void NetworkStorageManager::resolve(WebCore::FileSystemHandleIdentifier identifi
         return completionHandler(makeUnexpected(FileSystemStorageError::Unknown));
 
     completionHandler(handle->resolve(targetIdentifier));
+}
+
+void NetworkStorageManager::createSyncAccessHandle(WebCore::FileSystemHandleIdentifier identifier, CompletionHandler<void(Expected<AccessHandleInfo, FileSystemStorageError>)>&& completionHandler)
+{
+    ASSERT(!RunLoop::isMain());
+
+    auto handle = m_fileSystemStorageHandleRegistry->getHandle(identifier);
+    if (!handle)
+        return completionHandler(makeUnexpected(FileSystemStorageError::Unknown));
+
+    completionHandler(handle->createSyncAccessHandle());
+}
+
+void NetworkStorageManager::getSizeForAccessHandle(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemSyncAccessHandleIdentifier accessHandleIdentifier, CompletionHandler<void(Expected<uint64_t, FileSystemStorageError>)>&& completionHandler)
+{
+    ASSERT(!RunLoop::isMain());
+
+    auto handle = m_fileSystemStorageHandleRegistry->getHandle(identifier);
+    if (!handle)
+        return completionHandler(makeUnexpected(FileSystemStorageError::Unknown));
+
+    completionHandler(handle->getSize(accessHandleIdentifier));
+}
+
+void NetworkStorageManager::truncateForAccessHandle(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemSyncAccessHandleIdentifier accessHandleIdentifier, uint64_t size, CompletionHandler<void(std::optional<FileSystemStorageError>)>&& completionHandler)
+{
+    ASSERT(!RunLoop::isMain());
+
+    auto handle = m_fileSystemStorageHandleRegistry->getHandle(identifier);
+    if (!handle)
+        return completionHandler(FileSystemStorageError::Unknown);
+
+    completionHandler(handle->truncate(accessHandleIdentifier, size));
+}
+
+void NetworkStorageManager::flushForAccessHandle(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemSyncAccessHandleIdentifier accessHandleIdentifier, CompletionHandler<void(std::optional<FileSystemStorageError>)>&& completionHandler)
+{
+    ASSERT(!RunLoop::isMain());
+
+    auto handle = m_fileSystemStorageHandleRegistry->getHandle(identifier);
+    if (!handle)
+        return completionHandler(FileSystemStorageError::Unknown);
+
+    completionHandler(handle->flush(accessHandleIdentifier));
+}
+
+void NetworkStorageManager::closeAccessHandle(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemSyncAccessHandleIdentifier accessHandleIdentifier, CompletionHandler<void(std::optional<FileSystemStorageError>)>&& completionHandler)
+{
+    ASSERT(!RunLoop::isMain());
+
+    auto handle = m_fileSystemStorageHandleRegistry->getHandle(identifier);
+    if (!handle)
+        return completionHandler(FileSystemStorageError::Unknown);
+
+    completionHandler(handle->close(accessHandleIdentifier));
+}
+
+void NetworkStorageManager::getHandleNames(WebCore::FileSystemHandleIdentifier identifier, CompletionHandler<void(Expected<Vector<String>, FileSystemStorageError>)>&& completionHandler)
+{
+    ASSERT(!RunLoop::isMain());
+
+    auto handle = m_fileSystemStorageHandleRegistry->getHandle(identifier);
+    if (!handle)
+        return completionHandler(makeUnexpected(FileSystemStorageError::Unknown));
+
+    completionHandler(handle->getHandleNames());
+}
+
+void NetworkStorageManager::getHandle(IPC::Connection& connection, WebCore::FileSystemHandleIdentifier identifier, String&& name, CompletionHandler<void(Expected<std::pair<WebCore::FileSystemHandleIdentifier, bool>, FileSystemStorageError>)>&& completionHandler)
+{
+    ASSERT(!RunLoop::isMain());
+
+    auto handle = m_fileSystemStorageHandleRegistry->getHandle(identifier);
+    if (!handle)
+        return completionHandler(makeUnexpected(FileSystemStorageError::Unknown));
+
+    completionHandler(handle->getHandle(connection.uniqueID(), WTFMove(name)));
 }
 
 } // namespace WebKit

@@ -724,7 +724,7 @@ String CSSSelector::selectorText(const String& rightSide) const
                     if (!isFirst)
                         builder.append(' ');
                     isFirst = false;
-                    builder.append(partName);
+                    serializeIdentifier(partName, builder);
                 }
                 builder.append(')');
                 break;
@@ -822,6 +822,8 @@ String CSSSelector::selectorText(const String& rightSide) const
             FALLTHROUGH;
 #endif
         case CSSSelector::ShadowDescendant:
+        case CSSSelector::ShadowPartDescendant:
+        case CSSSelector::ShadowSlotted:
             builder.append(rightSide);
             return tagHistory->selectorText(builder.toString());
         }

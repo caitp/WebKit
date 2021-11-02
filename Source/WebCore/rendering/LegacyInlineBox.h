@@ -31,6 +31,7 @@
 namespace WebCore {
 
 class HitTestResult;
+class LegacyInlineFlowBox;
 class LegacyRootInlineBox;
 
 // LegacyInlineBox represents a rectangle that occurs on a line. It corresponds to
@@ -366,7 +367,7 @@ private:
 
 protected:
     explicit LegacyInlineBox(RenderObject& renderer)
-        : m_renderer(makeWeakPtr(renderer))
+        : m_renderer(renderer)
     {
     }
 
@@ -374,7 +375,7 @@ protected:
         : m_nextOnLine(next)
         , m_previousOnLine(previous)
         , m_parent(parent)
-        , m_renderer(makeWeakPtr(renderer))
+        , m_renderer(renderer)
         , m_logicalWidth(logicalWidth)
         , m_topLeft(topLeft)
         , m_bitfields(firstLine, constructed, dirty, extracted, isHorizontal)

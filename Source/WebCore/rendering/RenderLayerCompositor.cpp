@@ -249,7 +249,7 @@ public:
     void appendSharingLayer(RenderLayer& layer)
     {
         ASSERT(m_backingProviderCandidate);
-        m_backingSharingLayers.append(makeWeakPtr(layer));
+        m_backingSharingLayers.append(layer);
     }
 
     RenderLayer* updateBeforeDescendantTraversal(RenderLayer&, bool willBeComposited);
@@ -1758,18 +1758,6 @@ bool RenderLayerCompositor::needsCompositingUpdateForStyleChangeOnNonCompositedL
         return true;
 
     return false;
-}
-
-bool RenderLayerCompositor::canCompositeClipPath(const RenderLayer& layer)
-{
-    ASSERT(layer.isComposited());
-    ASSERT(layer.renderer().style().clipPath());
-
-    if (layer.renderer().hasMask())
-        return false;
-
-    auto& clipPath = *layer.renderer().style().clipPath();
-    return (clipPath.type() != ClipPathOperation::Shape || clipPath.type() == ClipPathOperation::Shape) && GraphicsLayer::supportsLayerType(GraphicsLayer::Type::Shape);
 }
 
 // FIXME: remove and never ask questions about reflection layers.
@@ -4256,6 +4244,9 @@ void RenderLayerCompositor::detachRootLayer()
     if (!m_rootContentsLayer || m_rootLayerAttachment == RootLayerUnattached)
         return;
 
+    if (auto* scrollingCoordinator = this->scrollingCoordinator())
+        scrollingCoordinator->frameViewWillBeDetached(m_renderView.frameView());
+
     switch (m_rootLayerAttachment) {
     case RootLayerAttachedViaEnclosingFrame: {
         // The layer will get unhooked up via RenderLayerBacking::updateConfiguration()
@@ -4269,13 +4260,19 @@ void RenderLayerCompositor::detachRootLayer()
             ownerElement->scheduleInvalidateStyleAndLayerComposition();
 
         if (auto frameRootScrollingNodeID = m_renderView.frameView().scrollingNodeID()) {
-            if (auto* scrollingCoordinator = this->scrollingCoordinator())
+            if (auto* scrollingCoordinator = this->scrollingCoordinator()) {
+                scrollingCoordinator->frameViewWillBeDetached(m_renderView.frameView());
                 scrollingCoordinator->unparentNode(frameRootScrollingNodeID);
+            }
         }
         break;
     }
     case RootLayerAttachedViaChromeClient: {
         auto& frame = m_renderView.frameView().frame();
+
+        if (auto* scrollingCoordinator = this->scrollingCoordinator())
+            scrollingCoordinator->frameViewWillBeDetached(m_renderView.frameView());
+
         page().chrome().client().attachRootGraphicsLayer(frame, nullptr);
     }
     break;
@@ -4474,7 +4471,7 @@ ScrollingNodeID RenderLayerCompositor::attachScrollingNode(RenderLayer& layer, S
         m_clipLayer->setScrollingNodeID(nodeID);
 #endif
 
-    m_scrollingNodeToLayerMap.add(nodeID, makeWeakPtr(layer));
+    m_scrollingNodeToLayerMap.add(nodeID, layer);
 
     return nodeID;
 }

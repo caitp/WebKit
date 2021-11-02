@@ -25,7 +25,7 @@
 #pragma once
 
 #include "FloatRect.h"
-#include "LayoutIntegrationRunIterator.h"
+#include "InlineIteratorTextBox.h"
 #include "RenderObject.h"
 #include "TextBoxSelectableRange.h"
 #include "TextRun.h"
@@ -50,6 +50,8 @@ public:
 #if ENABLE(LAYOUT_FORMATTING_CONTEXT)
     TextBoxPainter(const LayoutIntegration::InlineContent&, const InlineDisplay::Box&, PaintInfo&, const LayoutPoint& paintOffset);
 #endif
+    TextBoxPainter(const InlineIterator::TextBoxIterator&, PaintInfo&, const LayoutPoint& paintOffset);
+
     ~TextBoxPainter();
 
     void paint();
@@ -57,8 +59,6 @@ public:
     static FloatRect calculateUnionOfAllDocumentMarkerBounds(const LegacyInlineTextBox&);
 
 private:
-    TextBoxPainter(LayoutIntegration::TextRunIterator&&, PaintInfo&, const LayoutPoint& paintOffset);
-
     auto& textBox() const { return *m_textBox; }
 
     void paintBackground();
@@ -75,7 +75,7 @@ private:
     void paintCompositionUnderline(const CompositionUnderline&);
     void paintPlatformDocumentMarker(const MarkedText&);
 
-    static FloatRect calculateDocumentMarkerBounds(const LayoutIntegration::TextRunIterator&, const MarkedText&);
+    static FloatRect calculateDocumentMarkerBounds(const InlineIterator::TextBoxIterator&, const MarkedText&);
 
     FloatRect computePaintRect(const LayoutPoint& paintOffset);
     bool computeHaveSelection() const;
@@ -85,7 +85,7 @@ private:
 
     const ShadowData* debugTextShadow() const;
 
-    const LayoutIntegration::TextRunIterator m_textBox;
+    const InlineIterator::TextBoxIterator m_textBox;
     const RenderText& m_renderer;
     const Document& m_document;
     const RenderStyle& m_style;

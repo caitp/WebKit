@@ -792,7 +792,7 @@ bool DocumentLoader::tryLoadingSubstituteData()
     if (!m_deferMainResourceDataLoad || frameLoader()->loadsSynchronously())
         handleSubstituteDataLoadNow();
     else {
-        auto loadData = [this, weakDataLoadToken = makeWeakPtr(m_dataLoadToken)] {
+        auto loadData = [this, weakDataLoadToken = WeakPtr { m_dataLoadToken }] {
             if (!weakDataLoadToken)
                 return;
             m_dataLoadToken.clear();
@@ -1254,7 +1254,7 @@ void DocumentLoader::commitData(const uint8_t* bytes, size_t length)
                     document.setActiveServiceWorker(parent->activeServiceWorker());
             }
 
-            if (m_frame->document()->activeServiceWorker() || document.url().protocolIsInHTTPFamily())
+            if (m_frame->document()->activeServiceWorker() || document.url().protocolIsInHTTPFamily() || (document.page() && document.page()->isServiceWorkerPage()))
                 document.setServiceWorkerConnection(&ServiceWorkerProvider::singleton().serviceWorkerConnection());
 
             // We currently unregister the temporary service worker client since we now registered the real document.
@@ -1280,17 +1280,17 @@ void DocumentLoader::commitData(const uint8_t* bytes, size_t length)
             }
         }
 
-        bool userChosen;
+        DocumentWriter::IsEncodingUserChosen userChosen;
         String encoding;
         if (overrideEncoding().isNull()) {
-            userChosen = false;
+            userChosen = DocumentWriter::IsEncodingUserChosen::No;
             encoding = response().textEncodingName();
 #if ENABLE(WEB_ARCHIVE) || ENABLE(MHTML)
             if (m_archive && m_archive->shouldUseMainResourceEncoding())
                 encoding = m_archive->mainResource()->textEncoding();
 #endif
         } else {
-            userChosen = true;
+            userChosen = DocumentWriter::IsEncodingUserChosen::Yes;
             encoding = overrideEncoding();
         }
 
@@ -2338,10 +2338,8 @@ ShouldOpenExternalURLsPolicy DocumentLoader::shouldOpenExternalURLsPolicyToPropa
     if (m_frame->isMainFrame())
         return m_shouldOpenExternalURLsPolicy;
 
-    if (auto* currentDocument = document()) {
-        if (currentDocument->securityOrigin().isSameOriginAs(currentDocument->topOrigin()))
-            return m_shouldOpenExternalURLsPolicy;
-    }
+    if (document() && document()->isSameOriginAsTopDocument())
+        return m_shouldOpenExternalURLsPolicy;
 
     return ShouldOpenExternalURLsPolicy::ShouldNotAllow;
 }
@@ -2400,7 +2398,7 @@ void DocumentLoader::sendCSPViolationReport(URL&& reportURL, Ref<FormData>&& rep
     PingLoader::sendViolationReport(*m_frame, WTFMove(reportURL), WTFMove(report), ViolationReportType::ContentSecurityPolicy);
 }
 
-void DocumentLoader::enqueueSecurityPolicyViolationEvent(SecurityPolicyViolationEvent::Init&& eventInit)
+void DocumentLoader::enqueueSecurityPolicyViolationEvent(SecurityPolicyViolationEventInit&& eventInit)
 {
     m_frame->document()->enqueueSecurityPolicyViolationEvent(WTFMove(eventInit));
 }
@@ -2421,11 +2419,11 @@ void DocumentLoader::handleProvisionalLoadFailureFromContentFilter(const URL& bl
     frameLoader()->load(FrameLoadRequest(*frame(), blockedPageURL, substituteData));
 }
 
-ResourceError DocumentLoader::contentFilterDidBlock(ContentFilterUnblockHandler unblockHandler, WTF::String&& unblockRequestDeniedScript)
+ResourceError DocumentLoader::contentFilterDidBlock(ContentFilterUnblockHandler unblockHandler, String&& unblockRequestDeniedScript)
 {
     unblockHandler.setUnreachableURL(documentURL());
     if (!unblockRequestDeniedScript.isEmpty() && frame()) {
-        unblockHandler.wrapWithDecisionHandler([scriptController = makeWeakPtr(frame()->script()), script = unblockRequestDeniedScript.isolatedCopy()](bool unblocked) {
+        unblockHandler.wrapWithDecisionHandler([scriptController = WeakPtr { frame()->script() }, script = unblockRequestDeniedScript.isolatedCopy()](bool unblocked) {
             if (!unblocked && scriptController)
                 scriptController->executeScriptIgnoringException(script);
         });

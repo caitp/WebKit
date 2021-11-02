@@ -90,12 +90,14 @@ public:
     WEBCORE_EXPORT void postMessageToServiceWorker(ServiceWorkerIdentifier destination, MessageWithMessagePorts&&, ServiceWorkerOrClientData&& sourceData);
     WEBCORE_EXPORT void fireInstallEvent(ServiceWorkerIdentifier);
     WEBCORE_EXPORT void fireActivateEvent(ServiceWorkerIdentifier);
+    WEBCORE_EXPORT void firePushEvent(ServiceWorkerIdentifier, std::optional<Vector<uint8_t>>&&, CompletionHandler<void(bool)>&&);
+
     WEBCORE_EXPORT void terminateWorker(ServiceWorkerIdentifier, Seconds timeout, Function<void()>&&);
     WEBCORE_EXPORT void didSaveScriptsToDisk(ServiceWorkerIdentifier, ScriptBuffer&&, HashMap<URL, ScriptBuffer>&& importedScripts);
 
-    void forEachServiceWorkerThread(const WTF::Function<void(ServiceWorkerThreadProxy&)>&);
+    void forEachServiceWorkerThread(const Function<void(ServiceWorkerThreadProxy&)>&);
 
-    WEBCORE_EXPORT bool postTaskToServiceWorker(ServiceWorkerIdentifier, WTF::Function<void(ServiceWorkerGlobalScope&)>&&);
+    WEBCORE_EXPORT bool postTaskToServiceWorker(ServiceWorkerIdentifier, Function<void(ServiceWorkerGlobalScope&)>&&);
 
     using ServiceWorkerCreationCallback = void(uint64_t);
     void setServiceWorkerCreationCallback(ServiceWorkerCreationCallback* callback) { m_serviceWorkerCreationCallback = callback; }

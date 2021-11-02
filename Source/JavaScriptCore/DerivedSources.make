@@ -24,10 +24,13 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-PYTHON = python
-PERL = perl
-RUBY = ruby
-DELETE = rm -f
+# Workaround for rdar://84212106.
+find_tool = $(realpath $(shell xcrun --sdk $(SDK_NAME) -f $(1)))
+
+PYTHON := $(call find_tool,python3)
+PERL := perl
+RUBY := ruby
+DELETE := rm -f
 
 ifneq ($(SDKROOT),)
     SDK_FLAGS = -isysroot $(SDKROOT)
@@ -122,6 +125,7 @@ JavaScriptCore_BUILTINS_SOURCES = \
     ${JavaScriptCore}/builtins/RegExpStringIteratorPrototype.js \
     $(JavaScriptCore)/builtins/SetIteratorPrototype.js \
     $(JavaScriptCore)/builtins/SetPrototype.js \
+    $(JavaScriptCore)/builtins/ShadowRealmPrototype.js \
     $(JavaScriptCore)/builtins/StringConstructor.js \
     $(JavaScriptCore)/builtins/StringIteratorPrototype.js \
     $(JavaScriptCore)/builtins/StringPrototype.js \
@@ -187,6 +191,7 @@ OBJECT_LUT_HEADERS = \
     ReflectObject.lut.h \
     RegExpConstructor.lut.h \
     SetPrototype.lut.h \
+    ShadowRealmPrototype.lut.h \
     StringConstructor.lut.h \
     StringPrototype.lut.h \
     SymbolConstructor.lut.h \
@@ -203,6 +208,8 @@ OBJECT_LUT_HEADERS = \
     TemporalTimeZonePrototype.lut.h \
     WebAssemblyCompileErrorConstructor.lut.h \
     WebAssemblyCompileErrorPrototype.lut.h \
+    WebAssemblyExceptionConstructor.lut.h \
+    WebAssemblyExceptionPrototype.lut.h \
     WebAssemblyGlobalConstructor.lut.h \
     WebAssemblyGlobalPrototype.lut.h \
     WebAssemblyInstanceConstructor.lut.h \
@@ -217,6 +224,8 @@ OBJECT_LUT_HEADERS = \
     WebAssemblyRuntimeErrorPrototype.lut.h \
     WebAssemblyTableConstructor.lut.h \
     WebAssemblyTablePrototype.lut.h \
+    WebAssemblyTagConstructor.lut.h \
+    WebAssemblyTagPrototype.lut.h \
 #
 
 $(OBJECT_LUT_HEADERS): %.lut.h : %.cpp $(JavaScriptCore)/create_hash_table

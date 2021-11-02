@@ -26,7 +26,7 @@
 #include "config.h"
 #include "MediaRecorderPrivateAVFImpl.h"
 
-#if ENABLE(MEDIA_STREAM) && HAVE(AVASSETWRITERDELEGATE)
+#if ENABLE(MEDIA_STREAM)
 
 #include "AudioStreamDescription.h"
 #include "CAAudioStreamDescription.h"
@@ -119,7 +119,7 @@ void MediaRecorderPrivateAVFImpl::videoSampleAvailable(MediaSample& sampleBuffer
     m_writer->appendVideoSampleBuffer(sampleBuffer);
 }
 
-void MediaRecorderPrivateAVFImpl::audioSamplesAvailable(const WTF::MediaTime& mediaTime, const PlatformAudioData& data, const AudioStreamDescription& description, size_t sampleCount)
+void MediaRecorderPrivateAVFImpl::audioSamplesAvailable(const MediaTime& mediaTime, const PlatformAudioData& data, const AudioStreamDescription& description, size_t sampleCount)
 {
     ASSERT(is<WebAudioBufferList>(data));
     ASSERT(description.platformDescription().type == PlatformDescription::CAAudioStreamBasicType);
@@ -170,4 +170,4 @@ const String& MediaRecorderPrivateAVFImpl::mimeType() const
 
 } // namespace WebCore
 
-#endif // ENABLE(MEDIA_STREAM) && HAVE(AVASSETWRITERDELEGATE)
+#endif // ENABLE(MEDIA_STREAM)

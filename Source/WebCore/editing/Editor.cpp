@@ -46,6 +46,7 @@
 #include "DictationAlternative.h"
 #include "DictationCommand.h"
 #include "DocumentFragment.h"
+#include "DocumentInlines.h"
 #include "DocumentMarkerController.h"
 #include "Editing.h"
 #include "EditorClient.h"
@@ -2273,10 +2274,10 @@ void Editor::advanceToNextMisspelling(bool startBeforeSelection)
 
     if (unifiedTextCheckerEnabled()) {
         auto foundItem = TextCheckingHelper(*client(), spellingSearchRange).findFirstMisspelledWordOrUngrammaticalPhrase(isGrammarCheckingEnabled());
-        if (auto word = WTF::get_if<TextCheckingHelper::MisspelledWord>(foundItem))
+        if (auto* word = std::get_if<TextCheckingHelper::MisspelledWord>(&foundItem))
             misspelledWord = WTFMove(*word);
         else
-            ungrammaticalPhrase = WTF::get<TextCheckingHelper::UngrammaticalPhrase>(WTFMove(foundItem));
+            ungrammaticalPhrase = std::get<TextCheckingHelper::UngrammaticalPhrase>(WTFMove(foundItem));
     } else {
         misspelledWord = TextCheckingHelper(*client(), spellingSearchRange).findFirstMisspelledWord();
 
@@ -2300,10 +2301,10 @@ void Editor::advanceToNextMisspelling(bool startBeforeSelection)
         
         if (unifiedTextCheckerEnabled()) {
             auto foundItem = TextCheckingHelper(*client(), spellingSearchRange).findFirstMisspelledWordOrUngrammaticalPhrase(isGrammarCheckingEnabled());
-            if (auto word = WTF::get_if<TextCheckingHelper::MisspelledWord>(foundItem))
+            if (auto* word = std::get_if<TextCheckingHelper::MisspelledWord>(&foundItem))
                 misspelledWord = WTFMove(*word);
             else
-                ungrammaticalPhrase = WTF::get<TextCheckingHelper::UngrammaticalPhrase>(WTFMove(foundItem));
+                ungrammaticalPhrase = std::get<TextCheckingHelper::UngrammaticalPhrase>(WTFMove(foundItem));
         } else {
             misspelledWord = TextCheckingHelper(*client(), spellingSearchRange).findFirstMisspelledWord();
 
@@ -4009,7 +4010,7 @@ static Vector<TextList> editableTextListsAtPositionInDescendingOrder(const Posit
 FontAttributes Editor::fontAttributesAtSelectionStart()
 {
     RefPtr<Node> nodeToRemove;
-    auto nodeRemovalScope = WTF::makeScopeExit([&nodeToRemove]() {
+    auto nodeRemovalScope = makeScopeExit([&nodeToRemove]() {
         if (nodeToRemove)
             nodeToRemove->remove();
     });
@@ -4035,7 +4036,7 @@ FontAttributes Editor::fontAttributesAtSelectionStart()
         attributes.foregroundColor = foregroundColor;
 
     if (auto* shadowData = style->textShadow())
-        attributes.fontShadow = { shadowData->color(), { static_cast<float>(shadowData->x()), static_cast<float>(shadowData->y()) }, static_cast<double>(shadowData->radius()) };
+        attributes.fontShadow = { shadowData->color(), { shadowData->x().value(), shadowData->y().value() }, shadowData->radius().value() };
 
     switch (style->verticalAlign()) {
     case VerticalAlign::Baseline:

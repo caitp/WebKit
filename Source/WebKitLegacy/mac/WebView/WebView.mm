@@ -43,7 +43,6 @@
 #import "WebApplicationCacheInternal.h"
 #import "WebArchive.h"
 #import "WebBackForwardListInternal.h"
-#import "WebBaseNetscapePluginView.h"
 #import "WebBroadcastChannelRegistry.h"
 #import "WebCache.h"
 #import "WebChromeClient.h"
@@ -719,6 +718,10 @@ WebDragSourceAction kit(std::optional<WebCore::DragSourceAction> action)
     case WebCore::DragSourceAction::Color:
         break;
 #endif
+#if ENABLE(MODEL_ELEMENT)
+    case WebCore::DragSourceAction::Model:
+        break;
+#endif
     }
 
     ASSERT_NOT_REACHED();
@@ -878,7 +881,7 @@ private:
     }
 
     if (indicatorData.options.contains(WebCore::TextIndicatorOption::ComputeEstimatedBackgroundColor))
-        _estimatedBackgroundColor = [PAL::allocUIColorInstance() initWithCGColor:cachedCGColor(indicatorData.estimatedBackgroundColor)];
+        _estimatedBackgroundColor = cocoaColor(indicatorData.estimatedBackgroundColor).leakRef();
 
     return self;
 }
@@ -1242,7 +1245,7 @@ static const NSUInteger orderedListSegment = 2;
 - (void)_webChangeColor:(id)sender
 {
     _textColor = self.colorPickerItem.color;
-    [_webView _executeCoreCommandByName:@"ForeColor" value: WebCore::serializationForHTML(WebCore::colorFromNSColor(_textColor.get()))];
+    [_webView _executeCoreCommandByName:@"ForeColor" value:WebCore::serializationForHTML(WebCore::colorFromCocoaColor(_textColor.get()))];
 }
 
 - (NSViewController *)textListViewController
@@ -2986,6 +2989,7 @@ static bool needsSelfRetainWhileLoadingQuirk()
     }
     [WAKView _setInterpolationQuality:[preferences _interpolationQuality]];
 #endif
+    _private->page->settingsDidChange();
 }
 
 static inline IMP getMethod(id o, SEL s)
@@ -9237,7 +9241,7 @@ bool LayerFlushController::flushLayers()
     [self _devicePicker]->showPlaybackTargetPicker(contextId, rectInScreenCoordinates, hasVideo);
 }
 
-- (void)_playbackTargetPickerClientStateDidChange:(WebCore::PlaybackTargetClientContextIdentifier)contextId state:(WebCore::MediaProducer::MediaStateFlags)state
+- (void)_playbackTargetPickerClientStateDidChange:(WebCore::PlaybackTargetClientContextIdentifier)contextId state:(WebCore::MediaProducerMediaStateFlags)state
 {
     [self _devicePicker]->playbackTargetPickerClientStateDidChange(contextId, state);
 }
@@ -9506,7 +9510,7 @@ static NSTextAlignment nsTextAlignmentFromRenderStyle(const WebCore::RenderStyle
 
                 Color textColor = style->visitedDependentColor(CSSPropertyColor);
                 if (textColor.isValid())
-                    [_private->_textTouchBarItemController setTextColor:nsColor(textColor)];
+                    [_private->_textTouchBarItemController setTextColor:cocoaColor(textColor).get()];
 
                 [_private->_textTouchBarItemController setCurrentTextAlignment:nsTextAlignmentFromRenderStyle(style)];
 

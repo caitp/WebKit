@@ -26,6 +26,35 @@
 # They must include a humanReadableName and humanReadableDescription. This is
 #   the text exposed to the user from the WebKit client.
 
+AccentColorEnabled:
+  type: bool
+  humanReadableName: "CSS Accent Color"
+  humanReadableDescription: "Enable accent-color CSS property"
+  defaultValue:
+    WebKitLegacy:
+      "PLATFORM(COCOA)" : true
+      default: false
+    WebKit:
+      "PLATFORM(COCOA)" : true
+      default: false
+    WebCore:
+      "PLATFORM(COCOA)" : true
+      default: false
+
+AccessHandleEnabled:
+  type: bool
+  humanReadableName: "AccessHandle API"
+  humanReadableDescription: "Enable AccessHandle API"
+  defaultValue:
+    WebKitLegacy:
+      default: false
+    WebKit:
+      "PLATFORM(COCOA)" : true
+      default: false
+    WebCore:
+      "PLATFORM(COCOA)" : true
+      default: false
+
 AccessibilityObjectModelEnabled:
   type: bool
   humanReadableName: "Accessibility Object Model"
@@ -111,6 +140,18 @@ BroadcastChannelOriginPartitioningEnabled:
       default: true
     WebCore:
       default: true
+
+BuiltInNotificationsEnabled:
+  type: bool
+  humanReadableName: "Built-In Web Notifications"
+  humanReadableDescription: "Enable built-in WebKit managed notifications"
+  webcoreBinding: RuntimeEnabledFeatures
+  condition: ENABLE(BUILT_IN_NOTIFICATIONS)
+  defaultValue:
+    WebCore:
+      default: false
+    WebKit:
+      default: false
 
 CFNetworkNetworkLoaderEnabled:
   type: bool
@@ -232,15 +273,27 @@ CSSIndividualTransformPropertiesEnabled:
     WebCore:
       default: true
 
+CSSMotionPathEnabled:
+  type: bool
+  humanReadableName: "CSS Motion Path"
+  humanReadableDescription: "Enable CSS Motion Path support"
+  defaultValue:
+    WebKitLegacy:
+      default: false
+    WebKit:
+      default: false
+    WebCore:
+      default: false
+
 CSSOMViewSmoothScrollingEnabled:
   type: bool
   humanReadableName: "CSSOM View Smooth Scrolling"
   humanReadableDescription: "Enable DOM API and CSS property for 'smooth' scroll behavior"
   defaultValue:
     WebKitLegacy:
-      default: false
+      default: true
     WebKit:
-      default: false
+      default: true
     WebCore:
       default: false
 
@@ -288,8 +341,10 @@ CanvasColorSpaceEnabled:
   humanReadableDescription: "Enable use of predefined canvas color spaces"
   defaultValue:
     WebKitLegacy:
+      "PLATFORM(COCOA)": true
       default: false
     WebKit:
+      "PLATFORM(COCOA)": true
       default: false
     WebCore:
       default: false
@@ -309,6 +364,18 @@ ContactPickerAPIEnabled:
   type: bool
   humanReadableName: "Contact Picker API"
   humanReadableDescription: "Enable the Contact Picker API"
+  defaultValue:
+    WebKitLegacy:
+      default: false
+    WebKit:
+      default: false
+    WebCore:
+      default: false
+
+CoopCoepViolationReportingEnabled:
+  type: bool
+  humanReadableName: "COOP and COEP violations reporting"
+  humanReadableDescription: "Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy reporting"
   defaultValue:
     WebKitLegacy:
       default: false
@@ -377,9 +444,11 @@ DialogElementEnabled:
   webcoreBinding: RuntimeEnabledFeatures
   defaultValue:
     WebKitLegacy:
-      default: false
+      default: true
     WebKit:
-      default: false
+      default: true
+    WebCore:
+      default: true
 
 # FIXME: Starting the preference name with "Disable" is inconsistent with most other preferences and should be changed.
 DisableMediaExperiencePIDInheritance:
@@ -455,8 +524,10 @@ FileSystemAccessEnabled:
     WebKitLegacy:
       default: false
     WebKit:
+      "PLATFORM(COCOA)" : true
       default: false
     WebCore:
+      "PLATFORM(COCOA)" : true
       default: false
 
 FocusVisibleEnabled:
@@ -693,7 +764,7 @@ LazyImageLoadingEnabled:
     WebKitLegacy:
       default: false
     WebKit:
-      default: false
+      default: true
     WebCore:
       default: false
 
@@ -997,6 +1068,18 @@ ProcessSwapOnCrossSiteNavigationEnabled:
       "PLATFORM(MAC) || PLATFORM(IOS) || PLATFORM(GTK) || PLATFORM(WPE)": true
       default: false
 
+PushAPIEnabled:
+  type: bool
+  condition: ENABLE(SERVICE_WORKER)
+  humanReadableName: "Push API"
+  humanReadableDescription: "Enable Push API"
+  webcoreBinding: RuntimeEnabledFeatures
+  defaultValue:
+    WebCore:
+      default: false
+    WebKit:
+      default: false
+
 ReadableByteStreamAPIEnabled:
   type: bool
   humanReadableName: "ReadableByteStream"
@@ -1051,6 +1134,18 @@ RequestSubmitEnabled:
   type: bool
   humanReadableName: "Form requestSubmit"
   humanReadableDescription: "Form requestSubmit method"
+  defaultValue:
+    WebKitLegacy:
+      default: false
+    WebKit:
+      default: false
+    WebCore:
+      default: false
+
+RequestVideoFrameCallbackEnabled:
+  type: bool
+  humanReadableName: "RequestVideoFrameCallback"
+  humanReadableDescription: "Enable RequestVideoFrameCallback API"
   defaultValue:
     WebKitLegacy:
       default: false
@@ -1171,8 +1266,10 @@ StorageAPIEnabled:
     WebKitLegacy:
       default: false
     WebKit:
+      "PLATFORM(COCOA)" : true
       default: false
     WebCore:
+      "PLATFORM(COCOA)" : true
       default: false
 
 SyntheticEditingCommandsEnabled:
@@ -1404,6 +1501,18 @@ WebGLUsingMetal:
       "HAVE(WEBGL_COMPATIBLE_METAL)": true
       default: false
 
+WebLocksAPIEnabled:
+  type: bool
+  humanReadableName: "Web Locks API"
+  humanReadableDescription: "Web Locks API"
+  defaultValue:
+    WebKitLegacy:
+      default: false
+    WebKit:
+      default: false
+    WebCore:
+      default: false
+
 WebMFormatReaderEnabled:
   type: bool
   webcoreBinding: RuntimeEnabledFeatures
@@ -1453,10 +1562,8 @@ WebRTCH264LowLatencyEncoderEnabled:
     WebKit:
       default: true
 
-# FIXME: Is this implemented for WebKitLegacy? If not, this should be excluded from WebKitLegacy entirely.
 WebRTCH265CodecEnabled:
   type: bool
-  webcoreBinding: RuntimeEnabledFeatures
   condition: ENABLE(WEB_RTC)
   humanReadableName: "WebRTC H265 codec"
   humanReadableDescription: "Enable WebRTC H265 codec"
@@ -1464,6 +1571,8 @@ WebRTCH265CodecEnabled:
     WebKitLegacy:
       default: false
     WebKit:
+      default: false
+    WebCore:
       default: false
 
 # FIXME: This is not relevent for WebKitLegacy, so should be excluded from WebKitLegacy entirely.
@@ -1530,24 +1639,26 @@ WebRTCVP9Profile0CodecEnabled:
   type: bool
   humanReadableName: "WebRTC VP9 profile 0 codec"
   humanReadableDescription: "Enable WebRTC VP9 profile 0 codec"
-  webcoreBinding: RuntimeEnabledFeatures
   condition: ENABLE(WEB_RTC)
   defaultValue:
     WebKitLegacy:
       default: true
     WebKit:
+      default: true
+    WebCore:
       default: true
 
 WebRTCVP9Profile2CodecEnabled:
   type: bool
   humanReadableName: "WebRTC VP9 profile 2 codec"
   humanReadableDescription: "Enable WebRTC VP9 profile 2 codec"
-  webcoreBinding: RuntimeEnabledFeatures
   condition: ENABLE(WEB_RTC)
   defaultValue:
     WebKitLegacy:
       default: false
     WebKit:
+      default: false
+    WebCore:
       default: false
 
 WebShareFileAPIEnabled:
@@ -1563,11 +1674,50 @@ WebShareFileAPIEnabled:
     WebCore:
       default: false
 
+WebXRAugmentedRealityModuleEnabled:
+  type: bool
+  humanReadableName: "WebXR Augmented Reality Module"
+  humanReadableDescription: "Adds support for the WebXR Augmented Reality Module"
+  condition: ENABLE(WEBXR)
+  defaultValue:
+    WebKitLegacy:
+      default: WebKit::defaultWebXREnabled()
+    WebKit:
+      default: WebKit::defaultWebXREnabled()
+    WebCore:
+      default: false
+
 WebXREnabled:
   type: bool
   humanReadableName: "WebXR Device API"
   humanReadableDescription: "Adds support for accessing virtual reality (VR) and augmented reality (AR) devices, including sensors and head-mounted displays, on the Web"
   condition: ENABLE(WEBXR)
+  defaultValue:
+    WebKitLegacy:
+      default: WebKit::defaultWebXREnabled()
+    WebKit:
+      default: WebKit::defaultWebXREnabled()
+    WebCore:
+      default: false
+
+WebXRGamepadsModuleEnabled:
+  type: bool
+  humanReadableName: "WebXR Gamepads Module"
+  humanReadableDescription: "Adds support for the WebXR Gamepads Module"
+  condition: ENABLE(WEBXR)
+  defaultValue:
+    WebKitLegacy:
+      default: WebKit::defaultWebXREnabled()
+    WebKit:
+      default: WebKit::defaultWebXREnabled()
+    WebCore:
+      default: false
+
+WebXRHandInputModuleEnabled:
+  type: bool
+  humanReadableName: "WebXR Hand Input Module"
+  humanReadableDescription: "Adds support for the Hands Input Module for WebXR"
+  condition: ENABLE(WEBXR_HANDS)
   defaultValue:
     WebKitLegacy:
       default: WebKit::defaultWebXREnabled()

@@ -34,8 +34,6 @@
 #include "DownloadProxyMap.h"
 #include "LoadParameters.h"
 #include "Logging.h"
-#include "PluginInfoStore.h"
-#include "PluginProcessManager.h"
 #include "ProvisionalPageProxy.h"
 #include "SpeechRecognitionPermissionRequest.h"
 #include "SpeechRecognitionRemoteRealtimeMediaSourceManager.h"
@@ -338,7 +336,11 @@ void WebProcessProxy::setWebsiteDataStore(WebsiteDataStore& dataStore)
     WEBPROCESSPROXY_RELEASE_LOG(Process, "setWebsiteDataStore() dataStore=%p, sessionID=%" PRIu64, &dataStore, dataStore.sessionID().toUInt64());
     m_websiteDataStore = &dataStore;
 #if PLATFORM(COCOA)
-    dataStore.sendNetworkProcessXPCEndpointToWebProcess(*this);
+    dataStore.sendNetworkProcessXPCEndpointToProcess(*this);
+#if ENABLE(GPU_PROCESS)
+    if (GPUProcessProxy::singletonIfCreated())
+        dataStore.sendNetworkProcessXPCEndpointToProcess(*GPUProcessProxy::singletonIfCreated());
+#endif
 #endif
     updateRegistrationWithDataStore();
     send(Messages::WebProcess::SetWebsiteDataStoreParameters(processPool().webProcessDataStoreParameters(*this, dataStore)), 0);
@@ -799,40 +801,6 @@ void WebProcessProxy::updateBackForwardItem(const BackForwardListItemState& item
     }
 }
 
-#if ENABLE(NETSCAPE_PLUGIN_API)
-void WebProcessProxy::getPlugins(bool refresh, CompletionHandler<void(Vector<PluginInfo>&& plugins, Vector<PluginInfo>&& applicationPlugins, std::optional<Vector<WebCore::SupportedPluginIdentifier>>&& supportedPluginIdentifiers)>&& completionHandler)
-{
-    if (refresh)
-        m_processPool->pluginInfoStore().refresh();
-
-    auto supportedPluginIdentifiers = m_processPool->pluginInfoStore().supportedPluginIdentifiers();
-
-    Vector<PluginInfo> plugins;
-    Vector<PluginModuleInfo> pluginModules = m_processPool->pluginInfoStore().plugins();
-    for (size_t i = 0; i < pluginModules.size(); ++i)
-        plugins.append(pluginModules[i].info);
-
-    Vector<PluginInfo> applicationPlugins;
-#if ENABLE(PDFKIT_PLUGIN)
-    // Add built-in PDF last, so that it's not used when a real plug-in is installed.
-    if (!m_processPool->omitPDFSupport()) {
-        plugins.append(PDFPlugin::pluginInfo());
-        applicationPlugins.append(PDFPlugin::pluginInfo());
-    }
-#endif
-    completionHandler(WTFMove(plugins), WTFMove(applicationPlugins), WTFMove(supportedPluginIdentifiers));
-}
-#endif // ENABLE(NETSCAPE_PLUGIN_API)
-
-#if ENABLE(NETSCAPE_PLUGIN_API)
-void WebProcessProxy::getPluginProcessConnection(uint64_t pluginProcessToken, Messages::WebProcessProxy::GetPluginProcessConnection::DelayedReply&& reply)
-{
-    MESSAGE_CHECK(HashSet<uint64_t>::isValidValue(pluginProcessToken));
-    bool success = PluginProcessManager::singleton().getPluginProcessConnection(pluginProcessToken, WTFMove(reply));
-    MESSAGE_CHECK(success);
-}
-#endif
-
 void WebProcessProxy::getNetworkProcessConnection(Messages::WebProcessProxy::GetNetworkProcessConnection::DelayedReply&& reply)
 {
     websiteDataStore().getNetworkProcessConnection(*this, WTFMove(reply));
@@ -935,7 +903,7 @@ void WebProcessProxy::processDidTerminateOrFailedToLaunch(ProcessTerminationReas
         webConnection->didClose();
 
     auto pages = copyToVectorOf<RefPtr<WebPageProxy>>(m_pageMap.values());
-    auto provisionalPages = WTF::map(m_provisionalPages, [](auto* provisionalPage) { return makeWeakPtr(provisionalPage); });
+    auto provisionalPages = WTF::map(m_provisionalPages, [](auto* provisionalPage) { return WeakPtr { provisionalPage }; });
 
     auto isResponsiveCallbacks = std::exchange(m_isResponsiveCallbacks, { });
     for (auto& callback : isResponsiveCallbacks)
@@ -1067,7 +1035,7 @@ void WebProcessProxy::didFinishLaunching(ProcessLauncher* launcher, IPC::Connect
 
 #if PLATFORM(COCOA)
     if (m_websiteDataStore)
-        m_websiteDataStore->sendNetworkProcessXPCEndpointToWebProcess(*this);
+        m_websiteDataStore->sendNetworkProcessXPCEndpointToProcess(*this);
 #endif
 
     RELEASE_ASSERT(!m_webConnection);
@@ -1566,7 +1534,7 @@ void WebProcessProxy::isResponsive(CompletionHandler<void(bool isWebProcessRespo
     if (callback)
         m_isResponsiveCallbacks.append(WTFMove(callback));
 
-    checkForResponsiveness([weakThis = makeWeakPtr(*this)]() mutable {
+    checkForResponsiveness([weakThis = WeakPtr { *this }]() mutable {
         if (!weakThis)
             return;
 
@@ -1583,7 +1551,7 @@ void WebProcessProxy::isResponsiveWithLazyStop()
     if (!responsivenessTimer().hasActiveTimer()) {
         // We do not send a ping if we are already waiting for the WebProcess.
         // Spamming pings on a slow web process is not helpful.
-        checkForResponsiveness([weakThis = makeWeakPtr(*this)]() mutable {
+        checkForResponsiveness([weakThis = WeakPtr { *this }]() mutable {
             if (!weakThis)
                 return;
 
@@ -1787,7 +1755,7 @@ void WebProcessProxy::createSpeechRecognitionServer(SpeechRecognitionServerIdent
     MESSAGE_CHECK(!m_speechRecognitionServerMap.contains(identifier));
 
     auto& speechRecognitionServer = m_speechRecognitionServerMap.add(identifier, nullptr).iterator->value;
-    auto permissionChecker = [weakPage = makeWeakPtr(targetPage)](auto& request, auto&& completionHandler) mutable {
+    auto permissionChecker = [weakPage = WeakPtr { targetPage }](auto& request, auto&& completionHandler) mutable {
         if (!weakPage) {
             completionHandler(WebCore::SpeechRecognitionError { SpeechRecognitionErrorType::NotAllowed, "Page no longer exists"_s });
             return;
@@ -1795,12 +1763,12 @@ void WebProcessProxy::createSpeechRecognitionServer(SpeechRecognitionServerIdent
 
         weakPage->requestSpeechRecognitionPermission(request, WTFMove(completionHandler));
     };
-    auto checkIfMockCaptureDevicesEnabled = [weakPage = makeWeakPtr(targetPage)]() {
+    auto checkIfMockCaptureDevicesEnabled = [weakPage = WeakPtr { targetPage }]() {
         return weakPage && weakPage->preferences().mockCaptureDevicesEnabled();
     };
 
 #if ENABLE(MEDIA_STREAM)
-    auto createRealtimeMediaSource = [weakPage = makeWeakPtr(targetPage)]() {
+    auto createRealtimeMediaSource = [weakPage = WeakPtr { targetPage }]() {
         return weakPage ? weakPage->createRealtimeMediaSourceForSpeechRecognition() : CaptureSourceOrError { "Page is invalid" };
     };
     speechRecognitionServer = makeUnique<SpeechRecognitionServer>(*connection(), identifier, WTFMove(permissionChecker), WTFMove(checkIfMockCaptureDevicesEnabled), WTFMove(createRealtimeMediaSource));
@@ -1843,7 +1811,7 @@ void WebProcessProxy::muteCaptureInPagesExcept(WebCore::PageIdentifier pageID)
 
 #endif
 
-void WebProcessProxy::pageMutedStateChanged(WebCore::PageIdentifier identifier, WebCore::MediaProducer::MutedStateFlags flags)
+void WebProcessProxy::pageMutedStateChanged(WebCore::PageIdentifier identifier, WebCore::MediaProducerMutedStateFlags flags)
 {
     bool mutedForCapture = flags.containsAny(MediaProducer::AudioAndVideoCaptureIsMuted);
     if (!mutedForCapture)
@@ -1887,11 +1855,11 @@ void WebProcessProxy::endBackgroundActivityForFullscreenInput()
 #endif
 
 #if ENABLE(SERVICE_WORKER)
-void WebProcessProxy::establishServiceWorkerContext(const WebPreferencesStore& store, CompletionHandler<void()>&& completionHandler)
+void WebProcessProxy::establishServiceWorkerContext(const WebPreferencesStore& store, const RegistrableDomain& registrableDomain, std::optional<ServiceWorkerClientIdentifier> serviceWorkerPageIdentifier, CompletionHandler<void()>&& completionHandler)
 {
     WEBPROCESSPROXY_RELEASE_LOG(Loading, "establishServiceWorkerContext: Started");
     markProcessAsRecentlyUsed();
-    sendWithAsyncReply(Messages::WebProcess::EstablishWorkerContextConnectionToNetworkProcess { processPool().defaultPageGroup().pageGroupID(), m_serviceWorkerInformation->serviceWorkerPageProxyID, m_serviceWorkerInformation->serviceWorkerPageID, store, *m_registrableDomain, m_serviceWorkerInformation->initializationData }, [this, weakThis = makeWeakPtr(*this), completionHandler = WTFMove(completionHandler)]() mutable {
+    sendWithAsyncReply(Messages::WebProcess::EstablishWorkerContextConnectionToNetworkProcess { processPool().defaultPageGroup().pageGroupID(), m_serviceWorkerInformation->serviceWorkerPageProxyID, m_serviceWorkerInformation->serviceWorkerPageID, store, registrableDomain, serviceWorkerPageIdentifier, m_serviceWorkerInformation->initializationData }, [this, weakThis = WeakPtr { *this }, completionHandler = WTFMove(completionHandler)]() mutable {
         if (weakThis)
             WEBPROCESSPROXY_RELEASE_LOG(Loading, "establishServiceWorkerContext: Finished");
         completionHandler();
@@ -1934,6 +1902,14 @@ void WebProcessProxy::updateServiceWorkerProcessAssertion()
             m_serviceWorkerInformation->activity = m_throttler.backgroundActivity("Service Worker for background view(s)"_s);
         return;
     }
+
+    if (m_hasServiceWorkerBackgroundProcessing) {
+        WEBPROCESSPROXY_RELEASE_LOG(ProcessSuspension, "Service Worker for background processing");
+        if (!ProcessThrottler::isValidBackgroundActivity(m_serviceWorkerInformation->activity))
+            m_serviceWorkerInformation->activity = m_throttler.backgroundActivity("Service Worker for background processing"_s);
+        return;
+    }
+
     m_serviceWorkerInformation->activity = nullptr;
 }
 
@@ -1965,6 +1941,26 @@ bool WebProcessProxy::hasServiceWorkerForegroundActivityForTesting() const
 bool WebProcessProxy::hasServiceWorkerBackgroundActivityForTesting() const
 {
     return m_serviceWorkerInformation ? ProcessThrottler::isValidBackgroundActivity(m_serviceWorkerInformation->activity) : false;
+}
+
+void WebProcessProxy::startServiceWorkerBackgroundProcessing()
+{
+    if (!m_serviceWorkerInformation)
+        return;
+
+    WEBPROCESSPROXY_RELEASE_LOG(ProcessSuspension, "startServiceWorkerBackgroundProcessing");
+    m_hasServiceWorkerBackgroundProcessing = true;
+    updateServiceWorkerProcessAssertion();
+}
+
+void WebProcessProxy::endServiceWorkerBackgroundProcessing()
+{
+    if (!m_serviceWorkerInformation)
+        return;
+
+    WEBPROCESSPROXY_RELEASE_LOG(ProcessSuspension, "endServiceWorkerBackgroundProcessing");
+    m_hasServiceWorkerBackgroundProcessing = false;
+    updateServiceWorkerProcessAssertion();
 }
 #endif // ENABLE(SERVICE_WORKER)
 
@@ -2003,7 +1999,6 @@ static Vector<std::pair<String, WebCompiledContentRuleListData>> contentRuleList
 
 void WebProcessProxy::enableServiceWorkers(const UserContentControllerIdentifier& userContentControllerIdentifier)
 {
-    ASSERT(m_registrableDomain && !m_registrableDomain->isEmpty());
     ASSERT(!m_serviceWorkerInformation);
     WEBPROCESSPROXY_RELEASE_LOG(ServiceWorker, "enableServiceWorkers:");
     m_serviceWorkerInformation = ServiceWorkerInformation {

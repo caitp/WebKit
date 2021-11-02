@@ -47,6 +47,7 @@
 #import <WebCore/WebLayer.h>
 #import <mach/mach_port.h>
 #import <pal/spi/cocoa/QuartzCoreSPI.h>
+#import <wtf/cocoa/TypeCastsCocoa.h>
 
 #if ENABLE(CG_DISPLAY_LIST_BACKED_IMAGE_BUFFER)
 #import <WebKitAdditions/CGDisplayListImageBufferAdditions.h>
@@ -116,13 +117,16 @@ void RemoteLayerBackingStore::encode(IPC::Encoder& encoder) const
     if (m_frontBuffer.imageBuffer) {
         switch (m_type) {
         case Type::IOSurface:
-            if (m_frontBuffer.imageBuffer->canMapBackingStore())
-                handle = static_cast<AcceleratedImageBufferShareableMappedBackend&>(*m_frontBuffer.imageBuffer->ensureBackendCreated()).createImageBufferBackendHandle();
-            else
-                handle = static_cast<AcceleratedImageBufferShareableBackend&>(*m_frontBuffer.imageBuffer->ensureBackendCreated()).createImageBufferBackendHandle();
+            if (auto* backend = m_frontBuffer.imageBuffer->ensureBackendCreated()) {
+                if (m_frontBuffer.imageBuffer->canMapBackingStore())
+                    handle = static_cast<AcceleratedImageBufferShareableMappedBackend&>(*backend).createImageBufferBackendHandle();
+                else
+                    handle = static_cast<AcceleratedImageBufferShareableBackend&>(*backend).createImageBufferBackendHandle();
+            }
             break;
         case Type::Bitmap:
-            handle = static_cast<UnacceleratedImageBufferShareableBackend&>(*m_frontBuffer.imageBuffer->ensureBackendCreated()).createImageBufferBackendHandle();
+            if (auto* backend = m_frontBuffer.imageBuffer->ensureBackendCreated())
+                handle = static_cast<UnacceleratedImageBufferShareableBackend&>(*backend).createImageBufferBackendHandle();
             break;
         }
     }
@@ -131,8 +135,10 @@ void RemoteLayerBackingStore::encode(IPC::Encoder& encoder) const
 
 #if ENABLE(CG_DISPLAY_LIST_BACKED_IMAGE_BUFFER)
     std::optional<ImageBufferBackendHandle> displayListHandle;
-    if (m_frontBuffer.displayListImageBuffer)
-        displayListHandle = static_cast<CGDisplayListImageBufferBackend&>(*m_frontBuffer.displayListImageBuffer->ensureBackendCreated()).createImageBufferBackendHandle();
+    if (m_frontBuffer.displayListImageBuffer) {
+        if (auto* backend = m_frontBuffer.displayListImageBuffer->ensureBackendCreated())
+            displayListHandle = static_cast<CGDisplayListImageBufferBackend&>(*backend).createImageBufferBackendHandle();
+    }
 
     encoder << displayListHandle;
 #endif
@@ -423,7 +429,7 @@ void RemoteLayerBackingStore::enumerateRectsBeingDrawn(WebCore::GraphicsContext&
     }
 }
 
-void RemoteLayerBackingStore::applyBackingStoreToLayer(CALayer *layer, LayerContentsType contentsType)
+void RemoteLayerBackingStore::applyBackingStoreToLayer(CALayer *layer, LayerContentsType contentsType, bool replayCGDisplayListsIntoBackingStore)
 {
     ASSERT(m_bufferHandle);
     layer.contentsOpaque = m_isOpaque;
@@ -432,8 +438,7 @@ void RemoteLayerBackingStore::applyBackingStoreToLayer(CALayer *layer, LayerCont
     WTF::switchOn(*m_bufferHandle,
         [&] (ShareableBitmap::Handle& handle) {
             ASSERT(m_type == Type::Bitmap);
-            auto bitmap = ShareableBitmap::create(handle);
-            contents = bitmap->makeCGImageCopy();
+            contents = bridge_id_cast(ShareableBitmap::create(handle)->makeCGImageCopy());
         },
         [&] (MachSendRight& machSendRight) {
             ASSERT(m_type == Type::IOSurface);
@@ -444,7 +449,7 @@ void RemoteLayerBackingStore::applyBackingStoreToLayer(CALayer *layer, LayerCont
                 break;
             }
             case RemoteLayerBackingStore::LayerContentsType::CAMachPort:
-                contents = adoptCF(CAMachPortCreate(machSendRight.leakSendRight()));
+                contents = bridge_id_cast(adoptCF(CAMachPortCreate(machSendRight.leakSendRight())));
                 break;
             }
         }
@@ -460,12 +465,17 @@ void RemoteLayerBackingStore::applyBackingStoreToLayer(CALayer *layer, LayerCont
         ASSERT([layer isKindOfClass:[WKCompositingLayer class]]);
         if (![layer isKindOfClass:[WKCompositingLayer class]])
             return;
-        [layer setValue:@1 forKeyPath:WKCGDisplayListEnabledKey];
-        [layer setValue:@1 forKeyPath:WKCGDisplayListBifurcationEnabledKey];
-        auto data = WTF::get<IPC::SharedBufferCopy>(*m_displayListBufferHandle).buffer()->createCFData();
-        [(WKCompositingLayer *)layer _setWKContents:contents.get() withDisplayList:data.get()];
+
+        if (!replayCGDisplayListsIntoBackingStore) {
+            [layer setValue:@1 forKeyPath:WKCGDisplayListEnabledKey];
+            [layer setValue:@1 forKeyPath:WKCGDisplayListBifurcationEnabledKey];
+        }
+        auto data = std::get<IPC::SharedBufferCopy>(*m_displayListBufferHandle).buffer()->createCFData();
+        [(WKCompositingLayer *)layer _setWKContents:contents.get() withDisplayList:data.get() replayForTesting:replayCGDisplayListsIntoBackingStore];
         return;
     }
+#else
+    UNUSED_PARAM(replayCGDisplayListsIntoBackingStore);
 #endif
 
     layer.contents = contents.get();

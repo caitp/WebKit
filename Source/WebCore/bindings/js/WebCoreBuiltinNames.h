@@ -119,11 +119,13 @@ namespace WebCore {
     macro(FileSystem) \
     macro(FileSystemDirectoryEntry) \
     macro(FileSystemDirectoryHandle) \
+    macro(FileSystemDirectoryHandleIterator) \
     macro(FileSystemDirectoryReader) \
     macro(FileSystemEntry) \
     macro(FileSystemFileEntry) \
     macro(FileSystemFileHandle) \
     macro(FileSystemHandle) \
+    macro(FileSystemSyncAccessHandle) \
     macro(Gamepad) \
     macro(GamepadButton) \
     macro(GamepadEvent) \
@@ -157,6 +159,8 @@ namespace WebCore {
     macro(IntersectionObserver) \
     macro(IntersectionObserverEntry) \
     macro(KeyframeEffect) \
+    macro(Lock) \
+    macro(LockManager) \
     macro(MediaCapabilities) \
     macro(MediaCapabilitiesInfo) \
     macro(MediaDevices) \
@@ -207,6 +211,11 @@ namespace WebCore {
     macro(Permissions) \
     macro(PointerEvent) \
     macro(PublicKeyCredential) \
+    macro(PushEvent) \
+    macro(PushManager) \
+    macro(PushMessageData) \
+    macro(PushSubscription) \
+    macro(PushSubscriptionOptions) \
     macro(ResizeObserver) \
     macro(ResizeObserverEntry) \
     macro(RTCCertificate) \
@@ -303,10 +312,13 @@ namespace WebCore {
     macro(XMLHttpRequest) \
     macro(XRBoundedReferenceSpace) \
     macro(XRFrame) \
+    macro(XRHand) \
     macro(XRInputSource) \
     macro(XRInputSourceArray) \
     macro(XRInputSourceEvent) \
     macro(XRInputSourcesChangeEvent) \
+    macro(XRJointPose) \
+    macro(XRJointSpace) \
     macro(XRLayer) \
     macro(XRPose) \
     macro(XRReferenceSpace) \
@@ -400,7 +412,7 @@ namespace WebCore {
     macro(makeThisTypeError) \
     macro(matchingElementInFlatTree) \
     macro(mediaStreamTrackConstraints) \
-    macro(openDatabase) \
+    macro(onpush) \
     macro(onrtctransform) \
     macro(ontouchcancel) \
     macro(ontouchend) \
@@ -415,6 +427,7 @@ namespace WebCore {
     macro(onvrdisplaydisconnect) \
     macro(onvrdisplayfocus) \
     macro(onvrdisplaypresentchange) \
+    macro(openDatabase) \
     macro(opener) \
     macro(operations) \
     macro(ownerReadableStream) \

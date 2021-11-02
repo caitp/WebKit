@@ -293,7 +293,7 @@ namespace {
         UChar temp = 0;
         switch (m_parseState) {
         case BeginningOfLine:
-            if (WTF::isASCIISpace(c)) {
+            if (isASCIISpace(c)) {
                 emit(c);
                 break;
             }
@@ -730,26 +730,26 @@ private:
     void saveBlendValue(GCGLenum attachment, T& destination)
     {
         WebGLAny param = m_context.getParameter(attachment);
-        if (WTF::holds_alternative<T>(param))
-            destination = WTF::get<T>(param);
+        if (std::holds_alternative<T>(param))
+            destination = std::get<T>(param);
     }
 
     bool hasBufferBinding(GCGLenum pname)
     {
         WebGLAny binding = m_context.getParameter(pname);
         if (pname == GraphicsContextGL::FRAMEBUFFER_BINDING)
-            return WTF::holds_alternative<RefPtr<WebGLFramebuffer>>(binding) && WTF::get<RefPtr<WebGLFramebuffer>>(binding);
+            return std::holds_alternative<RefPtr<WebGLFramebuffer>>(binding) && std::get<RefPtr<WebGLFramebuffer>>(binding);
         if (pname == GraphicsContextGL::RENDERBUFFER_BINDING)
-            return WTF::holds_alternative<RefPtr<WebGLRenderbuffer>>(binding) && WTF::get<RefPtr<WebGLRenderbuffer>>(binding);
+            return std::holds_alternative<RefPtr<WebGLRenderbuffer>>(binding) && std::get<RefPtr<WebGLRenderbuffer>>(binding);
         return false;
     }
 
     bool hasFramebufferParameterAttachment(GCGLenum attachment)
     {
         WebGLAny attachmentParameter = m_context.getFramebufferAttachmentParameter(GraphicsContextGL::FRAMEBUFFER, attachment, GraphicsContextGL::FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
-        if (!WTF::holds_alternative<unsigned>(attachmentParameter))
+        if (!std::holds_alternative<unsigned>(attachmentParameter))
             return false;
-        if (WTF::get<unsigned>(attachmentParameter) != static_cast<unsigned>(GraphicsContextGL::RENDERBUFFER))
+        if (std::get<unsigned>(attachmentParameter) != static_cast<unsigned>(GraphicsContextGL::RENDERBUFFER))
             return false;
         return true;
     }
@@ -1758,7 +1758,7 @@ void WebGLRenderingContextBase::bufferData(GCGLenum target, std::optional<Buffer
     if (!buffer)
         return;
 
-    WTF::visit([&](auto& data) {
+    std::visit([&](auto& data) {
         if (!buffer->associateBufferData(data.get())) {
             this->synthesizeGLError(GraphicsContextGL::INVALID_VALUE, "bufferData", "invalid buffer");
             return;
@@ -1785,7 +1785,7 @@ void WebGLRenderingContextBase::bufferSubData(GCGLenum target, long long offset,
         return;
     }
 
-    WTF::visit([&](auto& data) {
+    std::visit([&](auto& data) {
         if (!buffer->associateBufferSubData(static_cast<GCGLintptr>(offset), data.get())) {
             this->synthesizeGLError(GraphicsContextGL::INVALID_VALUE, "bufferSubData", "offset out of range");
             return;
@@ -4813,7 +4813,7 @@ IntRect WebGLRenderingContextBase::getTexImageSourceSize(TexImageSource& source)
     }
     );
 
-    ExceptionOr<IntRect> result = WTF::visit(visitor, source);
+    ExceptionOr<IntRect> result = std::visit(visitor, source);
     if (result.hasException())
         return sentinelEmptyRect();
     return result.returnValue();
@@ -5074,7 +5074,7 @@ ExceptionOr<void> WebGLRenderingContextBase::texImageSourceHelper(TexImageFuncti
 #endif // ENABLE(VIDEO)
     );
 
-    return WTF::visit(visitor, source);
+    return std::visit(visitor, source);
 }
 
 void WebGLRenderingContextBase::texImageArrayBufferViewHelper(TexImageFunctionID functionID, GCGLenum target, GCGLint level, GCGLint internalformat, GCGLsizei width, GCGLsizei height, GCGLsizei depth, GCGLint border, GCGLenum format, GCGLenum type, GCGLint xoffset, GCGLint yoffset, GCGLint zoffset, RefPtr<ArrayBufferView>&& pixels, NullDisposition nullDisposition, GCGLuint srcOffset)
@@ -5885,7 +5885,7 @@ RefPtr<Image> WebGLRenderingContextBase::drawImageIntoBuffer(Image& image, int w
 {
     IntSize size(width, height);
     size.scale(deviceScaleFactor);
-    ImageBuffer* buf = m_generatedImageCache.imageBuffer(size);
+    ImageBuffer* buf = m_generatedImageCache.imageBuffer(size, DestinationColorSpace::SRGB());
     if (!buf) {
         synthesizeGLError(GraphicsContextGL::OUT_OF_MEMORY, functionName, "out of memory");
         return nullptr;
@@ -5901,6 +5901,16 @@ RefPtr<Image> WebGLRenderingContextBase::drawImageIntoBuffer(Image& image, int w
 
 RefPtr<Image> WebGLRenderingContextBase::videoFrameToImage(HTMLVideoElement* video, BackingStoreCopy backingStoreCopy, const char* functionName)
 {
+    // FIXME: When texImage2D is passed an HTMLVideoElement, implementations
+    // interoperably use the native RGB color values of the video frame (e.g.
+    // Rec.601 color space values) for the texture. But nativeImageForCurrentTime
+    // and paintCurrentFrameInContext return and use an image with its color space
+    // correctly matching the video.
+    //
+    // https://github.com/KhronosGroup/WebGL/issues/2165 is open on converting
+    // the video element image source to sRGB instead of leaving it in its
+    // native RGB color space. For now, we make sure to paint into an
+    // ImageBuffer with a matching color space, to avoid the conversion.
 #if USE(AVFOUNDATION)
     auto nativeImage = video->nativeImageForCurrentTime();
     // Currently we might be missing an image due to MSE not being able to provide the first requested frame.
@@ -5913,7 +5923,7 @@ RefPtr<Image> WebGLRenderingContextBase::videoFrameToImage(HTMLVideoElement* vid
         return nullptr;
     }
     FloatRect imageRect { { }, imageSize };
-    ImageBuffer* imageBuffer = m_generatedImageCache.imageBuffer(imageSize, CompositeOperator::Copy);
+    ImageBuffer* imageBuffer = m_generatedImageCache.imageBuffer(imageSize, nativeImage->colorSpace(), CompositeOperator::Copy);
     if (!imageBuffer) {
         synthesizeGLError(GraphicsContextGL::OUT_OF_MEMORY, functionName, "out of memory");
         return nullptr;
@@ -5924,7 +5934,10 @@ RefPtr<Image> WebGLRenderingContextBase::videoFrameToImage(HTMLVideoElement* vid
     // video visible size is different to the natural size. This should be removed
     // once all platforms implement nativeImageForCurrentTime().
     IntSize videoSize { static_cast<int>(video->videoWidth()), static_cast<int>(video->videoHeight()) };
-    ImageBuffer* imageBuffer = m_generatedImageCache.imageBuffer(videoSize);
+    auto colorSpace = video->colorSpace();
+    if (!colorSpace)
+        colorSpace = DestinationColorSpace::SRGB();
+    ImageBuffer* imageBuffer = m_generatedImageCache.imageBuffer(videoSize, *colorSpace);
     if (!imageBuffer) {
         synthesizeGLError(GraphicsContextGL::OUT_OF_MEMORY, functionName, "out of memory");
         return nullptr;
@@ -7769,7 +7782,7 @@ void WebGLRenderingContextBase::simulateEventForTesting(SimulatedEventForTesting
 String WebGLRenderingContextBase::ensureNotNull(const String& text) const
 {
     if (text.isNull())
-        return WTF::emptyString();
+        return emptyString();
     return text;
 }
 
@@ -7778,32 +7791,32 @@ WebGLRenderingContextBase::LRUImageBufferCache::LRUImageBufferCache(int capacity
 {
 }
 
-ImageBuffer* WebGLRenderingContextBase::LRUImageBufferCache::imageBuffer(const IntSize& size, CompositeOperator fillOperator)
+ImageBuffer* WebGLRenderingContextBase::LRUImageBufferCache::imageBuffer(const IntSize& size, DestinationColorSpace colorSpace, CompositeOperator fillOperator)
 {
     size_t i;
     for (i = 0; i < m_buffers.size(); ++i) {
-        ImageBuffer* buf = m_buffers[i].get();
-        if (!buf)
+        if (!m_buffers[i])
             break;
-        if (buf->logicalSize() != size)
+        ImageBuffer& buf = m_buffers[i]->second.get();
+        if (m_buffers[i]->first != colorSpace || buf.truncatedLogicalSize() != size)
             continue;
         bubbleToFront(i);
         if (fillOperator != CompositeOperator::Copy && fillOperator != CompositeOperator::Clear)
-            buf->context().clearRect({ { }, size });
-        return buf;
+            buf.context().clearRect({ { }, size });
+        return &buf;
     }
 
     // FIXME (149423): Should this ImageBuffer be unconditionally unaccelerated?
-    auto temp = ImageBuffer::create(size, RenderingMode::Unaccelerated, 1, DestinationColorSpace::SRGB(), PixelFormat::BGRA8);
+    auto temp = ImageBuffer::create(size, RenderingMode::Unaccelerated, 1, colorSpace, PixelFormat::BGRA8);
     if (!temp)
         return nullptr;
     ASSERT(m_buffers.size() > 0);
     i = std::min(m_buffers.size() - 1, i);
-    m_buffers[i] = WTFMove(temp);
+    m_buffers[i] = { colorSpace, temp.releaseNonNull() };
 
-    ImageBuffer* buf = m_buffers[i].get();
+    ImageBuffer& buf = m_buffers[i]->second.get();
     bubbleToFront(i);
-    return buf;
+    return &buf;
 }
 
 void WebGLRenderingContextBase::LRUImageBufferCache::bubbleToFront(size_t idx)
@@ -8173,14 +8186,6 @@ Lock& WebGLRenderingContextBase::objectGraphLock()
 void WebGLRenderingContextBase::prepareForDisplay()
 {
     if (!m_context)
-        return;
-
-    // If the canvas is not in the document body, then it won't be
-    // composited and thus doesn't need preparation. Unfortunately
-    // it can't tell at the time it was added to the list, since it
-    // could be inserted or removed from the document body afterwards.
-    auto canvas = htmlCanvas();
-    if (!canvas || !canvas->isInTreeScope())
         return;
 
     m_context->prepareForDisplay();

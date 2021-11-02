@@ -28,7 +28,7 @@
 
 #if ENABLE(LAYOUT_FORMATTING_CONTEXT)
 
-#include "InlineIterator.h"
+#include "InlineWalker.h"
 #include "LayoutContainerBox.h"
 #include "LayoutInlineTextBox.h"
 #include "LayoutLineBreakBox.h"
@@ -37,6 +37,7 @@
 #include "RenderChildIterator.h"
 #include "RenderImage.h"
 #include "RenderLineBreak.h"
+#include "TextUtil.h"
 
 namespace WebCore {
 namespace LayoutIntegration {
@@ -44,7 +45,7 @@ namespace LayoutIntegration {
 static constexpr size_t smallTreeThreshold = 8;
 
 // FIXME: see webkit.org/b/230964
-#define CAN_USE_FIRST_LINE_STYLE_RESOLVE 0
+#define CAN_USE_FIRST_LINE_STYLE_RESOLVE 1
 
 static RenderStyle rootBoxStyle(const RenderStyle& style)
 {
@@ -70,8 +71,10 @@ static std::unique_ptr<RenderStyle> rootBoxFirstLineStyle(const RenderBlockFlow&
 
 BoxTree::BoxTree(RenderBlockFlow& flow)
     : m_flow(flow)
-    , m_root(rootBoxStyle(flow.style()), rootBoxFirstLineStyle(flow))
+    , m_root(Layout::Box::ElementAttributes { }, rootBoxStyle(flow.style()), rootBoxFirstLineStyle(flow))
 {
+    m_root.setIsIntegrationBlockContainer();
+
     if (flow.isAnonymous())
         m_root.setIsAnonymous();
 
@@ -89,9 +92,14 @@ void BoxTree::buildTree()
         if (is<RenderText>(childRenderer)) {
             auto& textRenderer = downcast<RenderText>(childRenderer);
             auto style = RenderStyle::createAnonymousStyleWithDisplay(textRenderer.style(), DisplayType::Inline);
+            auto canUseSimplifiedTextMeasuring = [&] {
+                if (!textRenderer.canUseSimplifiedTextMeasuring())
+                    return false;
+                return !firstLineStyle || Layout::TextUtil::canUseSimplifiedTextMeasuringForFirstLine(style, *firstLineStyle);
+            }();
             return makeUnique<Layout::InlineTextBox>(
                 style.textSecurity() == TextSecurity::None ? textRenderer.text() : RenderBlock::updateSecurityDiscCharacters(style, textRenderer.text())
-                , textRenderer.canUseSimplifiedTextMeasuring(), WTFMove(style), WTFMove(firstLineStyle));
+                , canUseSimplifiedTextMeasuring, WTFMove(style), WTFMove(firstLineStyle));
         }
 
         auto style = RenderStyle::clone(childRenderer.style());
@@ -144,8 +152,6 @@ void BoxTree::buildTree()
     };
 
     for (auto walker = InlineWalker(m_flow); !walker.atEnd(); walker.advance()) {
-        if (walker.atEndOfInline())
-            continue;
         auto& childRenderer = *walker.current();
         auto childBox = createChildBox(childRenderer);
         appendChild(makeUniqueRefFromNonNullUniquePtr(WTFMove(childBox)), childRenderer);
@@ -155,9 +161,10 @@ void BoxTree::buildTree()
 void BoxTree::appendChild(UniqueRef<Layout::Box> childBox, RenderObject& childRenderer)
 {
     auto& parentBox = downcast<Layout::ContainerBox>(layoutBoxForRenderer(*childRenderer.parent()));
-    parentBox.appendChild(childBox.get());
 
-    m_boxes.append({ WTFMove(childBox), &childRenderer });
+    m_boxes.append({ childBox.get(), &childRenderer });
+
+    parentBox.appendChild(WTFMove(childBox));
 
     if (m_boxes.size() > smallTreeThreshold) {
         if (m_rendererToBoxMap.isEmpty()) {

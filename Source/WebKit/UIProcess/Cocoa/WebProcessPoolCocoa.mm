@@ -35,14 +35,11 @@
 #import "NetworkProcessCreationParameters.h"
 #import "NetworkProcessMessages.h"
 #import "NetworkProcessProxy.h"
-#import "PluginProcessManager.h"
 #import "PreferenceObserver.h"
 #import "SandboxUtilities.h"
 #import "TextChecker.h"
 #import "UserInterfaceIdiom.h"
 #import "WKBrowsingContextControllerInternal.h"
-#import "WKMouseDeviceObserver.h"
-#import "WKStylusDeviceObserver.h"
 #import "WebAuthnProcessMessages.h"
 #import "WebAuthnProcessProxy.h"
 #import "WebBackForwardCache.h"
@@ -105,6 +102,14 @@
 #import "GPUProcessMessages.h"
 #endif
 
+#if HAVE(MOUSE_DEVICE_OBSERVATION)
+#import "WKMouseDeviceObserver.h"
+#endif
+
+#if HAVE(STYLUS_DEVICE_OBSERVATION)
+#import "WKStylusDeviceObserver.h"
+#endif
+
 #if HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
 #include <WebCore/CaptionUserPreferencesMediaAF.h>
 #include <WebCore/MediaAccessibilitySoftLink.h>
@@ -139,15 +144,12 @@ SOFT_LINK(BackBoardServices, BKSDisplayBrightnessGetCurrent, float, (), ());
 @interface WKProcessPoolWeakObserver : NSObject {
     WeakPtr<WebKit::WebProcessPool> m_weakPtr;
 }
+@property (nonatomic, readonly, direct) RefPtr<WebKit::WebProcessPool> pool;
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithWeakPtr:(WeakPtr<WebKit::WebProcessPool>&&)weakPtr NS_DESIGNATED_INITIALIZER;
 @end
 
 NS_DIRECT_MEMBERS
-@interface WKProcessPoolWeakObserver (Direct)
-@property (nonatomic, readonly) RefPtr<WebKit::WebProcessPool> pool;
-@end
-
 @implementation WKProcessPoolWeakObserver
 - (instancetype)initWithWeakPtr:(WeakPtr<WebKit::WebProcessPool>&&)weakPtr
 {
@@ -155,10 +157,7 @@ NS_DIRECT_MEMBERS
         m_weakPtr = WTFMove(weakPtr);
     return self;
 }
-@end
 
-NS_DIRECT_MEMBERS
-@implementation WKProcessPoolWeakObserver (Direct)
 - (RefPtr<WebKit::WebProcessPool>)pool
 {
     return m_weakPtr.get();
@@ -189,13 +188,6 @@ void WebProcessPool::updateProcessSuppressionState()
         if (auto* networkProcess = dataStore.networkProcessIfExists())
             networkProcess->setProcessSuppressionEnabled(enabled);
     });
-
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    if (!m_processSuppressionDisabledForPageCounter.value())
-        m_pluginProcessManagerProcessSuppressionDisabledToken = nullptr;
-    else if (!m_pluginProcessManagerProcessSuppressionDisabledToken)
-        m_pluginProcessManagerProcessSuppressionDisabledToken = PluginProcessManager::singleton().processSuppressionDisabledToken();
-#endif
 }
 
 NSMutableDictionary *WebProcessPool::ensureBundleParameters()
@@ -224,7 +216,7 @@ static AccessibilityPreferences accessibilityPreferences()
 #if HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
 void WebProcessPool::setMediaAccessibilityPreferences(WebProcessProxy& process)
 {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), [weakProcess = makeWeakPtr(process)] {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), [weakProcess = WeakPtr { process }] {
         auto captionDisplayMode = WebCore::CaptionUserPreferencesMediaAF::platformCaptionDisplayMode();
         auto preferredLanguages = WebCore::CaptionUserPreferencesMediaAF::platformPreferredLanguages();
         callOnMainRunLoop([weakProcess, captionDisplayMode, preferredLanguages = WTFMove(preferredLanguages).isolatedCopy()] {
@@ -483,7 +475,7 @@ void WebProcessPool::platformInitializeWebProcess(const WebProcessProxy& process
     }
 
 #if PLATFORM(IOS_FAMILY)
-    parameters.currentUserInterfaceIdiomIsPhoneOrWatch = currentUserInterfaceIdiomIsPhoneOrWatch();
+    parameters.currentUserInterfaceIdiomIsSmallScreen = currentUserInterfaceIdiomIsSmallScreen();
     parameters.supportsPictureInPicture = supportsPictureInPicture();
     parameters.cssValueToSystemColorMap = RenderThemeIOS::cssValueToSystemColorMap();
     parameters.focusRingColor = RenderThemeIOS::systemFocusRingColor();
@@ -563,13 +555,6 @@ void WebProcessPool::platformInitializeNetworkProcess(NetworkProcessCreationPara
 #endif
 
     parameters.enablePrivateClickMeasurement = ![defaults objectForKey:WebPreferencesKey::privateClickMeasurementEnabledKey()] || [defaults boolForKey:WebPreferencesKey::privateClickMeasurementEnabledKey()];
-#if PLATFORM(MAC)
-    NSString *format = @"Experimental%@";
-#else
-    NSString *format = @"WebKitExperimental%@";
-#endif
-    parameters.enablePrivateClickMeasurementDebugMode = [defaults boolForKey:[NSString stringWithFormat:format, WebPreferencesKey::privateClickMeasurementDebugModeEnabledKey().createCFString().get()]];
-    
     parameters.ftpEnabled = [defaults objectForKey:WebPreferencesKey::ftpEnabledKey()] && [defaults boolForKey:WebPreferencesKey::ftpEnabledKey()];
 }
 
@@ -729,10 +714,10 @@ void WebProcessPool::removeCFNotificationObserver(CFStringRef name, CFNotificati
 
 void WebProcessPool::registerNotificationObservers()
 {
-    m_weakObserver = adoptNS([[WKProcessPoolWeakObserver alloc] initWithWeakPtr:makeWeakPtr(*this)]);
+    m_weakObserver = adoptNS([[WKProcessPoolWeakObserver alloc] initWithWeakPtr:*this]);
 
 #if !PLATFORM(IOS_FAMILY)
-    m_powerObserver = makeUnique<WebCore::PowerObserver>([weakThis = makeWeakPtr(this)] {
+    m_powerObserver = makeUnique<WebCore::PowerObserver>([weakThis = WeakPtr { *this }] {
         if (weakThis)
             weakThis->sendToAllProcesses(Messages::WebProcess::SystemWillPowerOn());
     });
@@ -816,10 +801,8 @@ void WebProcessPool::registerNotificationObservers()
 #endif
     if (![UIApplication sharedApplication]) {
         m_applicationLaunchObserver = [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil queue:[NSOperationQueue currentQueue] usingBlock:^(NSNotification *notification) {
-            if (WebKit::updateCurrentUserInterfaceIdiom()) {
-                auto isPhoneOrWatch = WebKit::currentUserInterfaceIdiomIsPhoneOrWatch();
-                sendToAllProcesses(Messages::WebProcess::UserInterfaceIdiomDidChange(isPhoneOrWatch));
-            }
+            if (WebKit::updateCurrentUserInterfaceIdiom())
+                sendToAllProcesses(Messages::WebProcess::UserInterfaceIdiomDidChange(WebKit::currentUserInterfaceIdiomIsSmallScreen()));
         }];
     }
 #endif

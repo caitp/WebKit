@@ -32,6 +32,7 @@
 #include <wtf/HashMap.h>
 
 OBJC_CLASS AVAssetImageGenerator;
+OBJC_CLASS AVAssetTrack;
 OBJC_CLASS AVAssetResourceLoadingRequest;
 OBJC_CLASS AVMediaSelectionGroup;
 OBJC_CLASS AVOutputContext;
@@ -50,6 +51,7 @@ OBJC_CLASS WebCoreAVFPullDelegate;
 
 typedef struct CGImage *CGImageRef;
 typedef struct __CVBuffer *CVPixelBufferRef;
+typedef NSString *AVMediaCharacteristic;
 
 namespace WebCore {
 
@@ -257,6 +259,7 @@ private:
     bool videoOutputHasAvailableFrame();
     void paintWithVideoOutput(GraphicsContext&, const FloatRect&);
     RefPtr<NativeImage> nativeImageForCurrentTime() final;
+    DestinationColorSpace colorSpace() final;
     void waitForVideoOutputMediaDataWillChange();
 
     RetainPtr<CVPixelBufferRef> pixelBufferForCurrentTime() final;
@@ -275,8 +278,9 @@ private:
     AVMediaSelectionGroup *safeMediaSelectionGroupForAudibleMedia();
     AVMediaSelectionGroup *safeMediaSelectionGroupForVisualMedia();
 
-    NSArray *safeAVAssetTracksForAudibleMedia();
-    NSArray *safeAVAssetTracksForVisualMedia();
+    AVAssetTrack* firstEnabledAudibleTrack() const;
+    AVAssetTrack* firstEnabledVisibleTrack() const;
+    AVAssetTrack* firstEnabledTrack(AVMediaCharacteristic) const;
 
 #if ENABLE(DATACUE_VALUE)
     void processMetadataTrack();
@@ -336,6 +340,7 @@ private:
     bool supportsPauseAtHostTime() const final { return true; }
     bool playAtHostTime(const MonotonicTime&) final;
     bool pauseAtHostTime(const MonotonicTime&) final;
+    bool haveBeenAskedToPaint() const { return m_haveBeenAskedToPaint; }
 
     RetainPtr<AVURLAsset> m_avAsset;
     RetainPtr<AVPlayer> m_avPlayer;
@@ -444,6 +449,8 @@ private:
 #endif
     bool m_runningModalPaint { false };
     bool m_haveProcessedChapterTracks { false };
+    bool m_waitForVideoOutputMediaDataWillChangeTimedOut { false };
+    bool m_haveBeenAskedToPaint { false };
 };
 
 }

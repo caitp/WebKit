@@ -26,25 +26,17 @@
 #import "config.h"
 #import "PrivateClickMeasurementXPCUtilities.h"
 
-namespace WebKit {
+#import "DaemonUtilities.h"
+#import "PrivateClickMeasurementManagerInterface.h"
+#import <wtf/OSObjectPtr.h>
 
-namespace PCM {
+namespace WebKit::PCM {
 
 void addVersionAndEncodedMessageToDictionary(Vector<uint8_t>&& message, xpc_object_t dictionary)
 {
     ASSERT(xpc_get_type(dictionary) == XPC_TYPE_DICTIONARY);
     xpc_dictionary_set_uint64(dictionary, PCM::protocolVersionKey, PCM::protocolVersionValue);
-
-    auto bufferSize = message.size();
-    auto rawPointer = message.releaseBuffer().leakPtr();
-    auto dispatchData = adoptNS(dispatch_data_create(rawPointer, bufferSize, dispatch_get_main_queue(), ^{
-        fastFree(rawPointer);
-    }));
-    auto xpcData = adoptOSObject(xpc_data_create_with_dispatch_data(dispatchData.get()));
-    xpc_dictionary_set_value(dictionary, PCM::protocolEncodedMessageKey, xpcData.get());
-
+    xpc_dictionary_set_value(dictionary, PCM::protocolEncodedMessageKey, vectorToXPCData(WTFMove(message)).get());
 }
-
-} // namespace PCM
 
 } // namespace WebKit

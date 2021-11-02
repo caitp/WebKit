@@ -93,9 +93,6 @@ public:
     LegacyInlineBox* firstLeafDescendant() const;
     LegacyInlineBox* lastLeafDescendant() const;
 
-    typedef void (*CustomInlineBoxRangeReverse)(void* userData, Vector<LegacyInlineBox*>::iterator first, Vector<LegacyInlineBox*>::iterator last);
-    void collectLeafBoxesInLogicalOrder(Vector<LegacyInlineBox*>&, CustomInlineBoxRangeReverse customReverseImplementation = nullptr, void* userData = nullptr) const;
-
     void setConstructed() final
     {
         LegacyInlineBox::setConstructed();
@@ -117,8 +114,6 @@ public:
 
     void paint(PaintInfo&, const LayoutPoint&, LayoutUnit lineTop, LayoutUnit lineBottom) override;
     bool nodeAtPoint(const HitTestRequest&, HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, LayoutUnit lineTop, LayoutUnit lineBottom, HitTestAction) override;
-
-    bool boxShadowCanBeAppliedToBackground(const FillLayer&) const;
 
     // logicalLeft = left in a horizontal line and top in a vertical line.
     LayoutUnit marginBorderPaddingLogicalLeft() const { return LayoutUnit(marginLogicalLeft() + borderLogicalLeft() + paddingLogicalLeft()); }

@@ -217,6 +217,10 @@ if JSVALUE64
     const StructureEntropyBitsShift = constexpr StructureIDTable::s_entropyBitsShiftForStructurePointer
 end
 
+if LARGE_TYPED_ARRAYS
+    const SmallTypedArrayMaxLength = constexpr ArrayProfile::s_smallTypedArrayMaxLength
+end
+
 const maxFrameExtentForSlowPathCall = constexpr maxFrameExtentForSlowPathCall
 
 if X86_64 or X86_64_WIN or ARM64 or ARM64E or RISCV64
@@ -934,7 +938,12 @@ macro copyCalleeSavesToEntryFrameCalleeSavesBuffer(entryFrame)
             storeq csr4, 32[entryFrame]
             storeq csr5, 40[entryFrame]
             storeq csr6, 48[entryFrame]
-        elsif ARMv7 or MIPS
+        # To understand why ARMv7 and MIPS differ in store order,
+        # see comment in preserveCalleeSavesUsedByLLInt
+        elsif ARMv7
+            storep csr1, [entryFrame]
+            storep csr0, 4[entryFrame]
+        elsif MIPS
             storep csr0, [entryFrame]
             storep csr1, 4[entryFrame]
         elsif RISCV64
@@ -1010,7 +1019,12 @@ macro restoreCalleeSavesFromVMEntryFrameCalleeSavesBuffer(vm, temp)
             loadq 32[temp], csr4
             loadq 40[temp], csr5
             loadq 48[temp], csr6
-        elsif ARMv7 or MIPS
+        # To understand why ARMv7 and MIPS differ in restore order,
+        # see comment in preserveCalleeSavesUsedByLLInt
+        elsif ARMv7
+            loadp [temp], csr1
+            loadp 4[temp], csr0
+        elsif MIPS
             loadp [temp], csr0
             loadp 4[temp], csr1
         elsif RISCV64
@@ -1300,7 +1314,8 @@ macro arrayProfile(offset, cellAndIndexingType, metadata, scratch)
     loadb JSCell::m_indexingTypeAndMisc[cell], indexingType
 end
 
-macro getByValTypedArray(base, index, finishIntGetByVal, finishDoubleGetByVal, slowPath)
+# Note that index is already sign-extended to be a register width.
+macro getByValTypedArray(base, index, finishIntGetByVal, finishDoubleGetByVal, setLargeTypedArray, slowPath)
     # First lets check if we even have a typed array. This lets us do some boilerplate up front.
     loadb JSCell::m_type[base], t2
     subi FirstTypedArrayType, t2
@@ -1311,11 +1326,26 @@ macro getByValTypedArray(base, index, finishIntGetByVal, finishDoubleGetByVal, s
     if ARM64E
         const length = t6
         const scratch = t7
-        loadi JSArrayBufferView::m_length[base], length
-        biaeq index, length, slowPath
+        if LARGE_TYPED_ARRAYS
+            loadq JSArrayBufferView::m_length[base], length
+            bqaeq index, length, slowPath
+        else
+            loadi JSArrayBufferView::m_length[base], length
+            biaeq index, length, slowPath
+        end
     else
         # length and scratch are intentionally undefined on this branch because they are not used on other platforms.
-        biaeq index, JSArrayBufferView::m_length[base], slowPath
+        if LARGE_TYPED_ARRAYS
+            bqaeq index, JSArrayBufferView::m_length[base], slowPath
+        else
+            biaeq index, JSArrayBufferView::m_length[base], slowPath
+        end
+    end
+
+    if LARGE_TYPED_ARRAYS
+        bqbeq index, SmallTypedArrayMaxLength, .smallTypedArray
+        setLargeTypedArray()
+.smallTypedArray:
     end
 
     loadp JSArrayBufferView::m_vector[base], t3
@@ -2482,6 +2512,35 @@ op(llint_internal_function_construct_trampoline, macro ()
 end)
 
 
+if JIT
+    macro loadBaselineJITConstantPool()
+        # Baseline uses LLInt's PB register for its JIT constant pool.
+        loadp CodeBlock[cfr], PB
+        loadp CodeBlock::m_jitData[PB], PB
+        loadp CodeBlock::JITData::m_jitConstantPool[PB], PB
+    end
+
+    macro setupReturnToBaselineAfterCheckpointExitIfNeeded()
+        # DFG or FTL OSR exit could have compiled an OSR exit to LLInt code.
+        # That means it set up registers as if execution would happen in the
+        # LLInt. However, during OSR exit for checkpoints, we might return to
+        # JIT code if it's already compiled. After the OSR exit gets compiled,
+        # we can tier up to JIT code. And checkpoint exit will jump to it.
+        # That means we always need to set up our constant pool GPR, because the OSR
+        # exit code might not have done it.
+        bpneq r0, 1, .notBaselineJIT
+        loadBaselineJITConstantPool()
+    .notBaselineJIT:
+
+    end
+else
+    macro loadBaselineJITConstantPool()
+    end
+
+    macro setupReturnToBaselineAfterCheckpointExitIfNeeded()
+    end
+end
+
 op(checkpoint_osr_exit_from_inlined_call_trampoline, macro ()
     if (JSVALUE64 and not (C_LOOP or C_LOOP_WIN)) or ARMv7 or MIPS
         restoreStackPointerAfterCall()
@@ -2505,8 +2564,10 @@ op(checkpoint_osr_exit_from_inlined_call_trampoline, macro ()
             cCall2(_llint_slow_path_checkpoint_osr_exit_from_inlined_call)
         end
 
+        setupReturnToBaselineAfterCheckpointExitIfNeeded()
         restoreStateAfterCCall()
         branchIfException(_llint_throw_from_slow_path_trampoline)
+
         if ARM64E
             move r1, a0
             leap JSCConfig + constexpr JSC::offsetOfJSCConfigGateMap + (constexpr Gate::loopOSREntry) * PtrSize, a2
@@ -2528,6 +2589,7 @@ op(checkpoint_osr_exit_trampoline, macro ()
         move cfr, a0
         # We don't call saveStateForCCall() because we are going to use the bytecodeIndex from our side state.
         cCall2(_llint_slow_path_checkpoint_osr_exit)
+        setupReturnToBaselineAfterCheckpointExitIfNeeded()
         restoreStateAfterCCall()
         branchIfException(_llint_throw_from_slow_path_trampoline)
         if ARM64E

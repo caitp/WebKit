@@ -93,6 +93,22 @@ JITConstantPool::Constant JIT::addToConstantPool(JITConstantPool::Type type, voi
     return result;
 }
 
+std::tuple<UnlinkedStructureStubInfo*, JITConstantPool::Constant> JIT::addUnlinkedStructureStubInfo()
+{
+    void* unlinkedStubInfoIndex = bitwise_cast<void*>(static_cast<uintptr_t>(m_unlinkedStubInfos.size()));
+    UnlinkedStructureStubInfo* stubInfo = &m_unlinkedStubInfos.alloc();
+    JITConstantPool::Constant stubInfoIndex = addToConstantPool(JITConstantPool::Type::StructureStubInfo, unlinkedStubInfoIndex);
+    return std::tuple { stubInfo, stubInfoIndex };
+}
+
+std::tuple<UnlinkedCallLinkInfo*, JITConstantPool::Constant> JIT::addUnlinkedCallLinkInfo()
+{
+    void* unlinkedCallLinkInfoIndex = bitwise_cast<void*>(static_cast<uintptr_t>(m_unlinkedCalls.size()));
+    UnlinkedCallLinkInfo* info = &m_unlinkedCalls.alloc();
+    JITConstantPool::Constant callLinkInfoIndex = addToConstantPool(JITConstantPool::Type::CallLinkInfo, unlinkedCallLinkInfoIndex);
+    return std::tuple { info, callLinkInfoIndex };
+}
+
 #if ENABLE(DFG_JIT)
 void JIT::emitEnterOptimizationCheck()
 {
@@ -269,6 +285,23 @@ void JIT::privateCompileMainPass()
             String id = makeString("Baseline_fast_", opcodeNames[opcodeID]);
             sizeMarker = m_vm->jitSizeStatistics->markStart(id, *this);
         }
+
+#if ASSERT_ENABLED
+        if (opcodeID != op_catch) {
+            loadPtr(addressFor(CallFrameSlot::codeBlock), regT0);
+            loadPtr(Address(regT0, CodeBlock::offsetOfMetadataTable()), regT1);
+            loadPtr(Address(regT0, CodeBlock::offsetOfJITData()), regT0);
+            loadPtr(Address(regT0, CodeBlock::JITData::offsetOfJITConstantPool()), regT2);
+
+            auto metadataOK = branchPtr(Equal, regT1, s_metadataGPR);
+            breakpoint();
+            metadataOK.link(this);
+
+            auto constantsOK = branchPtr(Equal, regT2, s_constantsGPR);
+            breakpoint();
+            constantsOK.link(this);
+        }
+#endif
 
         if (UNLIKELY(m_compilation)) {
             add64(
@@ -783,13 +816,11 @@ void JIT::compileAndLinkWithoutFinalizing(JITCompilationEffort effort)
                     continue;
                 int offset = CallFrame::argumentOffsetIncludingThis(argument) * static_cast<int>(sizeof(Register));
 #if USE(JSVALUE64)
-                JSValueRegs resultRegs = JSValueRegs(regT0);
-                load64(Address(callFrameRegister, offset), resultRegs.payloadGPR());
+                constexpr JSValueRegs resultRegs { regT0 };
 #elif USE(JSVALUE32_64)
-                JSValueRegs resultRegs = JSValueRegs(regT1, regT0);
-                load32(Address(callFrameRegister, offset + OBJECT_OFFSETOF(JSValue, u.asBits.payload)), resultRegs.payloadGPR());
-                load32(Address(callFrameRegister, offset + OBJECT_OFFSETOF(JSValue, u.asBits.tag)), resultRegs.tagGPR());
+                constexpr JSValueRegs resultRegs { regT1, regT0 };
 #endif
+                loadValue(Address(callFrameRegister, offset), resultRegs);
                 storeValue(resultRegs, Address(regT2, argument * sizeof(ValueProfile) + ValueProfile::offsetOfFirstBucket()));
             }
         }
@@ -922,7 +953,6 @@ void JIT::link()
             patchBuffer.link(record.from, record.callee);
     }
 
-#if USE(JSVALUE64)
     auto finalizeICs = [&] (auto& generators) {
         for (auto& gen : generators) {
             gen.m_unlinkedStubInfo->start = patchBuffer.locationOf<JITStubRoutinePtrTag>(gen.m_start);
@@ -942,31 +972,10 @@ void JIT::link()
     finalizeICs(m_inByVals);
     finalizeICs(m_instanceOfs);
     finalizeICs(m_privateBrandAccesses);
-#else
-    finalizeInlineCaches(m_getByIds, patchBuffer);
-    finalizeInlineCaches(m_getByVals, patchBuffer);
-    finalizeInlineCaches(m_getByIdsWithThis, patchBuffer);
-    finalizeInlineCaches(m_putByIds, patchBuffer);
-    finalizeInlineCaches(m_putByVals, patchBuffer);
-    finalizeInlineCaches(m_delByIds, patchBuffer);
-    finalizeInlineCaches(m_delByVals, patchBuffer);
-    finalizeInlineCaches(m_inByIds, patchBuffer);
-    finalizeInlineCaches(m_inByVals, patchBuffer);
-    finalizeInlineCaches(m_instanceOfs, patchBuffer);
-    finalizeInlineCaches(m_privateBrandAccesses, patchBuffer);
-#endif
 
     for (auto& compilationInfo : m_callCompilationInfo) {
-#if USE(JSVALUE64)
         UnlinkedCallLinkInfo& info = *compilationInfo.unlinkedCallLinkInfo;
         info.doneLocation = patchBuffer.locationOf<JSInternalPtrTag>(compilationInfo.doneLocation);
-#else
-        CallLinkInfo& info = *compilationInfo.callLinkInfo;
-        info.setCodeLocations(
-            patchBuffer.locationOf<JSInternalPtrTag>(compilationInfo.slowPathStart),
-            patchBuffer.locationOf<JSInternalPtrTag>(compilationInfo.doneLocation));
-#endif
-
     }
 
     JITCodeMapBuilder jitCodeMapBuilder;
@@ -998,9 +1007,13 @@ void JIT::link()
     MacroAssemblerCodePtr<JSEntryPtrTag> withArityCheck = patchBuffer.locationOf<JSEntryPtrTag>(m_arityCheck);
     m_jitCode = adoptRef(*new BaselineJITCode(result, withArityCheck));
 
-    m_jitCode->m_unlinkedCalls = WTFMove(m_unlinkedCalls);
+    m_jitCode->m_unlinkedCalls = FixedVector<UnlinkedCallLinkInfo>(m_unlinkedCalls.size());
+    if (m_jitCode->m_unlinkedCalls.size())
+        std::move(m_unlinkedCalls.begin(), m_unlinkedCalls.end(), m_jitCode->m_unlinkedCalls.begin());
     m_jitCode->m_evalCallLinkInfos = WTFMove(m_evalCallLinkInfos);
-    m_jitCode->m_unlinkedStubInfos = WTFMove(m_unlinkedStubInfos);
+    m_jitCode->m_unlinkedStubInfos = FixedVector<UnlinkedStructureStubInfo>(m_unlinkedStubInfos.size());
+    if (m_jitCode->m_unlinkedStubInfos.size())
+        std::move(m_unlinkedStubInfos.begin(), m_unlinkedStubInfos.end(), m_jitCode->m_unlinkedStubInfos.begin());
     m_jitCode->m_switchJumpTables = WTFMove(m_switchJumpTables);
     m_jitCode->m_stringSwitchJumpTables = WTFMove(m_stringSwitchJumpTables);
     m_jitCode->m_jitCodeMap = jitCodeMapBuilder.finalize();

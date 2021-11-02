@@ -35,9 +35,9 @@
 #include "HTMLElement.h"
 #include "HTMLHtmlElement.h"
 #include "HTMLNames.h"
+#include "InlineIteratorBox.h"
+#include "InlineIteratorLine.h"
 #include "InlineRunAndOffset.h"
-#include "LayoutIntegrationLineIterator.h"
-#include "LayoutIntegrationRunIterator.h"
 #include "Logging.h"
 #include "Range.h"
 #include "RenderBlockFlow.h"
@@ -122,6 +122,8 @@ Position VisiblePosition::leftVisuallyDistinctCandidate() const
     Position downstreamStart = p.downstream();
     TextDirection primaryDirection = p.primaryDirection();
 
+    InlineIterator::LineLogicalOrderCache orderCache;
+
     while (true) {
         auto [run, offset] = p.inlineRunAndOffset(m_affinity, primaryDirection);
         if (!run)
@@ -174,7 +176,9 @@ Position VisiblePosition::leftVisuallyDistinctCandidate() const
 
             if (run->direction() == primaryDirection) {
                 if (!previousRun) {
-                    auto logicalStart = (primaryDirection == TextDirection::LTR) ? run->line()->logicalStartRunWithNode() : run->line()->logicalEndRunWithNode();
+                    auto logicalStart = primaryDirection == TextDirection::LTR
+                        ? InlineIterator::firstLeafOnLineInLogicalOrderWithNode(run->line(), orderCache)
+                        : InlineIterator::lastLeafOnLineInLogicalOrderWithNode(run->line(), orderCache);
                     if (logicalStart) {
                         run = logicalStart;
                         renderer = &run->renderer();
@@ -284,6 +288,8 @@ Position VisiblePosition::rightVisuallyDistinctCandidate() const
     Position downstreamStart = p.downstream();
     TextDirection primaryDirection = p.primaryDirection();
 
+    InlineIterator::LineLogicalOrderCache orderCache;
+
     while (true) {
         auto [run, offset] = p.inlineRunAndOffset(m_affinity, primaryDirection);
         if (!run)
@@ -336,7 +342,10 @@ Position VisiblePosition::rightVisuallyDistinctCandidate() const
 
             if (run->direction() == primaryDirection) {
                 if (!nextRun) {
-                    auto logicalEnd = primaryDirection == TextDirection::LTR ? run->line()->logicalEndRunWithNode() : run->line()->logicalStartRunWithNode();
+                    auto logicalEnd = primaryDirection == TextDirection::LTR
+                        ? InlineIterator::lastLeafOnLineInLogicalOrderWithNode(run->line(), orderCache)
+                        : InlineIterator::firstLeafOnLineInLogicalOrderWithNode(run->line(), orderCache);
+
                     if (logicalEnd) {
                         run = logicalEnd;
                         renderer = &run->renderer();

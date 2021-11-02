@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 function plistbuddy()
 {
@@ -29,7 +30,7 @@ function mac_process_webcontent_entitlements()
         fi
         if (( "${TARGET_MAC_OS_X_VERSION_MAJOR}" >= 120000 ))
         then
-            plistbuddy add :com.apple.coreaudio.allow-vorbis-decode YES
+            plistbuddy add :com.apple.coreaudio.allow-vorbis-decode bool YES
         fi
     fi
 
@@ -60,6 +61,7 @@ function mac_process_gpu_entitlements()
         fi
 
         plistbuddy Add :com.apple.private.memory.ownership_transfer bool YES
+        plistbuddy Add :com.apple.private.webkit.use-xpc-endpoint bool YES
         plistbuddy Add :com.apple.rootless.storage.WebKitGPUSandbox bool YES
         plistbuddy Add :com.apple.QuartzCore.webkit-end-points bool YES
     fi
@@ -117,6 +119,7 @@ function mac_process_network_entitlements()
         plistbuddy Add :com.apple.private.webkit.use-xpc-endpoint bool YES
         plistbuddy Add :com.apple.rootless.storage.WebKitNetworkingSandbox bool YES
         plistbuddy Add :com.apple.symptom_analytics.configure bool YES
+        plistbuddy Add :com.apple.private.webkit.adattributiond bool YES
     fi
 }
 
@@ -182,7 +185,7 @@ function maccatalyst_process_webcontent_entitlements()
         plistbuddy Add :com.apple.private.pac.exception bool YES
         plistbuddy Add :com.apple.private.security.message-filter bool YES
         plistbuddy Add :com.apple.UIKit.view-service-wants-custom-idiom-and-scale bool YES
-        plistbuddy add :com.apple.QuartzCore.webkit-limited-types bool YES
+        plistbuddy Add :com.apple.QuartzCore.webkit-limited-types bool YES
     fi
 
     if [[ "${WK_USE_RESTRICTED_ENTITLEMENTS}" == YES ]]
@@ -206,7 +209,8 @@ function maccatalyst_process_gpu_entitlements()
     plistbuddy Add :com.apple.runningboard.assertions.webkit bool YES
     plistbuddy Add :com.apple.QuartzCore.webkit-end-points bool YES
     plistbuddy Add :com.apple.private.memory.ownership_transfer bool YES
-    plistbuddy add :com.apple.QuartzCore.webkit-limited-types bool YES
+    plistbuddy Add :com.apple.private.webkit.use-xpc-endpoint bool YES
+    plistbuddy Add :com.apple.QuartzCore.webkit-limited-types bool YES
 
     if [[ "${WK_USE_RESTRICTED_ENTITLEMENTS}" == YES ]]
     then
@@ -308,6 +312,7 @@ function ios_family_process_gpu_entitlements()
     plistbuddy Add :com.apple.private.memorystatus bool YES
     plistbuddy Add :com.apple.private.memory.ownership_transfer bool YES
     plistbuddy Add :com.apple.private.network.socket-delegate bool YES
+    plistbuddy Add :com.apple.private.webkit.use-xpc-endpoint bool YES
     plistbuddy Add :com.apple.runningboard.assertions.webkit bool YES
 
     plistbuddy Add :com.apple.tcc.delegated-services array
@@ -320,6 +325,8 @@ function ios_family_process_gpu_entitlements()
     plistbuddy Add :com.apple.systemstatus.activityattribution bool YES
     plistbuddy Add :com.apple.security.exception.mach-lookup.global-name array
     plistbuddy Add :com.apple.security.exception.mach-lookup.global-name:0 string com.apple.systemstatus.activityattribution
+    plistbuddy Add :com.apple.private.attribution.explicitly-assumed-identities array
+    plistbuddy Add :com.apple.private.attribution.explicitly-assumed-identities:0:type string wildcard
 }
 
 function ios_family_process_webauthn_entitlements()
@@ -364,8 +371,21 @@ function ios_family_process_webauthn_entitlements()
     plistbuddy Add :seatbelt-profiles:0 string com.apple.WebKit.WebAuthn
 }
 
+function ios_family_process_adattributiond_entitlements()
+{
+    plistbuddy Add :seatbelt-profiles array
+    plistbuddy Add :seatbelt-profiles:0 string com.apple.webkit.adattributiond
+}
+
+function ios_family_process_webpushd_entitlements()
+{
+    # FIXME: Add a sandbox profile for webpushd and add it to the seatbelt-profiles array.
+    echo "webpushd sandbox has not been implemented yet"
+}
+
 function ios_family_process_network_entitlements()
 {
+    plistbuddy Add :com.apple.private.webkit.adattributiond bool YES
     plistbuddy Add :com.apple.multitasking.systemappassertions bool YES
     plistbuddy Add :com.apple.payment.all-access bool YES
     plistbuddy Add :com.apple.private.accounts.bundleidspoofing bool YES
@@ -400,7 +420,9 @@ plistbuddy Clear dict
 # Simulator entitlements should be added to Resources/ios/XPCService-ios-simulator.entitlements
 if [[ "${WK_PLATFORM_NAME}" =~ .*simulator ]]
 then
-    cp "${CODE_SIGN_ENTITLEMENTS}" "${WK_PROCESSED_XCENT_FILE}"
+    if [[ "${PRODUCT_NAME}" != adattributiond && "${PRODUCT_NAME}" != webpushd ]]; then
+        cp "${CODE_SIGN_ENTITLEMENTS}" "${WK_PROCESSED_XCENT_FILE}"
+    fi
 elif [[ "${WK_PLATFORM_NAME}" == macosx ]]
 then
     [[ "${RC_XBS}" != YES ]] && plistbuddy Add :com.apple.security.get-task-allow bool YES
@@ -411,7 +433,7 @@ then
     elif [[ "${PRODUCT_NAME}" == com.apple.WebKit.Plugin.64 ]]; then mac_process_plugin_entitlements
     elif [[ "${PRODUCT_NAME}" == com.apple.WebKit.GPU ]]; then mac_process_gpu_entitlements
     elif [[ "${PRODUCT_NAME}" == com.apple.WebKit.WebAuthn ]]; then mac_process_webauthn_entitlements
-    else echo "Unsupported/unknown product: ${PRODUCT_NAME}"
+    elif [[ "${PRODUCT_NAME}" != webpushd && "${PRODUCT_NAME}" != adattributiond ]]; then echo "Unsupported/unknown product: ${PRODUCT_NAME}"
     fi
 elif [[ "${WK_PLATFORM_NAME}" == maccatalyst || "${WK_PLATFORM_NAME}" == iosmac ]]
 then
@@ -434,6 +456,10 @@ then
     elif [[ "${PRODUCT_NAME}" == com.apple.WebKit.Plugin.64 ]]; then ios_family_process_plugin_entitlements
     elif [[ "${PRODUCT_NAME}" == com.apple.WebKit.GPU ]]; then ios_family_process_gpu_entitlements
     elif [[ "${PRODUCT_NAME}" == com.apple.WebKit.WebAuthn ]]; then ios_family_process_webauthn_entitlements
+    elif [[ "${PRODUCT_NAME}" == adattributiond ]]; then
+        ios_family_process_adattributiond_entitlements
+    elif [[ "${PRODUCT_NAME}" == webpushd ]]; then
+        ios_family_process_webpushd_entitlements
     else echo "Unsupported/unknown product: ${PRODUCT_NAME}"
     fi
 else

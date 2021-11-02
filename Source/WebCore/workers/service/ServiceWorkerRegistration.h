@@ -29,8 +29,12 @@
 
 #include "ActiveDOMObject.h"
 #include "EventTarget.h"
+#include "JSDOMPromiseDeferred.h"
+#include "PushPermissionState.h"
+#include "PushSubscription.h"
 #include "SWClientConnection.h"
 #include "ServiceWorkerRegistrationData.h"
+#include "Supplementable.h"
 #include "Timer.h"
 
 namespace WebCore {
@@ -40,12 +44,12 @@ class ScriptExecutionContext;
 class ServiceWorker;
 class ServiceWorkerContainer;
 
-class ServiceWorkerRegistration final : public RefCounted<ServiceWorkerRegistration>, public EventTargetWithInlineData, public ActiveDOMObject {
-    WTF_MAKE_ISO_ALLOCATED(ServiceWorkerRegistration);
+class ServiceWorkerRegistration final : public RefCounted<ServiceWorkerRegistration>, public Supplementable<ServiceWorkerRegistration>, public EventTargetWithInlineData, public ActiveDOMObject {
+    WTF_MAKE_ISO_ALLOCATED_EXPORT(ServiceWorkerRegistration, WEBCORE_EXPORT);
 public:
     static Ref<ServiceWorkerRegistration> getOrCreate(ScriptExecutionContext&, Ref<ServiceWorkerContainer>&&, ServiceWorkerRegistrationData&&);
 
-    ~ServiceWorkerRegistration();
+    WEBCORE_EXPORT ~ServiceWorkerRegistration();
 
     ServiceWorkerRegistrationIdentifier identifier() const { return m_registrationData.identifier; }
 
@@ -67,6 +71,11 @@ public:
 
     void update(Ref<DeferredPromise>&&);
     void unregister(Ref<DeferredPromise>&&);
+
+    void subscribeToPushService(const Vector<uint8_t>& applicationServerKey, DOMPromiseDeferred<IDLInterface<PushSubscription>>&&);
+    void unsubscribeFromPushService(DOMPromiseDeferred<IDLBoolean>&&);
+    void getPushSubscription(DOMPromiseDeferred<IDLNullable<IDLInterface<PushSubscription>>>&&);
+    void getPushPermissionState(DOMPromiseDeferred<IDLEnumeration<PushPermissionState>>&&);
 
     using RefCounted::ref;
     using RefCounted::deref;

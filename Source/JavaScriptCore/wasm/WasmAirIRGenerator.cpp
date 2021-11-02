@@ -147,7 +147,12 @@ public:
         }
 
         static bool isIf(const ControlData& control) { return control.blockType() == BlockType::If; }
+        static bool isTry(const ControlData& control) { return control.blockType() == BlockType::Try; }
+        static bool isCatch(const ControlData& control) { return control.blockType() == BlockType::Catch; }
+        static bool isAnyCatch(const ControlData& control) { return control.blockType() == BlockType::Catch; }
         static bool isTopLevel(const ControlData& control) { return control.blockType() == BlockType::TopLevel; }
+        static bool isLoop(const ControlData& control) { return control.blockType() == BlockType::Loop; }
+        static bool isBlock(const ControlData& control) { return control.blockType() == BlockType::Block; }
 
         void dump(PrintStream& out) const
         {
@@ -163,6 +168,12 @@ public:
                 break;
             case BlockType::TopLevel:
                 out.print("TopLevel: ");
+                break;
+            case BlockType::Try:
+                out.print("Try: ");
+                break;
+            case BlockType::Catch:
+                out.print("Catch: ");
                 break;
             }
             out.print("Continuation: ", *continuation, ", Special: ");
@@ -314,6 +325,16 @@ public:
     PartialResult WARN_UNUSED_RETURN addElse(ControlData&, const Stack&);
     PartialResult WARN_UNUSED_RETURN addElseToUnreachable(ControlData&);
 
+    PartialResult WARN_UNUSED_RETURN addTry(BlockSignature, Stack& enclosingStack, ControlType& result, Stack& newStack);
+    PartialResult WARN_UNUSED_RETURN addCatch(unsigned exceptionIndex, const Signature&, Stack&, ControlType&, ResultList&);
+    PartialResult WARN_UNUSED_RETURN addCatchToUnreachable(unsigned exceptionIndex, const Signature&, ControlType&, ResultList&);
+    PartialResult WARN_UNUSED_RETURN addCatchAll(Stack&, ControlType&);
+    PartialResult WARN_UNUSED_RETURN addCatchAllToUnreachable(ControlType&);
+    PartialResult WARN_UNUSED_RETURN addDelegate(ControlType&, ControlType&);
+    PartialResult WARN_UNUSED_RETURN addDelegateToUnreachable(ControlType&, ControlType&);
+    PartialResult WARN_UNUSED_RETURN addThrow(unsigned exceptionIndex, Vector<ExpressionType>& args, Stack&);
+    PartialResult WARN_UNUSED_RETURN addRethrow(unsigned, ControlType&);
+
     PartialResult WARN_UNUSED_RETURN addReturn(const ControlData&, const Stack& returnValues);
     PartialResult WARN_UNUSED_RETURN addBranch(ControlData&, ExpressionType condition, const Stack& returnValues);
     PartialResult WARN_UNUSED_RETURN addSwitch(ExpressionType condition, const Vector<ControlData*>& targets, ControlData& defaultTargets, const Stack& expressionStack);
@@ -413,7 +434,7 @@ private:
     TypedTmp g64() { return { newTmp(B3::GP), Types::I64 }; }
     TypedTmp gExternref() { return { newTmp(B3::GP), Types::Externref }; }
     TypedTmp gFuncref() { return { newTmp(B3::GP), Types::Funcref }; }
-    TypedTmp gTypeIdx(Type type) { return { newTmp(B3::GP), type }; }
+    TypedTmp gRef(Type type) { return { newTmp(B3::GP), type }; }
     TypedTmp f32() { return { newTmp(B3::FP), Types::F32 }; }
     TypedTmp f64() { return { newTmp(B3::FP), Types::F64 }; }
 
@@ -426,8 +447,9 @@ private:
             return g64();
         case TypeKind::Funcref:
             return gFuncref();
-        case TypeKind::TypeIdx:
-            return gTypeIdx(type);
+        case TypeKind::Ref:
+        case TypeKind::RefNull:
+            return gRef(type);
         case TypeKind::Externref:
             return gExternref();
         case TypeKind::F32:
@@ -604,7 +626,8 @@ private:
             case TypeKind::I64:
             case TypeKind::Externref:
             case TypeKind::Funcref:
-            case TypeKind::TypeIdx:
+            case TypeKind::Ref:
+            case TypeKind::RefNull:
                 resultType = B3::Int64;
                 break;
             case TypeKind::F32:
@@ -654,7 +677,8 @@ private:
         case TypeKind::I64:
         case TypeKind::Externref:
         case TypeKind::Funcref:
-        case TypeKind::TypeIdx:
+        case TypeKind::Ref:
+        case TypeKind::RefNull:
             return Move;
         case TypeKind::F32:
             return MoveFloat;
@@ -912,7 +936,8 @@ AirIRGenerator::AirIRGenerator(const ModuleInformation& info, B3::Procedure& pro
         case TypeKind::I64:
         case TypeKind::Externref:
         case TypeKind::Funcref:
-        case TypeKind::TypeIdx:
+        case TypeKind::Ref:
+        case TypeKind::RefNull:
             append(Move, arg, m_locals[i]);
             break;
         case TypeKind::F32:
@@ -1015,7 +1040,8 @@ auto AirIRGenerator::addLocal(Type type, uint32_t count) -> PartialResult
         switch (type.kind) {
         case TypeKind::Externref:
         case TypeKind::Funcref:
-        case TypeKind::TypeIdx:
+        case TypeKind::Ref:
+        case TypeKind::RefNull:
             append(Move, Arg::imm(JSValue::encode(jsNull())), local);
             break;
         case TypeKind::I32:
@@ -1051,7 +1077,8 @@ auto AirIRGenerator::addConstant(BasicBlock* block, Type type, uint64_t value) -
     case TypeKind::I64:
     case TypeKind::Externref:
     case TypeKind::Funcref:
-    case TypeKind::TypeIdx:
+    case TypeKind::Ref:
+    case TypeKind::RefNull:
         append(block, Move, Arg::bigImm(value), result);
         break;
     case TypeKind::F32:
@@ -1098,7 +1125,7 @@ auto AirIRGenerator::addRefFunc(uint32_t index, ExpressionType& result) -> Parti
     // FIXME: Emit this inline <https://bugs.webkit.org/show_bug.cgi?id=198506>.
     if (Options::useWebAssemblyTypedFunctionReferences()) {
         SignatureIndex signatureIndex = m_info.signatureIndexFromFunctionIndexSpace(index);
-        result = tmpForType(Type { TypeKind::TypeIdx, Nullable::No, signatureIndex });
+        result = tmpForType(Type { TypeKind::Ref, Nullable::No, signatureIndex });
     } else
         result = tmpForType(Types::Funcref);
     emitCCall(&operationWasmRefFunc, result, instanceValue(), addConstant(Types::I32, index));
@@ -2982,6 +3009,60 @@ auto AirIRGenerator::addElseToUnreachable(ControlData& data) -> PartialResult
     return { };
 }
 
+// FIXME: Add support for Wasm exceptions in the Air generator
+// https://bugs.webkit.org/show_bug.cgi?id=231211
+auto AirIRGenerator::addTry(BlockSignature, Stack&, ControlType&, Stack&) -> PartialResult
+{
+    return { };
+}
+
+auto AirIRGenerator::addCatch(unsigned, const Signature&, Stack&, ControlType&, ResultList&) -> PartialResult
+{
+    RELEASE_ASSERT_NOT_REACHED();
+    return { };
+}
+
+auto AirIRGenerator::addCatchToUnreachable(unsigned, const Signature&, ControlType&, ResultList&) -> PartialResult
+{
+    RELEASE_ASSERT_NOT_REACHED();
+    return { };
+}
+
+auto AirIRGenerator::addCatchAll(Stack&, ControlType&) -> PartialResult
+{
+    RELEASE_ASSERT_NOT_REACHED();
+    return { };
+}
+
+auto AirIRGenerator::addCatchAllToUnreachable(ControlType&) -> PartialResult
+{
+    RELEASE_ASSERT_NOT_REACHED();
+    return { };
+}
+
+auto AirIRGenerator::addDelegate(ControlType&, ControlType&) -> PartialResult
+{
+    RELEASE_ASSERT_NOT_REACHED();
+    return { };
+}
+
+auto AirIRGenerator::addDelegateToUnreachable(ControlType&, ControlType&) -> PartialResult
+{
+    RELEASE_ASSERT_NOT_REACHED();
+    return { };
+}
+
+auto AirIRGenerator::addThrow(unsigned exceptionIndex, Vector<ExpressionType>&, Stack&) -> PartialResult
+{
+    UNUSED_PARAM(exceptionIndex);
+    return { };
+}
+
+auto AirIRGenerator::addRethrow(unsigned, ControlType&) -> PartialResult
+{
+    return { };
+}
+
 auto AirIRGenerator::addReturn(const ControlData& data, const Stack& returnValues) -> PartialResult
 {
     CallInformation wasmCallInfo = wasmCallingConvention().callInformationFor(*data.signature(), CallRole::Callee);
@@ -3362,6 +3443,15 @@ auto AirIRGenerator::addCallRef(const Signature& signature, Vector<ExpressionTyp
     // can be to the embedder for our stack check calculation.
     ExpressionType calleeFunction = args.takeLast();
     m_maxNumJSCallArguments = std::max(m_maxNumJSCallArguments, static_cast<uint32_t>(args.size()));
+
+    // Check the target reference for null.
+    auto tmpForNull = g64();
+    append(Move, Arg::bigImm(JSValue::encode(jsNull())), tmpForNull);
+    emitCheck([&] {
+        return Inst(Branch64, nullptr, Arg::relCond(MacroAssembler::Equal), calleeFunction, tmpForNull);
+    }, [=] (CCallHelpers& jit, const B3::StackmapGenerationParams&) {
+        this->emitThrowException(jit, ExceptionType::NullReference);
+    });
 
     ExpressionType calleeCode = g64();
     append(Move, Arg::addr(calleeFunction, WebAssemblyFunctionBase::offsetOfEntrypointLoadLocation()), calleeCode); // Pointer to callee code.

@@ -30,6 +30,7 @@
 
 #include "Chrome.h"
 #include "ChromeClient.h"
+#include "ElementInlines.h"
 #include "EventLoop.h"
 #include "EventNames.h"
 #include "Frame.h"
@@ -62,7 +63,7 @@ void FullscreenManager::requestFullscreenForElement(Element* element, Fullscreen
     if (!element)
         element = documentElement();
 
-    auto failedPreflights = [this, weakThis = makeWeakPtr(*this)](auto element) mutable {
+    auto failedPreflights = [this, weakThis = WeakPtr { *this }](auto element) mutable {
         m_fullscreenErrorEventTargetQueue.append(WTFMove(element));
         m_document.eventLoop().queueTask(TaskSource::MediaElement, [weakThis = WTFMove(weakThis)]() mutable {
             if (weakThis)
@@ -115,7 +116,7 @@ void FullscreenManager::requestFullscreenForElement(Element* element, Fullscreen
 
     m_pendingFullscreenElement = element;
 
-    m_document.eventLoop().queueTask(TaskSource::MediaElement, [this, weakThis = makeWeakPtr(*this), element = RefPtr { element }, checkType, hasKeyboardAccess, failedPreflights, identifier = LOGIDENTIFIER] () mutable {
+    m_document.eventLoop().queueTask(TaskSource::MediaElement, [this, weakThis = WeakPtr { *this }, element = RefPtr { element }, checkType, hasKeyboardAccess, failedPreflights, identifier = LOGIDENTIFIER] () mutable {
         if (!weakThis)
             return;
 
@@ -334,7 +335,7 @@ void FullscreenManager::exitFullscreen()
 
     // 6. Return, and run the remaining steps asynchronously.
     // 7. Optionally, perform some animation.
-    m_document.eventLoop().queueTask(TaskSource::MediaElement, [this, weakThis = makeWeakPtr(*this), newTop = RefPtr { newTop }, fullscreenElement = m_fullscreenElement, identifier = LOGIDENTIFIER] {
+    m_document.eventLoop().queueTask(TaskSource::MediaElement, [this, weakThis = WeakPtr { *this }, newTop = RefPtr { newTop }, fullscreenElement = m_fullscreenElement, identifier = LOGIDENTIFIER] {
         if (!weakThis)
             return;
 
@@ -551,7 +552,7 @@ void FullscreenManager::setFullscreenRenderer(RenderTreeBuilder& builder, Render
         builder.destroy(*m_fullscreenRenderer);
     ASSERT(!m_fullscreenRenderer);
 
-    m_fullscreenRenderer = makeWeakPtr(renderer);
+    m_fullscreenRenderer = renderer;
 }
 
 RenderFullScreen* FullscreenManager::fullscreenRenderer() const

@@ -968,6 +968,11 @@ void TestRunner::queueLoadHTMLString(JSStringRef content, JSStringRef baseURL, J
     InjectedBundle::singleton().queueLoadHTMLString(toWK(content).get(), baseURLWK.get(), unreachableURLWK.get());
 }
 
+void TestRunner::stopLoading()
+{
+    WKBundlePageStopLoading(page());
+}
+
 void TestRunner::queueReload()
 {
     InjectedBundle::singleton().queueReload();
@@ -2112,6 +2117,12 @@ void TestRunner::setPrivateClickMeasurementFraudPreventionValuesForTesting(JSStr
         { "Signature", toWK(signature) },
         { "KeyID", toWK(keyID) },
     }));
+}
+
+void TestRunner::setPrivateClickMeasurementAppBundleIDForTesting(JSStringRef appBundleID)
+{
+    postSynchronousPageMessage("SetPrivateClickMeasurementAppBundleIDForTesting",
+        toWK(appBundleID));
 }
 
 bool TestRunner::hasAppBoundSession()

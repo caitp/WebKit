@@ -31,6 +31,7 @@
 #include <CoreAudio/CoreAudioTypes.h>
 #include <CoreMedia/CMTime.h>
 #include <pal/spi/cf/CoreMediaSPI.h>
+#include <variant>
 #include <webm/callback.h>
 #include <webm/status.h>
 #include <webm/vp9_header_parser.h>
@@ -39,7 +40,6 @@
 #include <wtf/MediaTime.h>
 #include <wtf/RobinHoodHashSet.h>
 #include <wtf/UniqueRef.h>
-#include <wtf/Variant.h>
 #include <wtf/Vector.h>
 #include <wtf/text/AtomString.h>
 #include <wtf/text/WTFString.h>
@@ -83,10 +83,10 @@ public:
     void flushPendingAudioBuffers();
     void setMinimumAudioSampleDuration(float);
     
-    WEBCORE_EXPORT void setLogger(const WTF::Logger&, const void* identifier) final;
+    WEBCORE_EXPORT void setLogger(const Logger&, const void* identifier) final;
 
     void provideMediaData(RetainPtr<CMSampleBufferRef>, uint64_t, std::optional<size_t> byteRangeOffset);
-    using DidParseTrimmingDataCallback = WTF::Function<void(uint64_t trackID, const MediaTime& discardPadding)>;
+    using DidParseTrimmingDataCallback = Function<void(uint64_t trackID, const MediaTime& discardPadding)>;
     void setDidParseTrimmingDataCallback(DidParseTrimmingDataCallback&& callback)
     {
         m_didParseTrimmingDataCallback = WTFMove(callback);
@@ -248,7 +248,7 @@ public:
         float m_minimumSampleDuration { 2 };
     };
 
-    const WTF::Logger* loggerPtr() const { return m_logger.get(); }
+    const Logger* loggerPtr() const { return m_logger.get(); }
     const void* logIdentifier() const { return m_logIdentifier; }
 
 private:
@@ -288,12 +288,12 @@ private:
     UniqueRef<SegmentReader> m_reader;
 
     Vector<UniqueRef<TrackData>> m_tracks;
-    using BlockVariant = Variant<webm::Block, webm::SimpleBlock>;
+    using BlockVariant = std::variant<webm::Block, webm::SimpleBlock>;
     std::optional<BlockVariant> m_currentBlock;
     std::optional<uint64_t> m_rewindToPosition;
     float m_minimumAudioSampleDuration { 2 };
 
-    RefPtr<const WTF::Logger> m_logger;
+    RefPtr<const Logger> m_logger;
     const void* m_logIdentifier { nullptr };
     uint64_t m_nextChildIdentifier { 0 };
     DidParseTrimmingDataCallback m_didParseTrimmingDataCallback;

@@ -28,7 +28,7 @@
 
 #if PLATFORM(IOS_FAMILY)
 
-#import "Color.h"
+#import "ColorCocoa.h"
 #import "Image.h"
 #import "Pasteboard.h"
 #import "RuntimeApplicationChecks.h"
@@ -421,8 +421,7 @@ static void registerItemToPasteboard(WebItemProviderRegistrationInfoList *repres
 int64_t PlatformPasteboard::setColor(const Color& color)
 {
     auto representationsToRegister = adoptNS([[WebItemProviderRegistrationInfoList alloc] init]);
-    UIColor *uiColor = [PAL::getUIColorClass() colorWithCGColor:cachedCGColor(color)];
-    [representationsToRegister addData:[NSKeyedArchiver archivedDataWithRootObject:uiColor requiringSecureCoding:NO error:nil] forType:UIColorPboardType];
+    [representationsToRegister addData:[NSKeyedArchiver archivedDataWithRootObject:cocoaColor(color).get() requiringSecureCoding:NO error:nil] forType:UIColorPboardType];
     registerItemToPasteboard(representationsToRegister.get(), m_pasteboard.get());
     return 0;
 }
@@ -656,11 +655,11 @@ static RetainPtr<WebItemProviderRegistrationInfoList> createItemProviderRegistra
         if (cocoaType.isEmpty())
             return;
 
-        if (WTF::holds_alternative<String>(value)) {
-            if (WTF::get<String>(value).isNull())
+        if (std::holds_alternative<String>(value)) {
+            if (std::get<String>(value).isNull())
                 return;
 
-            NSString *nsStringValue = WTF::get<String>(value);
+            NSString *nsStringValue = std::get<String>(value);
             auto cfType = cocoaType.createCFString();
 ALLOW_DEPRECATED_DECLARATIONS_BEGIN
             if (UTTypeConformsTo(cfType.get(), kUTTypeURL))
@@ -673,7 +672,7 @@ ALLOW_DEPRECATED_DECLARATIONS_END
             return;
         }
 
-        auto buffer = WTF::get<Ref<SharedBuffer>>(value);
+        auto buffer = std::get<Ref<SharedBuffer>>(value);
         [representationsToRegister addData:buffer->createNSData().get() forType:(NSString *)cocoaType];
     });
 
@@ -758,7 +757,7 @@ RefPtr<SharedBuffer> PlatformPasteboard::readBuffer(size_t index, const String& 
 
     if (![pasteboardItem count])
         return nullptr;
-    return SharedBuffer::create([pasteboardItem.get() objectAtIndex:0]);
+    return SharedBuffer::create([pasteboardItem objectAtIndex:0]);
 }
 
 String PlatformPasteboard::readString(size_t index, const String& type) const

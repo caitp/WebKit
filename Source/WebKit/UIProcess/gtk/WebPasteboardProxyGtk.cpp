@@ -125,13 +125,13 @@ void WebPasteboardProxy::writeCustomData(IPC::Connection&, const Vector<Pasteboa
     SelectionData selectionData;
     const auto& customData = data[0];
     customData.forEachPlatformStringOrBuffer([&selectionData] (auto& type, auto& stringOrBuffer) {
-        if (WTF::holds_alternative<String>(stringOrBuffer)) {
+        if (std::holds_alternative<String>(stringOrBuffer)) {
             if (type == "text/plain"_s)
-                selectionData.setText(WTF::get<String>(stringOrBuffer));
+                selectionData.setText(std::get<String>(stringOrBuffer));
             else if (type == "text/html"_s)
-                selectionData.setMarkup(WTF::get<String>(stringOrBuffer));
+                selectionData.setMarkup(std::get<String>(stringOrBuffer));
             else if (type == "text/uri-list"_s)
-                selectionData.setURIList(WTF::get<String>(stringOrBuffer));
+                selectionData.setURIList(std::get<String>(stringOrBuffer));
         }
     });
 

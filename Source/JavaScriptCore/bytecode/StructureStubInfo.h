@@ -86,7 +86,27 @@ class StructureStubInfo {
     WTF_MAKE_NONCOPYABLE(StructureStubInfo);
     WTF_MAKE_FAST_ALLOCATED;
 public:
-    StructureStubInfo(AccessType, CodeOrigin);
+    StructureStubInfo(AccessType accessType, CodeOrigin codeOrigin)
+        : codeOrigin(codeOrigin)
+        , accessType(accessType)
+        , bufferingCountdown(Options::repatchBufferingCountdown())
+        , resetByGC(false)
+        , tookSlowPath(false)
+        , everConsidered(false)
+        , prototypeIsKnownObject(false)
+        , sawNonCell(false)
+        , hasConstantIdentifier(true)
+        , propertyIsString(false)
+        , propertyIsInt32(false)
+        , propertyIsSymbol(false)
+    {
+        regs.thisGPR = InvalidGPRReg;
+    }
+
+    StructureStubInfo()
+        : StructureStubInfo(AccessType::GetById, { })
+    { }
+
     ~StructureStubInfo();
 
     void initGetByIdSelf(const ConcurrentJSLockerBase&, CodeBlock*, Structure* inlineAccessBaseStructure, PropertyOffset, CacheableIdentifier);
@@ -465,6 +485,7 @@ struct UnlinkedStructureStubInfo {
     PutKind putKind;
     PrivateFieldPutKind privateFieldPutKind { PrivateFieldPutKind::none() };
     ECMAMode ecmaMode { ECMAMode::sloppy() };
+    bool propertyIsInt32 { false };
     BytecodeIndex bytecodeIndex;
     CodeLocationLabel<JITStubRoutinePtrTag> start; // This is either the start of the inline IC for *byId caches. or the location of patchable jump for 'instanceof' caches.
     CodeLocationLabel<JSInternalPtrTag> doneLocation;

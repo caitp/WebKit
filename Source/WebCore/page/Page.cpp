@@ -50,6 +50,7 @@
 #include "DocumentLoader.h"
 #include "DocumentMarkerController.h"
 #include "DocumentTimeline.h"
+#include "DocumentTimelinesController.h"
 #include "DragController.h"
 #include "Editing.h"
 #include "Editor.h"
@@ -129,6 +130,7 @@
 #include "ScriptedAnimationController.h"
 #include "ScrollLatchingController.h"
 #include "ScrollingCoordinator.h"
+#include "ServiceWorkerGlobalScope.h"
 #include "Settings.h"
 #include "SharedBuffer.h"
 #include "SocketProvider.h"
@@ -153,9 +155,11 @@
 #include "VisitedLinkState.h"
 #include "VisitedLinkStore.h"
 #include "VoidCallback.h"
+#include "WebCoreJSClientData.h"
 #include "WheelEventDeltaFilter.h"
 #include "WheelEventTestMonitor.h"
 #include "Widget.h"
+#include "WorkerOrWorkletScriptController.h"
 #include <wtf/FileSystem.h>
 #include <wtf/RefCountedLeakCounter.h>
 #include <wtf/StdLibExtras.h>
@@ -208,7 +212,7 @@ unsigned Page::nonUtilityPageCount()
 
 DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, pageCounter, ("Page"));
 
-void Page::forEachPage(const WTF::Function<void(Page&)>& function)
+void Page::forEachPage(const Function<void(Page&)>& function)
 {
     for (auto* page : allPages())
         function(*page);
@@ -365,10 +369,7 @@ Page::Page(PageConfiguration&& pageConfiguration)
     platformInitialize();
 #endif
 
-#if USE(LIBWEBRTC)
-    m_libWebRTCProvider->setH265Support(RuntimeEnabledFeatures::sharedFeatures().webRTCH265CodecEnabled());
-    m_libWebRTCProvider->setVP9Support(RuntimeEnabledFeatures::sharedFeatures().webRTCVP9Profile0CodecEnabled(), RuntimeEnabledFeatures::sharedFeatures().webRTCVP9Profile2CodecEnabled());
-#endif
+    settingsDidChange();
 
     if (!pageConfiguration.userScriptsShouldWaitUntilNotification)
         m_hasBeenNotifiedToInjectUserScripts = true;
@@ -565,6 +566,14 @@ Ref<DOMRectList> Page::passiveTouchEventListenerRectsForTesting()
         quads[i] = FloatRect(rects[i]);
 
     return DOMRectList::create(quads);
+}
+
+void Page::settingsDidChange()
+{
+#if USE(LIBWEBRTC)
+    m_libWebRTCProvider->setH265Support(settings().webRTCH265CodecEnabled());
+    m_libWebRTCProvider->setVP9Support(settings().webRTCVP9Profile0CodecEnabled(), settings().webRTCVP9Profile2CodecEnabled());
+#endif
 }
 
 bool Page::openedByDOM() const
@@ -1549,15 +1558,18 @@ void Page::updateRendering()
     Vector<WeakPtr<Document>> initialDocuments;
     forEachDocument([&initialDocuments] (Document& document) {
         document.domWindow()->freezeNowTimestamp();
-        initialDocuments.append(makeWeakPtr(&document));
+        initialDocuments.append(document);
     });
 
-    auto runProcessingStep = [&](RenderingUpdateStep step, const WTF::Function<void(Document&)>& perDocumentFunction) {
+    auto runProcessingStep = [&](RenderingUpdateStep step, const Function<void(Document&)>& perDocumentFunction) {
         m_renderingUpdateRemainingSteps.last().remove(step);
         forEachDocument(perDocumentFunction);
     };
 
-    // FIXME: Flush autofocus candidates.
+    runProcessingStep(RenderingUpdateStep::FlushAutofocusCandidates, [] (Document& document) {
+        if (document.isTopDocument())
+            document.flushAutofocusCandidates();
+    });
 
     runProcessingStep(RenderingUpdateStep::Resize, [] (Document& document) {
         document.runResizeSteps();
@@ -1577,6 +1589,10 @@ void Page::updateRendering()
 
     // FIXME: Run the fullscreen steps.
     m_renderingUpdateRemainingSteps.last().remove(RenderingUpdateStep::Fullscreen);
+
+    runProcessingStep(RenderingUpdateStep::VideoFrameCallbacks, [] (Document& document) {
+        document.serviceRequestVideoFrameCallbacks();
+    });
 
     runProcessingStep(RenderingUpdateStep::AnimationFrameCallbacks, [] (Document& document) {
         document.serviceRequestAnimationFrameCallbacks();
@@ -1640,7 +1656,7 @@ void Page::doAfterUpdateRendering()
     }
 #endif
 
-    auto runProcessingStep = [&](RenderingUpdateStep step, const WTF::Function<void(Document&)>& perDocumentFunction) {
+    auto runProcessingStep = [&](RenderingUpdateStep step, const Function<void(Document&)>& perDocumentFunction) {
         m_renderingUpdateRemainingSteps.last().remove(step);
         forEachDocument(perDocumentFunction);
     };
@@ -1665,7 +1681,7 @@ void Page::doAfterUpdateRendering()
         
         if (appHighlightStorage->hasUnrestoredHighlights() && MonotonicTime::now() - appHighlightStorage->lastRangeSearchTime() > 1_s) {
             appHighlightStorage->resetLastRangeSearchTime();
-            document.eventLoop().queueTask(TaskSource::InternalAsyncTask, [weakDocument = makeWeakPtr(document)] {
+            document.eventLoop().queueTask(TaskSource::InternalAsyncTask, [weakDocument = WeakPtr { document }] {
                 RefPtr document { weakDocument.get() };
                 if (!document)
                     return;
@@ -2167,7 +2183,7 @@ void Page::storageBlockingStateChanged()
 
 void Page::updateIsPlayingMedia()
 {
-    MediaProducer::MediaStateFlags state;
+    MediaProducerMediaStateFlags state;
     forEachDocument([&](auto& document) {
         state.add(document.mediaState());
     });
@@ -2205,7 +2221,7 @@ void Page::playbackControlsMediaEngineChanged()
 
 #endif
 
-void Page::setMuted(MediaProducer::MutedStateFlags muted)
+void Page::setMuted(MediaProducerMutedStateFlags muted)
 {
     m_mutedState = muted;
 
@@ -2214,7 +2230,7 @@ void Page::setMuted(MediaProducer::MutedStateFlags muted)
     });
 }
 
-void Page::stopMediaCapture(MediaProducer::MediaCaptureKind kind)
+void Page::stopMediaCapture(MediaProducerMediaCaptureKind kind)
 {
     UNUSED_PARAM(kind);
 #if ENABLE(MEDIA_STREAM)
@@ -2355,11 +2371,34 @@ void Page::setActivityState(OptionSet<ActivityState::Flag> activityState)
     for (auto& observer : m_activityStateChangeObservers)
         observer.activityStateDidChange(oldActivityState, m_activityState);
 
-    if (wasVisibleAndActive != isVisibleAndActive())
+    if (wasVisibleAndActive != isVisibleAndActive()) {
         PlatformMediaSessionManager::updateNowPlayingInfoIfNecessary();
+        stopKeyboardScrollAnimation();
+    }
 
     if (m_performanceMonitor)
         m_performanceMonitor->activityStateChanged(oldActivityState, activityState);
+}
+
+void Page::stopKeyboardScrollAnimation()
+{
+    for (auto* frame = &mainFrame(); frame; frame = frame->tree().traverseNext()) {
+        auto* frameView = frame->view();
+        if (!frameView)
+            continue;
+
+        frameView->stopKeyboardScrollAnimation();
+
+        auto scrollableAreas = frameView->scrollableAreas();
+        if (!scrollableAreas)
+            continue;
+
+        for (auto& scrollableArea : *scrollableAreas) {
+            // First call stopAsyncAnimatedScroll() to prepare for the keyboard scroller running on the scrolling thread.
+            scrollableArea->stopAsyncAnimatedScroll();
+            scrollableArea->stopKeyboardScrollAnimation();
+        }
+    }
 }
 
 bool Page::isVisibleAndActive() const
@@ -2533,7 +2572,7 @@ void Page::decrementNestedRunLoopCount()
     }
 }
 
-void Page::whenUnnested(WTF::Function<void()>&& callback)
+void Page::whenUnnested(Function<void()>&& callback)
 {
     ASSERT(!m_unnestCallback);
 
@@ -3015,7 +3054,7 @@ void Page::showPlaybackTargetPicker(PlaybackTargetClientContextIdentifier contex
 #endif
 }
 
-void Page::playbackTargetPickerClientStateDidChange(PlaybackTargetClientContextIdentifier contextId, MediaProducer::MediaStateFlags state)
+void Page::playbackTargetPickerClientStateDidChange(PlaybackTargetClientContextIdentifier contextId, MediaProducerMediaStateFlags state)
 {
     chrome().client().playbackTargetPickerClientStateDidChange(contextId, state);
 }
@@ -3602,6 +3641,7 @@ SpeechRecognitionConnection& Page::speechRecognitionConnection()
 WTF::TextStream& operator<<(WTF::TextStream& ts, RenderingUpdateStep step)
 {
     switch (step) {
+    case RenderingUpdateStep::FlushAutofocusCandidates: ts << "FlushAutofocusCandidates"; break;
     case RenderingUpdateStep::Resize: ts << "Resize"; break;
     case RenderingUpdateStep::Scroll: ts << "Scroll"; break;
     case RenderingUpdateStep::MediaQueryEvaluation: ts << "MediaQueryEvaluation"; break;
@@ -3618,6 +3658,7 @@ WTF::TextStream& operator<<(WTF::TextStream& ts, RenderingUpdateStep step)
 #if ENABLE(ASYNC_SCROLLING)
     case RenderingUpdateStep::ScrollingTreeUpdate: ts << "ScrollingTreeUpdate"; break;
 #endif
+    case RenderingUpdateStep::VideoFrameCallbacks: ts << "VideoFrameCallbacks"; break;
     }
     return ts;
 }
@@ -3651,7 +3692,7 @@ void Page::updateElementsWithTextRecognitionResults()
     }
 
     for (auto& [element, result] : elementsToUpdate) {
-        element->document().eventLoop().queueTask(TaskSource::InternalAsyncTask, [result = TextRecognitionResult { result }, weakElement = makeWeakPtr(element.get())] {
+        element->document().eventLoop().queueTask(TaskSource::InternalAsyncTask, [result = TextRecognitionResult { result }, weakElement = WeakPtr { element }] {
             RefPtr element { weakElement.get() };
             if (!element)
                 return;
@@ -3677,6 +3718,29 @@ void Page::resetTextRecognitionResults()
 }
 
 #endif // ENABLE(IMAGE_ANALYSIS)
+
+#if ENABLE(SERVICE_WORKER)
+JSC::JSGlobalObject* Page::serviceWorkerGlobalObject(DOMWrapperWorld& world)
+{
+    if (!m_serviceWorkerGlobalScope)
+        return nullptr;
+
+    auto scriptController = m_serviceWorkerGlobalScope->script();
+    if (!scriptController)
+        return nullptr;
+
+    // FIXME: We currently do not support non-normal worlds in service workers.
+    RELEASE_ASSERT(&static_cast<JSVMClientData*>(m_serviceWorkerGlobalScope->vm().clientData)->normalWorld() == &world);
+    return scriptController->globalScopeWrapper();
+}
+
+void Page::setServiceWorkerGlobalScope(ServiceWorkerGlobalScope& serviceWorkerGlobalScope)
+{
+    ASSERT(isMainThread());
+    ASSERT(m_isServiceWorkerPage);
+    m_serviceWorkerGlobalScope = serviceWorkerGlobalScope;
+}
+#endif
 
 PermissionController& Page::permissionController()
 {

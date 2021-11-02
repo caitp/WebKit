@@ -33,8 +33,8 @@
 #include "DataTransfer.h"
 #include "DeleteFromTextNodeCommand.h"
 #include "DeleteSelectionCommand.h"
-#include "Document.h"
 #include "DocumentFragment.h"
+#include "DocumentInlines.h"
 #include "DocumentMarkerController.h"
 #include "Editing.h"
 #include "Editor.h"
@@ -47,12 +47,13 @@
 #include "HTMLLIElement.h"
 #include "HTMLNames.h"
 #include "HTMLSpanElement.h"
+#include "InlineIteratorBox.h"
+#include "InlineIteratorLogicalOrderTraversal.h"
 #include "InsertIntoTextNodeCommand.h"
 #include "InsertLineBreakCommand.h"
 #include "InsertNodeBeforeCommand.h"
 #include "InsertParagraphSeparatorCommand.h"
 #include "InsertTextCommand.h"
-#include "LayoutIntegrationRunIterator.h"
 #include "LegacyInlineTextBox.h"
 #include "MergeIdenticalElementsCommand.h"
 #include "NodeTraversal.h"
@@ -551,12 +552,13 @@ bool CompositeEditCommand::isRemovableBlock(const Node* node)
     return false;
 }
 
-void CompositeEditCommand::insertNodeBefore(Ref<Node>&& insertChild, Node& refChild, ShouldAssumeContentIsAlwaysEditable shouldAssumeContentIsAlwaysEditable)
+bool CompositeEditCommand::insertNodeBefore(Ref<Node>&& insertChild, Node& refChild, ShouldAssumeContentIsAlwaysEditable shouldAssumeContentIsAlwaysEditable)
 {
     RefPtr parent { refChild.parentNode() };
     if (!parent || (!parent->hasEditableStyle() && parent->renderer()))
-        return;
+        return false;
     applyCommandToComposite(InsertNodeBeforeCommand::create(WTFMove(insertChild), refChild, shouldAssumeContentIsAlwaysEditable, editingAction()));
+    return true;
 }
 
 void CompositeEditCommand::insertNodeAfter(Ref<Node>&& insertChild, Node& refChild)
@@ -1016,7 +1018,7 @@ void CompositeEditCommand::deleteInsignificantText(Text& textNode, unsigned star
         if (!textRenderer)
             return;
 
-        auto run = LayoutIntegration::firstTextRunInTextOrderFor(*textRenderer);
+        auto [run, orderCache] = InlineIterator::firstTextBoxInLogicalOrderFor(*textRenderer);
         if (!run) {
             wholeTextNodeIsEmpty = true;
             return;
@@ -1027,7 +1029,7 @@ void CompositeEditCommand::deleteInsignificantText(Text& textNode, unsigned star
             return;
 
         unsigned removed = 0;
-        LayoutIntegration::TextRunIterator previousRun;
+        InlineIterator::TextBoxIterator previousRun;
 
         // This loop structure works to process all gaps preceding a box,
         // and also will look at the gap after the last box.
@@ -1051,7 +1053,7 @@ void CompositeEditCommand::deleteInsignificantText(Text& textNode, unsigned star
 
             previousRun = run;
             if (run)
-                run.traverseNextTextRunInTextOrder();
+                run = InlineIterator::nextTextBoxInLogicalOrder(run, orderCache);
         }
     };
     determineRemovalMode();

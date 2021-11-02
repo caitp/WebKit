@@ -49,8 +49,7 @@ class TestExpectedBuildSteps(unittest.TestCase):
             'show-identifier',
             'update-working-directory',
             'apply-patch',
-            'apply-watch-list',
-            'verify-github-integrity'
+            'apply-watch-list'
         ],
         'GTK-Build-EWS': [
             'configure-build',
@@ -84,7 +83,7 @@ class TestExpectedBuildSteps(unittest.TestCase):
             'layout-tests',
             'set-build-summary'
         ],
-        'iOS-14-Build-EWS': [
+        'iOS-15-Build-EWS': [
             'configure-build',
             'validate-patch',
             'configuration',
@@ -96,7 +95,7 @@ class TestExpectedBuildSteps(unittest.TestCase):
             'kill-old-processes',
             'compile-webkit'
         ],
-        'iOS-14-Simulator-Build-EWS': [
+        'iOS-15-Simulator-Build-EWS': [
             'configure-build',
             'validate-patch',
             'configuration',
@@ -108,7 +107,7 @@ class TestExpectedBuildSteps(unittest.TestCase):
             'kill-old-processes',
             'compile-webkit'
         ],
-        'iOS-14-Simulator-WK2-Tests-EWS': [
+        'iOS-15-Simulator-WK2-Tests-EWS': [
             'configure-build',
             'validate-patch',
             'configuration',
@@ -260,7 +259,7 @@ class TestExpectedBuildSteps(unittest.TestCase):
             'trigger-crash-log-submission',
             'set-build-summary'
         ],
-        'watchOS-7-Build-EWS': [
+        'watchOS-8-Build-EWS': [
             'configure-build',
             'validate-patch',
             'configuration',
@@ -272,7 +271,7 @@ class TestExpectedBuildSteps(unittest.TestCase):
             'kill-old-processes',
             'compile-webkit'
         ],
-        'watchOS-7-Simulator-Build-EWS': [
+        'watchOS-8-Simulator-Build-EWS': [
             'configure-build',
             'validate-patch',
             'configuration',
@@ -284,7 +283,7 @@ class TestExpectedBuildSteps(unittest.TestCase):
             'kill-old-processes',
             'compile-webkit'
         ],
-        'tvOS-14-Build-EWS': [
+        'tvOS-15-Build-EWS': [
             'configure-build',
             'validate-patch',
             'configuration',
@@ -296,7 +295,7 @@ class TestExpectedBuildSteps(unittest.TestCase):
             'kill-old-processes',
             'compile-webkit'
         ],
-        'tvOS-14-Simulator-Build-EWS': [
+        'tvOS-15-Simulator-Build-EWS': [
             'configure-build',
             'validate-patch',
             'configuration',

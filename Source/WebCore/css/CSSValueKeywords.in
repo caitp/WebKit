@@ -1347,6 +1347,9 @@ calc
 min
 max
 clamp
+pow
+sqrt
+hypot
 sin
 cos
 e
@@ -1363,6 +1366,9 @@ mod
 rem
 to-zero
 nearest
+infinity
+-infinity
+NaN
 
 from-image
 

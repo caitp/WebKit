@@ -29,14 +29,14 @@
 #include "ClipRect.h"
 #include "ColorSerialization.h"
 #include "Document.h"
+#include "ElementInlines.h"
 #include "Frame.h"
 #include "FrameSelection.h"
 #include "FrameView.h"
 #include "HTMLElement.h"
 #include "HTMLNames.h"
 #include "HTMLSpanElement.h"
-#include "InlineIterator.h"
-#include "LayoutIntegrationRunIterator.h"
+#include "InlineIteratorTextBox.h"
 #include "LegacyInlineTextBox.h"
 #include "Logging.h"
 #include "PrintContext.h"
@@ -241,13 +241,13 @@ void RenderTreeAsText::writeRenderObject(TextStream& ts, const RenderObject& o, 
         // many test results.
         const RenderText& text = downcast<RenderText>(o);
         r = IntRect(text.firstRunLocation(), text.linesBoundingBox().size());
-        if (!LayoutIntegration::firstTextRunFor(text))
+        if (!InlineIterator::firstTextBoxFor(text))
             adjustForTableCells = false;
     } else if (o.isBR()) {
         const RenderLineBreak& br = downcast<RenderLineBreak>(o);
         IntRect linesBox = br.linesBoundingBox();
         r = IntRect(linesBox.x(), linesBox.y(), linesBox.width(), linesBox.height());
-        if (!br.inlineBoxWrapper() && !LayoutIntegration::runFor(br))
+        if (!br.inlineBoxWrapper() && !InlineIterator::boxFor(br))
             adjustForTableCells = false;
     } else if (is<RenderInline>(o)) {
         const RenderInline& inlineFlow = downcast<RenderInline>(o);
@@ -602,7 +602,7 @@ void write(TextStream& ts, const RenderObject& o, OptionSet<RenderAsTextFlag> be
 
     if (is<RenderText>(o)) {
         auto& text = downcast<RenderText>(o);
-        for (auto& run : LayoutIntegration::textRunsFor(text)) {
+        for (auto& run : InlineIterator::textBoxesFor(text)) {
             ts << indent;
             writeTextRun(text, run);
         }

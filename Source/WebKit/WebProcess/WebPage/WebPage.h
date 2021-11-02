@@ -83,6 +83,7 @@
 #include <WebCore/PluginData.h>
 #include <WebCore/PointerCharacteristics.h>
 #include <WebCore/PointerID.h>
+#include <WebCore/RectEdges.h>
 #include <WebCore/SecurityPolicyViolationEvent.h>
 #include <WebCore/ShareData.h>
 #include <WebCore/SimpleRange.h>
@@ -106,9 +107,13 @@
 #include <wtf/WallTime.h>
 #include <wtf/text/WTFString.h>
 
-#if ENABLE(ACCESSIBILITY) && USE(ATK)
+#if ENABLE(ACCESSIBILITY)
+#if USE(ATK)
 typedef struct _AtkObject AtkObject;
 #include <wtf/glib/GRefPtr.h>
+#elif USE(ATSPI)
+#include <WebCore/AccessibilityRootAtspi.h>
+#endif
 #endif
 
 #if PLATFORM(GTK)
@@ -121,6 +126,7 @@ typedef struct _AtkObject AtkObject;
 #endif
 
 #if PLATFORM(IOS_FAMILY)
+#include "DynamicViewportSizeUpdate.h"
 #include "GestureTypes.h"
 #include <WebCore/InspectorOverlay.h>
 #include <WebCore/IntPointHash.h>
@@ -154,7 +160,6 @@ typedef struct _AtkObject AtkObject;
 #endif
 
 #if PLATFORM(COCOA)
-#include "DynamicViewportSizeUpdate.h"
 #include <WebCore/VisibleSelection.h>
 #include <wtf/RetainPtr.h>
 OBJC_CLASS CALayer;
@@ -443,7 +448,7 @@ public:
     void sendCOEPCORPViolation(WebCore::FrameIdentifier, const WebCore::SecurityOriginData& embedderOrigin, const String& endpoint, WebCore::COEPDisposition, WebCore::FetchOptions::Destination, const URL& blockedURL);
     void sendViolationReportWhenNavigatingToCOOPResponse(WebCore::FrameIdentifier, const WebCore::CrossOriginOpenerPolicy&, WebCore::COOPDisposition, const URL& coopURL, const URL& previousResponseURL, const WebCore::SecurityOriginData& coopOrigin, const WebCore::SecurityOriginData& previousResponseOrigin, const String& referrer, const String& userAgent, const String& reportToHeaderValue);
     void sendViolationReportWhenNavigatingAwayFromCOOPResponse(WebCore::FrameIdentifier, const WebCore::CrossOriginOpenerPolicy&, WebCore::COOPDisposition, const URL& coopURL, const URL& nextResponseURL, const WebCore::SecurityOriginData& coopOrigin, const WebCore::SecurityOriginData& nextResponseOrigin, bool isCOOPResponseNavigationSource, const String& userAgent);
-    void enqueueSecurityPolicyViolationEvent(WebCore::FrameIdentifier, WebCore::SecurityPolicyViolationEvent::Init&&);
+    void enqueueSecurityPolicyViolationEvent(WebCore::FrameIdentifier, WebCore::SecurityPolicyViolationEventInit&&);
 
     // -- Called by the DrawingArea.
     // FIXME: We could genericize these into a DrawingArea client interface. Would that be beneficial?
@@ -553,7 +558,7 @@ public:
 
     std::optional<WebCore::SimpleRange> currentSelectionAsRange();
 
-#if ENABLE(NETSCAPE_PLUGIN_API)
+#if ENABLE(PDFKIT_PLUGIN)
     RefPtr<Plugin> createPlugin(WebFrame*, WebCore::HTMLPlugInElement*, const Plugin::Parameters&, String& newMIMEType);
 #endif
 
@@ -612,7 +617,9 @@ public:
     void listenForLayoutMilestones(OptionSet<WebCore::LayoutMilestone>);
 
     void setSuppressScrollbarAnimations(bool);
-    
+
+    void setHasActiveAnimatedScrolls(bool);
+
     void setEnableVerticalRubberBanding(bool);
     void setEnableHorizontalRubberBanding(bool);
     
@@ -1022,9 +1029,9 @@ public:
     void removeResourceRequest(WebCore::ResourceLoaderIdentifier);
 
     void setMediaVolume(float);
-    void setMuted(WebCore::MediaProducer::MutedStateFlags, CompletionHandler<void()>&&);
+    void setMuted(WebCore::MediaProducerMutedStateFlags, CompletionHandler<void()>&&);
     void setMayStartMediaWhenInWindow(bool);
-    void stopMediaCapture(WebCore::MediaProducer::MediaCaptureKind, CompletionHandler<void()>&&);
+    void stopMediaCapture(WebCore::MediaProducerMediaCaptureKind, CompletionHandler<void()>&&);
 
     void updateMainFrameScrollOffsetPinning();
 
@@ -1074,9 +1081,10 @@ public:
     void updateVisibilityState(bool isInitialState = false);
 
 #if PLATFORM(IOS_FAMILY)
+    void setMinimumUnobscuredSize(const WebCore::FloatSize&);
     void setMaximumUnobscuredSize(const WebCore::FloatSize&);
     void setDeviceOrientation(int32_t);
-    void dynamicViewportSizeUpdate(const WebCore::FloatSize& viewLayoutSize, const WebCore::FloatSize& maximumUnobscuredSize, const WebCore::FloatRect& targetExposedContentRect, const WebCore::FloatRect& targetUnobscuredRect, const WebCore::FloatRect& targetUnobscuredRectInScrollViewCoordinates, const WebCore::FloatBoxExtent& targetUnobscuredSafeAreaInsets, double scale, int32_t deviceOrientation, double minimumEffectiveDeviceWidth, DynamicViewportSizeUpdateID);
+    void dynamicViewportSizeUpdate(const WebCore::FloatSize& viewLayoutSize, const WebCore::FloatSize& minimumUnobscuredSize, const WebCore::FloatSize& maximumUnobscuredSize, const WebCore::FloatRect& targetExposedContentRect, const WebCore::FloatRect& targetUnobscuredRect, const WebCore::FloatRect& targetUnobscuredRectInScrollViewCoordinates, const WebCore::FloatBoxExtent& targetUnobscuredSafeAreaInsets, double scale, int32_t deviceOrientation, double minimumEffectiveDeviceWidth, DynamicViewportSizeUpdateID);
     bool scaleWasSetByUIProcess() const { return m_scaleWasSetByUIProcess; }
     void willStartUserTriggeredZooming();
     void applicationWillResignActive();
@@ -1128,6 +1136,9 @@ public:
 #if PLATFORM(COCOA)
     bool pdfPluginEnabled() const { return m_pdfPluginEnabled; }
     void setPDFPluginEnabled(bool enabled) { m_pdfPluginEnabled = enabled; }
+    
+    bool selectionFlippingEnabled() const { return m_selectionFlippingEnabled; }
+    void setSelectionFlippingEnabled(bool enabled) { m_selectionFlippingEnabled = enabled; }
 
     NSDictionary *dataDetectionContext() const { return m_dataDetectionContext.get(); }
 #endif
@@ -1212,6 +1223,9 @@ public:
 
 #if ENABLE(VIDEO) && USE(GSTREAMER)
     void requestInstallMissingMediaPlugins(const String& details, const String& description, WebCore::MediaPlayerRequestInstallMissingPluginsCallback&);
+#endif
+#if ENABLE(MEDIA_STREAM) && USE(GSTREAMER)
+    void setOrientationForMediaCapture(uint64_t rotation);
 #endif
 
     void addUserScript(String&& source, InjectedBundleScriptWorld&, WebCore::UserContentInjectedFrames, WebCore::UserScriptInjectionTime);
@@ -1416,7 +1430,7 @@ public:
     void removeMediaUsageManagerSession(WebCore::MediaSessionIdentifier);
 #endif
 
-    void isPlayingMediaDidChange(WebCore::MediaProducer::MediaStateFlags);
+    void isPlayingMediaDidChange(WebCore::MediaProducerMediaStateFlags);
 
 #if ENABLE(IMAGE_ANALYSIS)
     void requestTextRecognition(WebCore::Element&, CompletionHandler<void(RefPtr<WebCore::Element>&&)>&&);
@@ -1487,6 +1501,10 @@ public:
 #endif
 
     void prepareToRunModalJavaScriptDialog();
+
+#if USE(ATSPI)
+    const WebCore::AccessibilityRootAtspi& accessibilityRootObject() const { return *m_accessibilityRootObject; }
+#endif
 
 private:
     WebPage(WebCore::PageIdentifier, WebPageCreationParameters&&);
@@ -1987,6 +2005,7 @@ private:
 #if PLATFORM(COCOA)
     bool m_pdfPluginEnabled { false };
     bool m_hasCachedWindowFrame { false };
+    bool m_selectionFlippingEnabled { false };
 
     // The frame of the containing window in screen coordinates.
     WebCore::FloatRect m_windowFrameInScreenCoordinates;
@@ -2015,8 +2034,12 @@ private:
     RetainPtr<NSDictionary> m_dataDetectionContext;
 #endif
 
-#if ENABLE(ACCESSIBILITY) && USE(ATK)
+#if ENABLE(ACCESSIBILITY)
+#if USE(ATK)
     GRefPtr<AtkObject> m_accessibilityObject;
+#elif USE(ATSPI)
+    RefPtr<WebCore::AccessibilityRootAtspi> m_accessibilityRootObject;
+#endif
 #endif
 
 #if PLATFORM(WIN)
@@ -2154,10 +2177,7 @@ private:
     std::optional<WebCore::SimpleRange> m_rangeForDropSnapshot;
 #endif
 
-    bool m_cachedMainFrameIsPinnedToLeftSide { true };
-    bool m_cachedMainFrameIsPinnedToRightSide { true };
-    bool m_cachedMainFrameIsPinnedToTopSide { true };
-    bool m_cachedMainFrameIsPinnedToBottomSide { true };
+    WebCore::RectEdges<bool> m_cachedMainFramePinnedState { true, true, true, true };
     bool m_canShortCircuitHorizontalWheelEvents { false };
     bool m_hasWheelEventHandlers { false };
 
@@ -2239,6 +2259,7 @@ private:
 
     std::optional<WebCore::SimpleRange> m_initialSelection;
     WebCore::VisibleSelection m_storedSelectionForAccessibility { WebCore::VisibleSelection() };
+    WebCore::FloatSize m_minimumUnobscuredSize;
     WebCore::FloatSize m_maximumUnobscuredSize;
     int32_t m_deviceOrientation { 0 };
     bool m_keyboardIsAttached { false };

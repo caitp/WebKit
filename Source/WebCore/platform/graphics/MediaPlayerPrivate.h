@@ -70,7 +70,7 @@ public:
 
 #if ENABLE(VIDEO_PRESENTATION_MODE)
     virtual RetainPtr<PlatformLayer> createVideoFullscreenLayer() { return nullptr; }
-    virtual void setVideoFullscreenLayer(PlatformLayer*, WTF::Function<void()>&& completionHandler) { completionHandler(); }
+    virtual void setVideoFullscreenLayer(PlatformLayer*, Function<void()>&& completionHandler) { completionHandler(); }
     virtual void updateVideoFullscreenInlineImage() { }
     virtual void setVideoFullscreenFrame(FloatRect) { }
     virtual void setVideoFullscreenGravity(MediaPlayer::VideoGravity) { }
@@ -182,6 +182,7 @@ public:
     virtual RetainPtr<CVPixelBufferRef> pixelBufferForCurrentTime() { return nullptr; }
 #endif
     virtual RefPtr<NativeImage> nativeImageForCurrentTime() { return nullptr; }
+    virtual DestinationColorSpace colorSpace() = 0;
 
     virtual void setPreload(MediaPlayer::Preload) { }
 
@@ -320,6 +321,8 @@ public:
     virtual bool supportsPauseAtHostTime() const { return false; }
     virtual bool playAtHostTime(const MonotonicTime&) { return false; }
     virtual bool pauseAtHostTime(const MonotonicTime&) { return false; }
+
+    virtual std::optional<VideoFrameMetadata> videoFrameMetadata() { return { }; }
 };
 
 }

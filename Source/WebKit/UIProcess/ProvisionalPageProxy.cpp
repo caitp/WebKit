@@ -103,6 +103,11 @@ ProvisionalPageProxy::ProvisionalPageProxy(WebPageProxy& page, Ref<WebProcessPro
 
 ProvisionalPageProxy::~ProvisionalPageProxy()
 {
+#if PLATFORM(GTK) || PLATFORM(WPE)
+    if (m_accessibilityBindCompletionHandler)
+        m_accessibilityBindCompletionHandler({ });
+#endif
+
     if (!m_wasCommitted) {
         m_page.inspectorController().willDestroyProvisionalPage(*this);
 
@@ -144,6 +149,7 @@ void ProvisionalPageProxy::cancel()
         true, // isMainFrame
         m_request,
         SecurityOriginData::fromURL(m_request.url()),
+        { },
         m_mainFrame->frameID(),
         std::nullopt,
     };
@@ -422,9 +428,10 @@ void ProvisionalPageProxy::registerWebProcessAccessibilityToken(const IPC::DataR
 #endif
 
 #if PLATFORM(GTK) || PLATFORM(WPE)
-void ProvisionalPageProxy::bindAccessibilityTree(const String& plugID)
+void ProvisionalPageProxy::bindAccessibilityTree(const String& plugID, CompletionHandler<void(String&&)>&& completionHandler)
 {
     m_accessibilityPlugID = plugID;
+    m_accessibilityBindCompletionHandler = WTFMove(completionHandler);
 }
 #endif
 
@@ -489,7 +496,7 @@ void ProvisionalPageProxy::didReceiveMessage(IPC::Connection& connection, IPC::D
 
 #if PLATFORM(GTK) || PLATFORM(WPE)
     if (decoder.messageName() == Messages::WebPageProxy::BindAccessibilityTree::name()) {
-        IPC::handleMessage<Messages::WebPageProxy::BindAccessibilityTree>(connection, decoder, this, &ProvisionalPageProxy::bindAccessibilityTree);
+        IPC::handleMessageAsync<Messages::WebPageProxy::BindAccessibilityTree>(connection, decoder, this, &ProvisionalPageProxy::bindAccessibilityTree);
         return;
     }
 #endif

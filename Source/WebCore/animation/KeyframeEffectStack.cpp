@@ -31,6 +31,7 @@
 #include "KeyframeEffect.h"
 #include "WebAnimation.h"
 #include "WebAnimationUtilities.h"
+#include <wtf/PointerComparison.h>
 
 namespace WebCore {
 
@@ -49,7 +50,7 @@ bool KeyframeEffectStack::addEffect(KeyframeEffect& effect)
     if (!effect.targetStyleable() || !effect.animation() || !effect.animation()->timeline() || !effect.animation()->isRelevant())
         return false;
 
-    m_effects.append(makeWeakPtr(&effect));
+    m_effects.append(effect);
     m_isSorted = false;
     return true;
 }
@@ -120,7 +121,7 @@ void KeyframeEffectStack::setCSSAnimationList(RefPtr<const AnimationList>&& cssA
     m_isSorted = false;
 }
 
-OptionSet<AnimationImpact> KeyframeEffectStack::applyKeyframeEffects(RenderStyle& targetStyle, const RenderStyle& previousLastStyleChangeEventStyle, const RenderStyle* parentElementStyle)
+OptionSet<AnimationImpact> KeyframeEffectStack::applyKeyframeEffects(RenderStyle& targetStyle, const RenderStyle& previousLastStyleChangeEventStyle, const Style::ResolutionContext& resolutionContext)
 {
     OptionSet<AnimationImpact> impact;
 
@@ -133,7 +134,7 @@ OptionSet<AnimationImpact> KeyframeEffectStack::applyKeyframeEffects(RenderStyle
 
     for (const auto& effect : sortedEffects()) {
         ASSERT(effect->animation());
-        effect->animation()->resolve(targetStyle, parentElementStyle);
+        effect->animation()->resolve(targetStyle, resolutionContext);
 
         if (effect->isRunningAccelerated() || effect->isAboutToRunAccelerated())
             impact.add(AnimationImpact::RequiresRecomposite);

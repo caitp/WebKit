@@ -27,7 +27,6 @@
 #include "EventTarget.h"
 #include "ExceptionOr.h"
 #include "LayoutRect.h"
-#include "MutationObserver.h"
 #include "RenderStyleConstants.h"
 #include "StyleValidity.h"
 #include "TreeScope.h"
@@ -54,6 +53,8 @@ class FloatPoint;
 class HTMLQualifiedName;
 class HTMLSlotElement;
 class MathMLQualifiedName;
+class MutationObserver;
+class MutationObserverRegistration;
 class NamedNodeMap;
 class NodeList;
 class NodeListsNodeData;
@@ -67,7 +68,11 @@ class SVGQualifiedName;
 class ShadowRoot;
 class TouchEvent;
 
-using NodeOrString = Variant<RefPtr<Node>, String>;
+enum class MutationObserverOptionType : uint8_t;
+using MutationObserverOptions = OptionSet<MutationObserverOptionType>;
+using MutationRecordDeliveryOptions = OptionSet<MutationObserverOptionType>;
+
+using NodeOrString = std::variant<RefPtr<Node>, String>;
 
 class Node : public EventTarget {
     WTF_MAKE_ISO_ALLOCATED(Node);
@@ -113,7 +118,7 @@ public:
 
     bool hasTagName(const HTMLQualifiedName&) const;
     bool hasTagName(const MathMLQualifiedName&) const;
-    bool hasTagName(const SVGQualifiedName&) const;
+    inline bool hasTagName(const SVGQualifiedName&) const;
     virtual String nodeName() const = 0;
     virtual String nodeValue() const;
     virtual ExceptionOr<void> setNodeValue(const String&);
@@ -121,7 +126,7 @@ public:
     virtual size_t approximateMemoryCost() const { return sizeof(*this); }
     ContainerNode* parentNode() const;
     static ptrdiff_t parentNodeMemoryOffset() { return OBJECT_OFFSETOF(Node, m_parentNode); }
-    Element* parentElement() const;
+    inline Element* parentElement() const;
     Node* previousSibling() const { return m_previous; }
     static ptrdiff_t previousSiblingMemoryOffset() { return OBJECT_OFFSETOF(Node, m_previous); }
     Node* nextSibling() const { return m_next; }
@@ -129,8 +134,8 @@ public:
     WEBCORE_EXPORT RefPtr<NodeList> childNodes();
     Node* firstChild() const;
     Node* lastChild() const;
-    bool hasAttributes() const;
-    NamedNodeMap* attributes() const;
+    inline bool hasAttributes() const;
+    inline NamedNodeMap* attributes() const;
     Node* pseudoAwareNextSibling() const;
     Node* pseudoAwarePreviousSibling() const;
     Node* pseudoAwareFirstChild() const;
@@ -494,7 +499,7 @@ public:
     EventTargetData* eventTargetDataConcurrently() final;
     EventTargetData& ensureEventTargetData() final;
 
-    HashMap<Ref<MutationObserver>, MutationRecordDeliveryOptions> registeredMutationObservers(MutationObserver::MutationType, const QualifiedName* attributeName);
+    HashMap<Ref<MutationObserver>, MutationRecordDeliveryOptions> registeredMutationObservers(MutationObserverOptionType, const QualifiedName* attributeName);
     void registerMutationObserver(MutationObserver&, MutationObserverOptions, const HashSet<AtomString>& attributeFilter);
     void unregisterMutationObserver(MutationObserverRegistration&);
     void registerTransientMutationObserver(MutationObserverRegistration&);

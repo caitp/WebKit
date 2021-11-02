@@ -39,10 +39,12 @@
 static RetainPtr<WKWebView> webViewWithResourceLoadStatisticsEnabledInNetworkProcess()
 {
     auto *sharedProcessPool = [WKProcessPool _sharedProcessPool];
-    auto *dataStore = [WKWebsiteDataStore defaultDataStore];
-    auto configuration = adoptNS([[WKWebViewConfiguration alloc] init]);
+    auto dataStoreConfiguration = adoptNS([_WKWebsiteDataStoreConfiguration new]);
+    dataStoreConfiguration.get().pcmMachServiceName = nil;
+    auto dataStore = adoptNS([[WKWebsiteDataStore alloc] _initWithConfiguration:dataStoreConfiguration.get()]);
+    auto configuration = adoptNS([WKWebViewConfiguration new]);
     [configuration setProcessPool: sharedProcessPool];
-    configuration.get().websiteDataStore = dataStore;
+    configuration.get().websiteDataStore = dataStore.get();
 
     // We need an active NetworkProcess to perform PCM operations.
     auto webView = adoptNS([[WKWebView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600) configuration:configuration.get()]);
@@ -52,7 +54,7 @@ static RetainPtr<WKWebView> webViewWithResourceLoadStatisticsEnabledInNetworkPro
 }
 
 template<size_t size>
-void addValuesToTable(WebCore::SQLiteDatabase& database, ASCIILiteral query, std::array<Variant<StringView, int, double>, size> values)
+void addValuesToTable(WebCore::SQLiteDatabase& database, ASCIILiteral query, std::array<std::variant<StringView, int, double>, size> values)
 {
     auto statement = database.prepareStatement(query);
     EXPECT_TRUE(!!statement);
@@ -64,7 +66,7 @@ void addValuesToTable(WebCore::SQLiteDatabase& database, ASCIILiteral query, std
         }, [&] (double real) {
             return statement->bindDouble(i + 1, real);
         });
-        auto result = WTF::visit(visitor, values[i]);
+        auto result = std::visit(visitor, values[i]);
         EXPECT_EQ(result, SQLITE_OK);
     }
     EXPECT_EQ(statement->step(), SQLITE_DONE);

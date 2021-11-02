@@ -40,8 +40,8 @@
 
 namespace WebKit {
 
-AuxiliaryProcessProxy::AuxiliaryProcessProxy(bool alwaysRunsAtBackgroundPriority)
-    : m_responsivenessTimer(*this)
+AuxiliaryProcessProxy::AuxiliaryProcessProxy(bool alwaysRunsAtBackgroundPriority, Seconds responsivenessTimeout)
+    : m_responsivenessTimer(*this, responsivenessTimeout)
     , m_alwaysRunsAtBackgroundPriority(alwaysRunsAtBackgroundPriority)
 {
 }
@@ -75,11 +75,6 @@ void AuxiliaryProcessProxy::getLaunchOptions(ProcessLauncher::LaunchOptions& lau
     case ProcessLauncher::ProcessType::Web:
         varname = "WEB_PROCESS_CMD_PREFIX";
         break;
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    case ProcessLauncher::ProcessType::Plugin:
-        varname = "PLUGIN_PROCESS_CMD_PREFIX";
-        break;
-#endif
     case ProcessLauncher::ProcessType::Network:
         varname = "NETWORK_PROCESS_CMD_PREFIX";
         break;
@@ -393,7 +388,7 @@ void AuxiliaryProcessProxy::didBecomeUnresponsive()
 void AuxiliaryProcessProxy::checkForResponsiveness(CompletionHandler<void()>&& responsivenessHandler, UseLazyStop useLazyStop)
 {
     startResponsivenessTimer(useLazyStop);
-    sendWithAsyncReply(Messages::AuxiliaryProcess::MainThreadPing(), [weakThis = makeWeakPtr(*this), responsivenessHandler = WTFMove(responsivenessHandler)]() mutable {
+    sendWithAsyncReply(Messages::AuxiliaryProcess::MainThreadPing(), [weakThis = WeakPtr { *this }, responsivenessHandler = WTFMove(responsivenessHandler)]() mutable {
         // Schedule an asynchronous task because our completion handler may have been called as a result of the AuxiliaryProcessProxy
         // being in the middle of destruction.
         RunLoop::main().dispatch([weakThis = WTFMove(weakThis), responsivenessHandler = WTFMove(responsivenessHandler)]() mutable {

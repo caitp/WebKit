@@ -40,9 +40,11 @@
 #include "HTMLParserIdioms.h"
 #include "HTMLPictureElement.h"
 #include "KeyboardEvent.h"
+#include "LoaderStrategy.h"
 #include "MouseEvent.h"
 #include "PingLoader.h"
 #include "PlatformMouseEvent.h"
+#include "PlatformStrategies.h"
 #include "PrivateClickMeasurement.h"
 #include "RegistrableDomain.h"
 #include "RenderImage.h"
@@ -319,7 +321,7 @@ DOMTokenList& HTMLAnchorElement::relList()
             if (equalIgnoringASCIICase(token, "ar"))
                 return true;
 #endif
-            return equalIgnoringASCIICase(token, "noreferrer") || equalIgnoringASCIICase(token, "noopener");
+            return equalIgnoringASCIICase(token, "noreferrer") || equalIgnoringASCIICase(token, "noopener") || equalIgnoringASCIICase(token, "opener");
         });
     }
     return *m_relList;
@@ -402,8 +404,9 @@ std::optional<PrivateClickMeasurement> HTMLAnchorElement::parsePrivateClickMeasu
     using SourceSite = PrivateClickMeasurement::SourceSite;
     using AttributionDestinationSite = PrivateClickMeasurement::AttributionDestinationSite;
 
+    RefPtr<Frame> frame = document().frame();
     auto* page = document().page();
-    if (!page || page->sessionID().isEphemeral()
+    if (!frame ||!page || page->sessionID().isEphemeral()
         || !document().settings().privateClickMeasurementEnabled()
         || !UserGestureIndicator::processingUserGesture())
         return std::nullopt;
@@ -421,12 +424,6 @@ std::optional<PrivateClickMeasurement> HTMLAnchorElement::parsePrivateClickMeasu
         return std::nullopt;
     }
 
-    RefPtr<Frame> frame = document().frame();
-    if (!frame || !frame->isMainFrame()) {
-        document().addConsoleMessage(MessageSource::Other, MessageLevel::Warning, "Private Click Measurement is only supported in the main frame."_s);
-        return std::nullopt;
-    }
-    
     auto attributionSourceID = parseHTMLNonNegativeInteger(attributionSourceIDAttr);
     if (!attributionSourceID) {
         document().addConsoleMessage(MessageSource::Other, MessageLevel::Warning, "attributionsourceid is not a non-negative integer which is required for Private Click Measurement."_s);
@@ -444,8 +441,15 @@ std::optional<PrivateClickMeasurement> HTMLAnchorElement::parsePrivateClickMeasu
         return std::nullopt;
     }
 
-    RegistrableDomain documentRegistrableDomain { document().url() };
-    if (documentRegistrableDomain.matches(destinationURL)) {
+    RegistrableDomain mainDocumentRegistrableDomain;
+    if (auto mainDocument = frame->mainFrame().document())
+        mainDocumentRegistrableDomain = RegistrableDomain { mainDocument->url() };
+    else {
+        document().addConsoleMessage(MessageSource::Other, MessageLevel::Warning, "Could not find a main document to use as source site for Private Click Measurement."_s);
+        return std::nullopt;
+    }
+
+    if (mainDocumentRegistrableDomain.matches(destinationURL)) {
         document().addConsoleMessage(MessageSource::Other, MessageLevel::Warning, "attributiondestination can not be the same site as the current website."_s);
         return std::nullopt;
     }
@@ -455,7 +459,7 @@ std::optional<PrivateClickMeasurement> HTMLAnchorElement::parsePrivateClickMeasu
 #else
     String bundleID;
 #endif
-    auto privateClickMeasurement = PrivateClickMeasurement { SourceID(attributionSourceID.value()), SourceSite(WTFMove(documentRegistrableDomain)), AttributionDestinationSite(destinationURL), bundleID };
+    auto privateClickMeasurement = PrivateClickMeasurement { SourceID(attributionSourceID.value()), SourceSite(WTFMove(mainDocumentRegistrableDomain)), AttributionDestinationSite(destinationURL), bundleID, WallTime::now(), PrivateClickMeasurement::AttributionEphemeral::No };
 
     auto attributionSourceNonceAttr = attributeWithoutSynchronization(attributionsourcenonceAttr);
     if (!attributionSourceNonceAttr.isEmpty()) {
@@ -524,7 +528,7 @@ void HTMLAnchorElement::handleClick(Event& event)
 
     auto effectiveTarget = this->effectiveTarget();
     NewFrameOpenerPolicy newFrameOpenerPolicy = NewFrameOpenerPolicy::Allow;
-    if (hasRel(Relation::NoOpener) || hasRel(Relation::NoReferrer) || (!hasRel(Relation::Opener) && document().settings().blankAnchorTargetImpliesNoOpenerEnabled() && equalIgnoringASCIICase(effectiveTarget, "_blank")))
+    if (hasRel(Relation::NoOpener) || hasRel(Relation::NoReferrer) || (!hasRel(Relation::Opener) && document().settings().blankAnchorTargetImpliesNoOpenerEnabled() && isBlankTargetFrameName(effectiveTarget)))
         newFrameOpenerPolicy = NewFrameOpenerPolicy::Suppress;
 
     auto privateClickMeasurement = parsePrivateClickMeasurement();
@@ -535,6 +539,12 @@ void HTMLAnchorElement::handleClick(Event& event)
     frame->loader().changeLocation(completedURL, effectiveTarget, &event, referrerPolicy, document().shouldOpenExternalURLsPolicyToPropagate(), newFrameOpenerPolicy, downloadAttribute, systemPreviewInfo, WTFMove(privateClickMeasurement));
 
     sendPings(completedURL);
+
+    // Preconnect to the link's target for improved page load time.
+    if (completedURL.protocolIsInHTTPFamily()) {
+        auto storageCredentialsPolicy = frame->page() && frame->page()->canUseCredentialStorage() ? StoredCredentialsPolicy::Use : StoredCredentialsPolicy::DoNotUse;
+        platformStrategies()->loaderStrategy()->preconnectTo(frame->loader(), completedURL, storageCredentialsPolicy, nullptr);
+    }
 }
 
 // Falls back to using <base> element's target if the anchor does not have one.
@@ -622,7 +632,7 @@ void HTMLAnchorElement::setRootEditableElementForSelectionOnMouseDown(Element* e
         return;
     }
 
-    rootEditableElementMap().set(*this, makeWeakPtr(element));
+    rootEditableElementMap().set(*this, element);
     m_hasRootEditableElementForSelectionOnMouseDown = true;
 }
 

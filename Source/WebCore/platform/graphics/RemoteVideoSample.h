@@ -48,6 +48,10 @@ public:
     WEBCORE_EXPORT static std::unique_ptr<RemoteVideoSample> create(RetainPtr<CVPixelBufferRef>&&, MediaTime&& presentationTime, MediaSample::VideoRotation = MediaSample::VideoRotation::None);
     WEBCORE_EXPORT IOSurfaceRef surface() const;
 
+#if HAVE(IOSURFACE_SET_OWNERSHIP_IDENTITY)
+    void setOwnershipIdentity(task_id_token_t newOwner);
+#endif
+
     const MediaTime& time() const { return m_time; }
     uint32_t videoFormat() const { return m_videoFormat; }
     IntSize size() const { return m_size; }
@@ -59,7 +63,7 @@ public:
         if (m_ioSurface)
             encoder << m_ioSurface->createSendRight();
         else
-            encoder << WTF::MachSendRight();
+            encoder << MachSendRight();
         encoder << m_rotation;
         encoder << m_time;
         encoder << m_videoFormat;
@@ -107,13 +111,21 @@ private:
 
     std::unique_ptr<WebCore::IOSurface> m_ioSurface;
     RetainPtr<CVPixelBufferRef> m_imageBuffer;
-    WTF::MachSendRight m_sendRight;
+    MachSendRight m_sendRight;
     MediaSample::VideoRotation m_rotation { MediaSample::VideoRotation::None };
     MediaTime m_time;
     uint32_t m_videoFormat { 0 };
     IntSize m_size;
     bool m_mirrored { false };
 };
+
+#if HAVE(IOSURFACE_SET_OWNERSHIP_IDENTITY)
+inline void RemoteVideoSample::setOwnershipIdentity(task_id_token_t newOwner)
+{
+    if (m_ioSurface)
+        m_ioSurface->setOwnershipIdentity(newOwner);
+}
+#endif
 
 }
 

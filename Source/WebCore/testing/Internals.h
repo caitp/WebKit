@@ -29,6 +29,7 @@
 #include "CSSComputedStyleDeclaration.h"
 #include "ContextDestructionObserver.h"
 #include "Cookie.h"
+#include "EpochTimeStamp.h"
 #include "ExceptionOr.h"
 #include "HEVCUtilities.h"
 #include "IDLTypes.h"
@@ -38,7 +39,7 @@
 #include "SleepDisabler.h"
 #include "TextIndicator.h"
 #include "VP9Utilities.h"
-#include <JavaScriptCore/Float32Array.h>
+#include <JavaScriptCore/Forward.h>
 
 #if ENABLE(VIDEO)
 #include "MediaElementSession.h"
@@ -53,6 +54,7 @@ class ArtworkImageLoader;
 class AudioContext;
 class AudioTrack;
 class BaseAudioContext;
+class Blob;
 class CacheStorageConnection;
 class DOMPointReadOnly;
 class DOMRect;
@@ -102,6 +104,7 @@ class SerializedScriptValue;
 class SourceBuffer;
 class StringCallback;
 class StyleSheet;
+class TextIterator;
 class TextTrack;
 class TimeRanges;
 class TypeConversions;
@@ -122,7 +125,9 @@ class TextTrackCueGeneric;
 #endif
 
 #if ENABLE(SERVICE_WORKER)
+class PushSubscription;
 class ServiceWorker;
+class ServiceWorkerRegistration;
 #endif
 
 #if ENABLE(WEB_RTC)
@@ -635,6 +640,9 @@ public:
     void setWebRTCH265Support(bool);
     void setWebRTCVP9Support(bool supportVP9Profile0, bool supportVP9Profile2);
     void setWebRTCVP9VTBSupport(bool);
+    bool isSupportingVP9VTB() const;
+    void isVP9VTBDeccoderUsed(RTCPeerConnection&, DOMPromiseDeferred<IDLBoolean>&&);
+
     void setSFrameCounter(RTCRtpSFrameTransform&, const String&);
     uint64_t sframeCounter(const RTCRtpSFrameTransform&);
     uint64_t sframeKeyId(const RTCRtpSFrameTransform&);
@@ -644,6 +652,9 @@ public:
 
     String getImageSourceURL(Element&);
 
+    String blobInternalURL(const Blob&);
+    void isBlobInternalURLRegistered(const String&, DOMPromiseDeferred<IDLBoolean>&&);
+
 #if ENABLE(VIDEO)
     unsigned mediaElementCount();
     Vector<String> mediaResponseSources(HTMLMediaElement&);
@@ -652,6 +663,7 @@ public:
     ExceptionOr<bool> mediaElementHasCharacteristic(HTMLMediaElement&, const String&);
     void beginSimulatedHDCPError(HTMLMediaElement&);
     void endSimulatedHDCPError(HTMLMediaElement&);
+    ExceptionOr<bool> mediaPlayerRenderingCanBeAccelerated(HTMLMediaElement&);
 
     bool elementShouldBufferData(HTMLMediaElement&);
     String elementBufferingPolicy(HTMLMediaElement&);
@@ -1190,6 +1202,12 @@ public:
     };
     ExceptionOr<void> setDocumentAutoplayPolicy(Document&, AutoplayPolicy);
 
+    void retainTextIteratorForDocumentContent();
+
+#if ENABLE(SERVICE_WORKER)
+    RefPtr<PushSubscription> createPushSubscription(Ref<ServiceWorkerRegistration>&&, const String& endpoint, std::optional<EpochTimeStamp> expirationTime, const ArrayBuffer& serverVAPIDPublicKey, const ArrayBuffer& clientECDHPublicKey, const ArrayBuffer& auth);
+#endif
+
 private:
     explicit Internals(Document&);
     Document* contextDocument() const;
@@ -1218,6 +1236,8 @@ private:
     RefPtr<CacheStorageConnection> m_cacheStorageConnection;
 
     HashMap<unsigned, std::unique_ptr<WebCore::SleepDisabler>> m_sleepDisablers;
+
+    std::unique_ptr<TextIterator> m_textIterator;
 
 #if ENABLE(WEBXR)
     RefPtr<WebXRTest> m_xrTest;

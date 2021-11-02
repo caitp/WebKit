@@ -2,7 +2,7 @@
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
- * Copyright (C) 2004-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2004-2021 Apple Inc. All rights reserved.
  *           (C) 2006 Alexey Proskuryakov (ap@nypop.com)
  *
  * This library is free software; you can redistribute it and/or
@@ -72,7 +72,6 @@ HTMLFormControlElement::HTMLFormControlElement(const QualifiedName& tagName, Doc
     , m_willValidate(true)
     , m_isValid(true)
     , m_wasChangedSinceLastFormControlChangeEvent(false)
-    , m_hasAutofocused(false)
 {
     setHasCustomStyleResolveCallbacks();
 }
@@ -201,45 +200,6 @@ void HTMLFormControlElement::requiredStateChanged()
     invalidateStyleForSubtree();
 }
 
-static bool shouldAutofocus(HTMLFormControlElement* element)
-{
-    if (!element->renderer())
-        return false;
-    if (!element->hasAttributeWithoutSynchronization(autofocusAttr))
-        return false;
-    if (!element->isConnected() || !element->document().renderView())
-        return false;
-    if (element->document().isSandboxed(SandboxAutomaticFeatures)) {
-        // FIXME: This message should be moved off the console once a solution to https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
-        element->document().addConsoleMessage(MessageSource::Security, MessageLevel::Error, "Blocked autofocusing on a form control because the form's frame is sandboxed and the 'allow-scripts' permission is not set."_s);
-        return false;
-    }
-
-    auto& document = element->document();
-    if (!document.frame()->isMainFrame() && !document.topDocument().securityOrigin().isSameOriginDomain(document.securityOrigin())) {
-        document.addConsoleMessage(MessageSource::Security, MessageLevel::Error, "Blocked autofocusing on a form control in a cross-origin subframe."_s);
-        return false;
-    }
-
-    if (element->hasAutofocused())
-        return false;
-
-    // FIXME: Should this set of hasTagName checks be replaced by a
-    // virtual member function?
-    if (is<HTMLInputElement>(*element))
-        return !downcast<HTMLInputElement>(*element).isInputTypeHidden();
-    if (element->hasTagName(selectTag))
-        return true;
-    if (element->hasTagName(keygenTag))
-        return true;
-    if (element->hasTagName(buttonTag))
-        return true;
-    if (is<HTMLTextAreaElement>(*element))
-        return true;
-
-    return false;
-}
-
 void HTMLFormControlElement::didAttachRenderers()
 {
     // The call to updateFromElement() needs to go after the call through
@@ -247,22 +207,6 @@ void HTMLFormControlElement::didAttachRenderers()
     // on the renderer.
     if (renderer())
         renderer()->updateFromElement();
-
-    if (shouldAutofocus(this)) {
-        setAutofocused();
-
-        RefPtr<HTMLFormControlElement> element = this;
-        RefPtr frameView = document().view();
-        if (frameView && frameView->layoutContext().isInLayout()) {
-            frameView->queuePostLayoutCallback([element] {
-                element->focus({ SelectionRestorationMode::PlaceCaretAtStart });
-            });
-        } else {
-            Style::deprecatedQueuePostResolutionCallback([element] {
-                element->focus({ SelectionRestorationMode::PlaceCaretAtStart });
-            });
-        }
-    }
 }
 
 void HTMLFormControlElement::didMoveToNewDocument(Document& oldDocument, Document& newDocument)
@@ -301,6 +245,7 @@ Node::InsertedIntoAncestorResult HTMLFormControlElement::insertedIntoAncestor(In
         setAncestorDisabled(computeIsDisabledByFieldsetAncestor());
     HTMLElement::insertedIntoAncestor(insertionType, parentOfInsertedTree);
     FormAssociatedElement::insertedIntoAncestor(insertionType, parentOfInsertedTree);
+
     return InsertedIntoAncestorResult::NeedsPostInsertionCallback;
 }
 
@@ -394,6 +339,11 @@ bool HTMLFormControlElement::isMouseFocusable() const
         return HTMLElement::isMouseFocusable();
     return false;
 #endif
+}
+
+void HTMLFormControlElement::runFocusingStepsForAutofocus()
+{
+    focus({ SelectionRestorationMode::PlaceCaretAtStart });
 }
 
 bool HTMLFormControlElement::matchesValidPseudoClass() const
@@ -680,6 +630,11 @@ AutofillData HTMLFormControlElement::autofillData() const
     // owner's autocomplete attribute changed or the form owner itself changed.
 
     return AutofillData::createFromHTMLFormControlElement(*this);
+}
+
+String HTMLFormControlElement::resultForDialogSubmit() const
+{
+    return attributeWithoutSynchronization(HTMLNames::valueAttr);
 }
 
 // FIXME: We should remove the quirk once <rdar://problem/47334655> is fixed.

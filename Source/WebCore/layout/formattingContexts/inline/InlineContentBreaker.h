@@ -34,7 +34,7 @@ namespace WebCore {
 namespace Layout {
 
 class InlineItem;
-struct OverflowingTextContent;
+struct CandidateTextRunForBreaking;
 
 class InlineContentBreaker {
 public:
@@ -77,12 +77,12 @@ public:
     // see https://drafts.csswg.org/css-text-3/#line-break-details
     struct ContinuousContent {
         InlineLayoutUnit logicalWidth() const { return m_logicalWidth; }
-        InlineLayoutUnit collapsibleLogicalWidth() const { return m_collapsibleLogicalWidth; }
-        InlineLayoutUnit nonCollapsibleLogicalWidth() const { return logicalWidth() - collapsibleLogicalWidth(); }
-        bool hasTrailingCollapsibleContent() const { return !!collapsibleLogicalWidth(); }
-        bool isFullyCollapsible() const { return logicalWidth() == collapsibleLogicalWidth(); }
+        InlineLayoutUnit leadingCollapsibleWidth() const { return m_leadingCollapsibleWidth; }
+        InlineLayoutUnit trailingCollapsibleWidth() const { return m_trailingCollapsibleWidth; }
+        bool hasCollapsibleContent() const { return trailingCollapsibleWidth() > 0 || leadingCollapsibleWidth() > 0; }
+        bool isFullyCollapsible() const { return logicalWidth() == trailingCollapsibleWidth() + leadingCollapsibleWidth(); }
 
-        void append(const InlineItem&, const RenderStyle&, InlineLayoutUnit logicalWidth, std::optional<InlineLayoutUnit> collapsibleWidth);
+        void append(const InlineItem&, const RenderStyle&, InlineLayoutUnit logicalWidth, std::optional<InlineLayoutUnit> collapsibleWidth = std::nullopt);
         void reset();
 
         struct Run {
@@ -91,19 +91,7 @@ public:
             Run& operator=(const Run&);
 
             const InlineItem& inlineItem;
-            struct Style {
-                WhiteSpace whiteSpace { WhiteSpace::Normal };
-                LineBreak lineBreak { LineBreak::Auto };
-                WordBreak wordBreak { WordBreak::Normal };
-                OverflowWrap overflowWrap { OverflowWrap::Normal };
-                Hyphens hyphens { Hyphens::None };
-                std::optional<unsigned> hyphenationLimitBefore;
-                std::optional<unsigned> hyphenationLimitAfter;
-                const FontCascade& fontCascade;
-                const AtomString& hyphenString;
-                const AtomString& locale;
-            };
-            Style style;
+            const RenderStyle& style;
             InlineLayoutUnit logicalWidth { 0 };
         };
         using RunList = Vector<Run, 3>;
@@ -112,7 +100,8 @@ public:
     private:
         RunList m_runs;
         InlineLayoutUnit m_logicalWidth { 0 };
-        InlineLayoutUnit m_collapsibleLogicalWidth { 0 };
+        InlineLayoutUnit m_leadingCollapsibleWidth { 0 };
+        InlineLayoutUnit m_trailingCollapsibleWidth { 0 };
     };
 
     struct LineStatus {
@@ -120,7 +109,7 @@ public:
         InlineLayoutUnit availableWidth { 0 };
         InlineLayoutUnit collapsibleWidth { 0 };
         std::optional<InlineLayoutUnit> trailingSoftHyphenWidth;
-        bool hasFullyCollapsibleTrailingRun { false };
+        bool hasFullyCollapsibleTrailingContent { false };
         bool hasContent { false };
         bool hasWrapOpportunityAtPreviousPosition { false };
     };
@@ -131,14 +120,33 @@ public:
 
 private:
     Result processOverflowingContent(const ContinuousContent&, const LineStatus&) const;
+
+    struct OverflowingTextContent {
+        size_t runIndex { 0 }; // Overflowing run index. There's always an overflowing run.
+        struct BreakingPosition {
+            size_t runIndex { 0 };
+            struct TrailingContent {
+                // Trailing content is either the run's left side (when we break the run somewhere in the middle) or the previous run.
+                // Sometimes the breaking position is at the very beginning of the first run, so there's no trailing run at all.
+                bool overflows { false };
+                std::optional<InlineContentBreaker::PartialRun> partialRun { };
+            };
+            std::optional<TrailingContent> trailingContent { };
+        };
+        std::optional<BreakingPosition> breakingPosition { }; // Where we actually break this overflowing content.
+    };
     OverflowingTextContent processOverflowingContentWithText(const ContinuousContent&, const LineStatus&) const;
-    std::optional<PartialRun> tryBreakingTextRun(const ContinuousContent::Run& overflowRun, InlineLayoutUnit logicalLeft, std::optional<InlineLayoutUnit> availableWidth, bool hasWrapOpportunityAtPreviousPosition) const;
+    std::optional<PartialRun> tryBreakingTextRun(const ContinuousContent::RunList& runs, const CandidateTextRunForBreaking&, InlineLayoutUnit availableWidth, bool lineHasWrapOpportunityAtPreviousPosition) const;
+    std::optional<OverflowingTextContent::BreakingPosition> tryBreakingOverflowingRun(const LineStatus&, const ContinuousContent::RunList&, size_t overflowingRunIndex, InlineLayoutUnit nonOverflowingContentWidth) const;
+    std::optional<OverflowingTextContent::BreakingPosition> tryBreakingPreviousNonOverflowingRuns(const LineStatus&, const ContinuousContent::RunList&, size_t overflowingRunIndex, InlineLayoutUnit nonOverflowingContentWidth) const;
+    std::optional<OverflowingTextContent::BreakingPosition> tryBreakingNextOverflowingRuns(const LineStatus&, const ContinuousContent::RunList&, size_t overflowingRunIndex, InlineLayoutUnit nonOverflowingContentWidth) const;
 
     enum class WordBreakRule {
-        AtArbitraryPosition        = 1 << 0,
-        AtHyphenationOpportunities = 1 << 1
+        AtArbitraryPositionWithinWords = 1 << 0,
+        AtArbitraryPosition            = 1 << 1,
+        AtHyphenationOpportunities     = 1 << 2
     };
-    OptionSet<WordBreakRule> wordBreakBehavior(const ContinuousContent::Run::Style&, bool hasWrapOpportunityAtPreviousPosition) const;
+    OptionSet<WordBreakRule> wordBreakBehavior(const RenderStyle&, bool hasWrapOpportunityAtPreviousPosition) const;
     bool shouldKeepEndOfLineWhitespace(const ContinuousContent&) const;
 
     bool n_hyphenationIsDisabled { false };
@@ -146,16 +154,7 @@ private:
 
 inline InlineContentBreaker::ContinuousContent::Run::Run(const InlineItem& inlineItem, const RenderStyle& style, InlineLayoutUnit logicalWidth)
     : inlineItem(inlineItem)
-    , style({ style.whiteSpace()
-        , style.lineBreak()
-        , style.wordBreak()
-        , style.overflowWrap()
-        , style.hyphens()
-        , style.hyphenationLimitBefore() != style.initialHyphenationLimitBefore() ? std::make_optional(style.hyphenationLimitBefore()) : std::nullopt
-        , style.hyphenationLimitAfter() != style.initialHyphenationLimitAfter() ? std::make_optional(style.hyphenationLimitAfter()) : std::nullopt
-        , style.fontCascade()
-        , (style.hyphens() == Hyphens::None ? nullAtom() : style.hyphenString())
-        , style.fontDescription().computedLocale() })
+    , style(style)
     , logicalWidth(logicalWidth)
 {
 }

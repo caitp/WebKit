@@ -82,6 +82,7 @@ struct MockWebAuthenticationConfiguration;
 namespace WebKit {
 
 class AuthenticatorManager;
+class AuxiliaryProcessProxy;
 class SecKeyProxyStore;
 class DeviceIdHashSaltStorage;
 class NetworkProcessProxy;
@@ -102,10 +103,6 @@ struct WebsiteDataStoreParameters;
 enum class ShouldGrandfatherStatistics : bool;
 enum class StorageAccessStatus : uint8_t;
 enum class StorageAccessPromptStatus;
-#endif
-
-#if ENABLE(NETSCAPE_PLUGIN_API)
-struct PluginModuleInfo;
 #endif
 
 class WebsiteDataStore : public API::ObjectImpl<API::Object::Type::WebsiteDataStore>, public Identified<WebsiteDataStore>, public CanMakeWeakPtr<WebsiteDataStore>  {
@@ -172,6 +169,7 @@ public:
     void setCacheModelSynchronouslyForTesting(CacheModel);
     void setServiceWorkerTimeoutForTesting(Seconds);
     void resetServiceWorkerTimeoutForTesting();
+    bool hasServiceWorkerBackgroundActivityForTesting() const;
 
 #if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
     void fetchDataForRegistrableDomains(OptionSet<WebsiteDataType>, OptionSet<WebsiteDataFetchOption>, Vector<WebCore::RegistrableDomain>&&, CompletionHandler<void(Vector<WebsiteDataRecord>&&, HashSet<WebCore::RegistrableDomain>&&)>&&);
@@ -278,8 +276,8 @@ public:
     void dispatchOnQueue(Function<void()>&&);
 
 #if PLATFORM(COCOA)
-    void sendNetworkProcessXPCEndpointToWebProcess(WebProcessProxy&);
-    void sendNetworkProcessXPCEndpointToAllWebProcesses();
+    bool sendNetworkProcessXPCEndpointToProcess(AuxiliaryProcessProxy&) const;
+    void sendNetworkProcessXPCEndpointToAllProcesses();
     
     static bool useNetworkLoader();
 #endif
@@ -396,10 +394,6 @@ private:
 
     // Will create a temporary process pool is none exists yet.
     HashSet<RefPtr<WebProcessPool>> ensureProcessPools() const;
-
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    Vector<PluginModuleInfo> plugins() const;
-#endif
 
     static Vector<WebCore::SecurityOriginData> mediaKeyOrigins(const String& mediaKeysStorageDirectory);
     static void removeMediaKeys(const String& mediaKeysStorageDirectory, WallTime modifiedSince);

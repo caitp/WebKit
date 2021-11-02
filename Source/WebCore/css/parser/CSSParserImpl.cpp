@@ -680,33 +680,31 @@ RefPtr<StyleRuleFontPaletteValues> CSSParserImpl::consumeFontPaletteValuesRule(C
     if (auto fontFamilyValue = properties->getPropertyCSSValue(CSSPropertyFontFamily))
         fontFamily = downcast<CSSPrimitiveValue>(*fontFamilyValue).fontFamily().familyName;
 
-    FontPaletteValues::PaletteIndex basePalette(nullAtom());
+    std::optional<FontPaletteIndex> basePalette;
     if (auto basePaletteValue = properties->getPropertyCSSValue(CSSPropertyBasePalette)) {
         const auto& primitiveValue = downcast<CSSPrimitiveValue>(*basePaletteValue);
-        if (primitiveValue.isString())
-            basePalette = primitiveValue.stringValue();
-        else if (primitiveValue.isNumber())
-            basePalette = primitiveValue.value<unsigned>();
+        if (primitiveValue.isNumber())
+            basePalette = FontPaletteIndex(primitiveValue.value<unsigned>());
+        else if (primitiveValue.valueID() == CSSValueLight)
+            basePalette = FontPaletteIndex(FontPaletteIndex::Type::Light);
+        else if (primitiveValue.valueID() == CSSValueDark)
+            basePalette = FontPaletteIndex(FontPaletteIndex::Type::Dark);
     }
 
     Vector<FontPaletteValues::OverriddenColor> overrideColors;
     if (auto overrideColorsValue = properties->getPropertyCSSValue(CSSPropertyOverrideColors)) {
         const auto& list = downcast<CSSValueList>(*overrideColorsValue);
         for (const auto& item : list) {
-            FontPaletteValues::PaletteColorIndex key(nullAtom());
             const auto& pair = downcast<CSSFontPaletteValuesOverrideColorsValue>(item.get());
-            if (pair.key().isString())
-                key = pair.key().stringValue();
-            else if (pair.key().isNumber())
-                key = pair.key().value<unsigned>();
-            else
+            if (!pair.key().isNumber())
                 continue;
+            unsigned key = pair.key().value<unsigned>();
             Color color = pair.color().isRGBColor() ? pair.color().color() : StyleColor::colorFromKeyword(pair.color().valueID(), { });
             overrideColors.append(std::make_pair(key, color));
         }
     }
 
-    return StyleRuleFontPaletteValues::create(name->stringValue(), fontFamily, basePalette, WTFMove(overrideColors));
+    return StyleRuleFontPaletteValues::create(name->stringValue(), fontFamily, WTFMove(basePalette), WTFMove(overrideColors));
 }
 
 RefPtr<StyleRuleKeyframes> CSSParserImpl::consumeKeyframesRule(bool webkitPrefixed, CSSParserTokenRange prelude, CSSParserTokenRange block)

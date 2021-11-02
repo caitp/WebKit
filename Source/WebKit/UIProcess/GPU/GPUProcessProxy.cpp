@@ -108,7 +108,7 @@ Ref<GPUProcessProxy> GPUProcessProxy::getOrCreate()
     }
     auto gpuProcess = adoptRef(*new GPUProcessProxy);
     gpuProcess->updatePreferences();
-    singleton() = makeWeakPtr(gpuProcess.get());
+    singleton() = gpuProcess;
     return gpuProcess;
 }
 
@@ -340,7 +340,7 @@ void GPUProcessProxy::getGPUProcessConnection(WebProcessProxy& webProcessProxy, 
 
     RELEASE_LOG(ProcessSuspension, "%p - GPUProcessProxy is taking a background assertion because a web process is requesting a connection", this);
     startResponsivenessTimer(UseLazyStop::No);
-    sendWithAsyncReply(Messages::GPUProcess::CreateGPUConnectionToWebProcess { webProcessProxy.coreProcessIdentifier(), webProcessProxy.sessionID(), parameters }, [this, weakThis = makeWeakPtr(*this), reply = WTFMove(reply)](auto&& identifier, auto&& connectionParameters) mutable {
+    sendWithAsyncReply(Messages::GPUProcess::CreateGPUConnectionToWebProcess { webProcessProxy.coreProcessIdentifier(), webProcessProxy.sessionID(), parameters }, [this, weakThis = WeakPtr { *this }, reply = WTFMove(reply)](auto&& identifier, auto&& connectionParameters) mutable {
         if (!weakThis) {
             RELEASE_LOG_ERROR(Process, "GPUProcessProxy::getGPUProcessConnection: GPUProcessProxy deallocated during connection establishment");
             return reply({ });
@@ -399,6 +399,11 @@ void GPUProcessProxy::terminateForTesting()
     processIsReadyToExit();
 }
 
+void GPUProcessProxy::webProcessConnectionCountForTesting(CompletionHandler<void(uint64_t)>&& completionHandler)
+{
+    sendWithAsyncReply(Messages::GPUProcess::WebProcessConnectionCountForTesting(), WTFMove(completionHandler));
+}
+
 void GPUProcessProxy::didClose(IPC::Connection&)
 {
     RELEASE_LOG_ERROR(Process, "%p - GPUProcessProxy::didClose:", this);
@@ -431,6 +436,18 @@ void GPUProcessProxy::didFinishLaunching(ProcessLauncher* launcher, IPC::Connect
 #if PLATFORM(IOS_FAMILY)
     if (xpc_connection_t connection = this->connection()->xpcConnection())
         m_throttler.didConnectToProcess(xpc_connection_get_pid(connection));
+#endif
+
+#if PLATFORM(COCOA)
+    // Use any session ID to get any Website data store. It is OK to use any Website data store,
+    // since we are using it to access any Networking process, which all have the XPC endpoint.
+    // The XPC endpoint is used to receive the Launch Services database from the Network process.
+    if (m_sessionIDs.isEmpty())
+        return;
+    auto store = WebsiteDataStore::existingDataStoreForSessionID(*m_sessionIDs.begin());
+    if (!store)
+        return;
+    m_hasSentNetworkProcessXPCEndpoint = store->sendNetworkProcessXPCEndpointToProcess(*this);
 #endif
 }
 
@@ -496,6 +513,11 @@ void GPUProcessProxy::addSession(const WebsiteDataStore& store)
 
     send(Messages::GPUProcess::AddSession { store.sessionID(), gpuProcessSessionParameters(store) }, 0);
     m_sessionIDs.add(store.sessionID());
+
+#if PLATFORM(COCOA)
+    if (!m_hasSentNetworkProcessXPCEndpoint)
+        m_hasSentNetworkProcessXPCEndpoint = store.sendNetworkProcessXPCEndpointToProcess(*this);
+#endif
 }
 
 void GPUProcessProxy::removeSession(PAL::SessionID sessionID)

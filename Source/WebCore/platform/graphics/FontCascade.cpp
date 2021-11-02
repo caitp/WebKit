@@ -26,7 +26,7 @@
 
 #include "CharacterProperties.h"
 #include "ComplexTextController.h"
-#include "DisplayListRecorder.h"
+#include "DisplayListRecorderImpl.h"
 #include "FloatRect.h"
 #include "FontCache.h"
 #include "GlyphBuffer.h"
@@ -213,7 +213,7 @@ std::unique_ptr<DisplayList::InMemoryDisplayList> FontCascade::displayListForTex
         return nullptr;
     
     std::unique_ptr<DisplayList::InMemoryDisplayList> displayList = makeUnique<DisplayList::InMemoryDisplayList>();
-    DisplayList::Recorder recordingContext(*displayList, context.state(), FloatRect(), AffineTransform(), nullptr, DrawGlyphsRecorder::DrawGlyphsDeconstruction::DontDeconstruct);
+    DisplayList::RecorderImpl recordingContext(*displayList, context.state(), FloatRect(), AffineTransform(), nullptr, DrawGlyphsRecorder::DeconstructDrawGlyphs::No);
     
     FloatPoint startPoint = toFloatPoint(WebCore::size(glyphBuffer.initialAdvance()));
     drawGlyphBuffer(recordingContext, glyphBuffer, startPoint, customFontNotReadyAction);
@@ -311,28 +311,29 @@ float FontCascade::widthForSimpleText(StringView text, TextDirection textDirecti
         return *cacheEntry;
 
     GlyphBuffer glyphBuffer;
-    float runWidth = 0;
+    float beforeWidth = 0;
     auto& font = primaryFont();
     for (unsigned i = 0; i < text.length(); ++i) {
         auto glyph = glyphDataForCharacter(text[i], false).glyph;
         auto glyphWidth = font.widthForGlyph(glyph);
-        runWidth += glyphWidth;
+        beforeWidth += glyphWidth;
         glyphBuffer.add(glyph, font, glyphWidth, i);
     }
 
     auto initialAdvance = font.applyTransforms(glyphBuffer, 0, 0, enableKerning(), requiresShaping(), fontDescription().computedLocale(), text, textDirection);
     // This is needed only to match the result of the slow path.
     // Same glyph widths but different floating point arithmetic can produce different run width.
-    float runWidthDifferenceWithTransformApplied = -runWidth;
+    float afterWidth = 0;
     for (size_t i = 0; i < glyphBuffer.size(); ++i)
-        runWidthDifferenceWithTransformApplied += WebCore::width(glyphBuffer.advanceAt(i));
-    runWidth += runWidthDifferenceWithTransformApplied;
+        afterWidth += WebCore::width(glyphBuffer.advanceAt(i));
+    auto additionalAdvance = afterWidth - beforeWidth;
 
-    runWidth += WebCore::width(initialAdvance);
+    auto finalWidth = beforeWidth + additionalAdvance;
+    finalWidth += WebCore::width(initialAdvance);
 
     if (cacheEntry)
-        *cacheEntry = runWidth;
-    return runWidth;
+        *cacheEntry = finalWidth;
+    return finalWidth;
 }
 
 GlyphData FontCascade::glyphDataForCharacter(UChar32 c, bool mirror, FontVariant variant) const

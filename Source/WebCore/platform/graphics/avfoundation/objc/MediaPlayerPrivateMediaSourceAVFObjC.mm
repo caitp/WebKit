@@ -120,7 +120,7 @@ void EffectiveRateChangedListener::stop(CMTimebaseRef timebase)
 }
 
 EffectiveRateChangedListener::EffectiveRateChangedListener(MediaPlayerPrivateMediaSourceAVFObjC& client, CMTimebaseRef timebase)
-    : m_client(makeWeakPtr(client))
+    : m_client(client)
 {
     CMNotificationCenterRef nc = PAL::CMNotificationCenterGetDefaultLocalCenter();
     PAL::CMNotificationCenterAddListener(nc, this, CMTimebaseEffectiveRateChangedCallback, PAL::kCMTimebaseNotification_EffectiveRateChanged, timebase, 0);
@@ -147,7 +147,7 @@ MediaPlayerPrivateMediaSourceAVFObjC::MediaPlayerPrivateMediaSourceAVFObjC(Media
 
     // addPeriodicTimeObserverForInterval: throws an exception if you pass a non-numeric CMTime, so just use
     // an arbitrarily large time value of once an hour:
-    __block auto weakThis = makeWeakPtr(*this);
+    __block WeakPtr weakThis { *this };
     m_timeJumpedObserver = [m_synchronizer addPeriodicTimeObserverForInterval:PAL::toCMTime(MediaTime::createWithDouble(3600)) queue:dispatch_get_main_queue() usingBlock:^(CMTime time) {
 #if LOG_DISABLED
         UNUSED_PARAM(time);
@@ -310,7 +310,7 @@ PlatformLayer* MediaPlayerPrivateMediaSourceAVFObjC::platformLayer() const
 void MediaPlayerPrivateMediaSourceAVFObjC::play()
 {
     ALWAYS_LOG(LOGIDENTIFIER);
-    callOnMainThread([weakThis = makeWeakPtr(*this)] {
+    callOnMainThread([weakThis = WeakPtr { *this }] {
         if (!weakThis)
             return;
         weakThis.get()->playInternal();
@@ -353,7 +353,7 @@ void MediaPlayerPrivateMediaSourceAVFObjC::playInternal(std::optional<MonotonicT
 void MediaPlayerPrivateMediaSourceAVFObjC::pause()
 {
     ALWAYS_LOG(LOGIDENTIFIER);
-    callOnMainThread([weakThis = makeWeakPtr(*this)] {
+    callOnMainThread([weakThis = WeakPtr { *this }] {
         if (!weakThis)
             return;
         weakThis.get()->pauseInternal();
@@ -471,7 +471,7 @@ bool MediaPlayerPrivateMediaSourceAVFObjC::setCurrentTimeDidChangeCallback(Media
 bool MediaPlayerPrivateMediaSourceAVFObjC::playAtHostTime(const MonotonicTime& time)
 {
     ALWAYS_LOG(LOGIDENTIFIER);
-    callOnMainThread([weakThis = makeWeakPtr(*this), time = time] {
+    callOnMainThread([weakThis = WeakPtr { *this }, time = time] {
         if (!weakThis)
             return;
         weakThis.get()->playInternal(time);
@@ -482,7 +482,7 @@ bool MediaPlayerPrivateMediaSourceAVFObjC::playAtHostTime(const MonotonicTime& t
 bool MediaPlayerPrivateMediaSourceAVFObjC::pauseAtHostTime(const MonotonicTime& time)
 {
     ALWAYS_LOG(LOGIDENTIFIER);
-    callOnMainThread([weakThis = makeWeakPtr(*this), time = time] {
+    callOnMainThread([weakThis = WeakPtr { *this }, time = time] {
         if (!weakThis)
             return;
         weakThis.get()->pauseInternal(time);
@@ -729,6 +729,12 @@ RetainPtr<CVPixelBufferRef> MediaPlayerPrivateMediaSourceAVFObjC::pixelBufferFor
     }
 
     return m_lastPixelBuffer;
+}
+
+DestinationColorSpace MediaPlayerPrivateMediaSourceAVFObjC::colorSpace()
+{
+    updateLastImage();
+    return m_lastImage ? m_lastImage->colorSpace() : DestinationColorSpace::SRGB();
 }
 
 bool MediaPlayerPrivateMediaSourceAVFObjC::hasAvailableVideoFrame() const
@@ -1008,7 +1014,7 @@ void MediaPlayerPrivateMediaSourceAVFObjC::durationChanged()
     DEBUG_LOG(logSiteIdentifier, duration);
     UNUSED_PARAM(logSiteIdentifier);
 
-    m_durationObserver = [m_synchronizer addBoundaryTimeObserverForTimes:times queue:dispatch_get_main_queue() usingBlock:[weakThis = makeWeakPtr(*this), duration, logSiteIdentifier, this] {
+    m_durationObserver = [m_synchronizer addBoundaryTimeObserverForTimes:times queue:dispatch_get_main_queue() usingBlock:[weakThis = WeakPtr { *this }, duration, logSiteIdentifier, this] {
         if (!weakThis)
             return;
 
@@ -1110,7 +1116,7 @@ void MediaPlayerPrivateMediaSourceAVFObjC::setCDMSession(LegacyCDMSession* sessi
 
     ALWAYS_LOG(LOGIDENTIFIER);
 
-    m_session = makeWeakPtr(toCDMSessionMediaSourceAVFObjC(session));
+    m_session = toCDMSessionMediaSourceAVFObjC(session);
 
 #if HAVE(AVSTREAMSESSION)
     if (CDMSessionAVStreamSession* cdmStreamSession = toCDMSessionAVStreamSession(m_session.get()))

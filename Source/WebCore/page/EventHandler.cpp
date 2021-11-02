@@ -36,6 +36,7 @@
 #include "ComposedTreeAncestorIterator.h"
 #include "ComposedTreeIterator.h"
 #include "CursorList.h"
+#include "DocumentInlines.h"
 #include "DocumentMarkerController.h"
 #include "DragController.h"
 #include "DragEvent.h"
@@ -43,6 +44,7 @@
 #include "Editing.h"
 #include "Editor.h"
 #include "EditorClient.h"
+#include "ElementInlines.h"
 #include "EventNames.h"
 #include "FileList.h"
 #include "FloatPoint.h"
@@ -94,10 +96,12 @@
 #include "ResourceLoadObserver.h"
 #include "RuntimeApplicationChecks.h"
 #include "SVGDocument.h"
+#include "SVGElementTypeHelpers.h"
 #include "SVGNames.h"
 #include "ScrollAnimator.h"
 #include "ScrollLatchingController.h"
 #include "Scrollbar.h"
+#include "ScrollingEffectsController.h"
 #include "SelectionRestorationMode.h"
 #include "Settings.h"
 #include "ShadowRoot.h"
@@ -116,6 +120,7 @@
 #include "WindowsKeyboardCodes.h"
 #include <wtf/Assertions.h>
 #include <wtf/NeverDestroyed.h>
+#include <wtf/SetForScope.h>
 #include <wtf/StdLibExtras.h>
 
 #if ENABLE(IOS_TOUCH_EVENTS)
@@ -471,7 +476,7 @@ static VisibleSelection expandSelectionToRespectSelectOnMouseDown(Node& targetNo
 
 bool EventHandler::updateSelectionForMouseDownDispatchingSelectStart(Node* targetNode, const VisibleSelection& selection, TextGranularity granularity)
 {
-    if (Position::nodeIsInertOrUserSelectNone(targetNode))
+    if (Position::nodeIsUserSelectNone(targetNode))
         return false;
 
     if (!dispatchSelectStart(targetNode)) {
@@ -711,12 +716,12 @@ bool EventHandler::canMouseDownStartSelect(const MouseEventWithHitTestResults& e
         if (!page->chrome().client().shouldUseMouseEventForSelection(event.event()))
             return false;
     }
-    
+
     if (!node || !node->renderer())
         return true;
 
     if (HTMLElement::isImageOverlayText(*node))
-        return node->renderer()->style().userSelect() != UserSelect::None;
+        return node->renderer()->style().userSelectIncludingInert() != UserSelect::None;
 
     return node->canStartSelection() || Position::nodeIsUserSelectAll(node.get());
 }
@@ -1518,7 +1523,7 @@ std::optional<Cursor> EventHandler::selectCursor(const HitTestResult& result, bo
     case CursorType::Auto: {
         if (HTMLElement::isImageOverlayText(node.get())) {
             auto* renderer = node->renderer();
-            if (renderer && renderer->style().userSelect() != UserSelect::None)
+            if (renderer && renderer->style().userSelectIncludingInert() != UserSelect::None)
                 return iBeam;
         }
 
@@ -2538,8 +2543,10 @@ RefPtr<Element> EventHandler::textRecognitionCandidateElement() const
         return candidateElement;
 #endif
 
+#if ENABLE(VIDEO)
     if (is<HTMLVideoElement>(*candidateElement))
         return nullptr;
+#endif // ENABLE(VIDEO)
 
     return candidateElement;
 }
@@ -2621,7 +2628,7 @@ void EventHandler::updateMouseEventTargetNode(const AtomString& eventType, Node*
             if (auto elementUnderMouse = m_elementUnderMouse)
                 elementUnderMouse->dispatchMouseEvent(platformMouseEvent, eventNames().mouseoverEvent, 0, m_lastElementUnderMouse.get());
 
-            for (auto& chain : WTF::makeReversedRange(enteredElementsChain)) {
+            for (auto& chain : makeReversedRange(enteredElementsChain)) {
                 if (hasCapturingMouseEnterListener || chain->hasEventListeners(eventNames().pointerenterEvent) || chain->hasEventListeners(eventNames().mouseenterEvent))
                     chain->dispatchMouseEvent(platformMouseEvent, eventNames().mouseenterEvent, 0, m_lastElementUnderMouse.get());
             }
@@ -2888,7 +2895,7 @@ static WeakPtr<Widget> widgetForElement(const Element& element)
     if (!is<RenderWidget>(target) || !downcast<RenderWidget>(*target).widget())
         return { };
 
-    return makeWeakPtr(*downcast<RenderWidget>(*target).widget());
+    return *downcast<RenderWidget>(*target).widget();
 }
 
 bool EventHandler::completeWidgetWheelEvent(const PlatformWheelEvent& event, const WeakPtr<Widget>& widget, const WeakPtr<ScrollableArea>& scrollableArea)
@@ -3103,10 +3110,12 @@ bool EventHandler::scrollableAreaCanHandleEvent(const PlatformWheelEvent& wheelE
     auto biasedDelta = wheelEvent.delta();
 #endif
 
-    if (biasedDelta.height() && !scrollableArea.isPinnedForScrollDeltaOnAxis(-biasedDelta.height(), ScrollEventAxis::Vertical))
+    auto verticalSide = ScrollableArea::targetSideForScrollDelta(-biasedDelta, ScrollEventAxis::Vertical);
+    if (verticalSide && !scrollableArea.isPinnedOnSide(*verticalSide))
         return true;
 
-    if (biasedDelta.width() && !scrollableArea.isPinnedForScrollDeltaOnAxis(-biasedDelta.width(), ScrollEventAxis::Horizontal))
+    auto horizontalSide = ScrollableArea::targetSideForScrollDelta(-biasedDelta, ScrollEventAxis::Horizontal);
+    if (horizontalSide && !scrollableArea.isPinnedOnSide(*horizontalSide))
         return true;
 
     return false;
@@ -3883,6 +3892,9 @@ bool EventHandler::dragHysteresisExceeded(const FloatPoint& dragViewportLocation
 #if ENABLE(ATTACHMENT_ELEMENT)
         case DragSourceAction::Attachment:
 #endif
+#if ENABLE(MODEL_ELEMENT)
+        case DragSourceAction::Model:
+#endif
             threshold = ImageDragHysteresis;
             break;
         case DragSourceAction::Link:
@@ -4312,10 +4324,11 @@ float EventHandler::scrollDistance(ScrollDirection direction, ScrollGranularity 
 void EventHandler::stopKeyboardScrolling()
 {
     Ref protectedFrame = m_frame;
-    FrameView* view = m_frame.view();
+    auto* view = m_frame.view();
+    if (!view)
+        return;
 
-    KeyboardScrollingAnimator* animator = view->scrollAnimator().keyboardScrollingAnimator();
-
+    auto* animator = view->scrollAnimator().keyboardScrollingAnimator();
     if (animator)
         animator->handleKeyUpEvent();
 }
@@ -4326,12 +4339,14 @@ bool EventHandler::startKeyboardScrolling(KeyboardEvent& event)
         return false;
 
     Ref protectedFrame = m_frame;
-    FrameView* view = m_frame.view();
+    auto* view = m_frame.view();
+    if (!view)
+        return false;
 
-    KeyboardScrollingAnimator* animator = view->scrollAnimator().keyboardScrollingAnimator();
-
-    if (animator)
-        return animator->beginKeyboardScrollGesture(event);
+    auto* animator = view->scrollAnimator().keyboardScrollingAnimator();
+    auto* platformEvent = event.underlyingPlatformEvent();
+    if (animator && platformEvent)
+        return animator->beginKeyboardScrollGesture(*platformEvent);
 
     return false;
 }
@@ -4425,7 +4440,7 @@ void EventHandler::updateLastScrollbarUnderMouse(Scrollbar* scrollbar, SetOrClea
         // Send mouse entered if we're setting a new scrollbar.
         if (scrollbar && setOrClear == SetOrClearLastScrollbar::Set) {
             scrollbar->mouseEntered();
-            m_lastScrollbarUnderMouse = makeWeakPtr(*scrollbar);
+            m_lastScrollbarUnderMouse = *scrollbar;
         } else
             m_lastScrollbarUnderMouse = nullptr;
     }

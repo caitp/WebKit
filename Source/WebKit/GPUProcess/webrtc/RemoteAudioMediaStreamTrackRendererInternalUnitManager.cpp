@@ -57,6 +57,7 @@ public:
     void stop();
     void setAudioOutputDevice(const String&);
     OSStatus render(size_t sampleCount, AudioBufferList&, uint64_t sampleTime, double hostTime, AudioUnitRenderActionFlags&);
+    void notifyReset();
 
 private:
     void storageChanged(SharedMemory*, const WebCore::CAAudioStreamDescription&, size_t);
@@ -123,18 +124,26 @@ static WebCore::AudioMediaStreamTrackRendererInternalUnit::RenderCallback render
     };
 }
 
+static WebCore::AudioMediaStreamTrackRendererInternalUnit::ResetCallback resetCallback(RemoteAudioMediaStreamTrackRendererInternalUnitManager::Unit& unit)
+{
+    return [&unit]() {
+        return unit.notifyReset();
+    };
+}
+
 RemoteAudioMediaStreamTrackRendererInternalUnitManager::Unit::Unit(AudioMediaStreamTrackRendererInternalUnitIdentifier identifier, Ref<IPC::Connection>&& connection, CompletionHandler<void(const WebCore::CAAudioStreamDescription&, size_t)>&& callback)
     : m_identifier(identifier)
     , m_connection(WTFMove(connection))
-    , m_localUnit(WebCore::AudioMediaStreamTrackRendererInternalUnit::createLocalInternalUnit(renderCallback(*this)))
+    , m_localUnit(WebCore::AudioMediaStreamTrackRendererInternalUnit::createLocalInternalUnit(renderCallback(*this), resetCallback(*this)))
 {
-    m_localUnit->retrieveFormatDescription([weakThis = makeWeakPtr(this), this, callback = WTFMove(callback)](auto&& description) mutable {
+    m_localUnit->retrieveFormatDescription([weakThis = WeakPtr { *this }, this, callback = WTFMove(callback)](auto&& description) mutable {
         if (!weakThis || !description) {
             RELEASE_LOG_IF(!description, WebRTC, "RemoteAudioMediaStreamTrackRendererInternalUnitManager::Unit unable to get format description");
             callback({ }, 0);
             return;
         }
-        m_frameChunkSize = std::max(WebCore::AudioUtilities::renderQuantumSize, WebCore::AudioSession::sharedSession().preferredBufferSize());
+        size_t tenMsSampleSize = description->sampleRate() * 10 / 1000;
+        m_frameChunkSize = std::max(WebCore::AudioUtilities::renderQuantumSize, tenMsSampleSize);
         callback(*description, m_frameChunkSize);
     });
 }
@@ -142,6 +151,11 @@ RemoteAudioMediaStreamTrackRendererInternalUnitManager::Unit::Unit(AudioMediaStr
 RemoteAudioMediaStreamTrackRendererInternalUnitManager::Unit::~Unit()
 {
     stop();
+}
+
+void RemoteAudioMediaStreamTrackRendererInternalUnitManager::Unit::notifyReset()
+{
+    m_connection->send(Messages::GPUProcessConnection::ResetAudioMediaStreamTrackRendererInternalUnit { m_identifier }, 0);
 }
 
 void RemoteAudioMediaStreamTrackRendererInternalUnitManager::Unit::start(const SharedMemory::Handle& handle, const WebCore::CAAudioStreamDescription& description, uint64_t numberOfFrames, IPC::Semaphore&& semaphore)

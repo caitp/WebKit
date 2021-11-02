@@ -31,9 +31,11 @@
 #import "CompletionHandlerCallChecker.h"
 #import "NetworkProcessProxy.h"
 #import "ShouldGrandfatherStatistics.h"
+#import "WKError.h"
 #import "WKHTTPCookieStoreInternal.h"
 #import "WKNSArray.h"
 #import "WKNSURLAuthenticationChallenge.h"
+#import "WKSecurityOriginInternal.h"
 #import "WKWebViewInternal.h"
 #import "WKWebsiteDataRecordInternal.h"
 #import "WebPageProxy.h"
@@ -658,6 +660,11 @@ static Vector<WebKit::WebsiteDataRecord> toWebsiteDataRecords(NSArray *dataRecor
     _websiteDataStore->allowTLSCertificateChainForLocalPCMTesting(WebCore::CertificateInfo(serverTrust));
 }
 
+- (void)_setPrivateClickMeasurementDebugModeEnabledForTesting:(BOOL)enabled
+{
+    _websiteDataStore->setPrivateClickMeasurementDebugMode(enabled);
+}
+
 - (void)_appBoundDomains:(void (^)(NSArray<NSString *> *))completionHandler
 {
 #if ENABLE(APP_BOUND_DOMAINS)
@@ -745,6 +752,48 @@ static Vector<WebKit::WebsiteDataRecord> toWebsiteDataRecords(NSArray *dataRecor
 {
     _websiteDataStore->countNonDefaultSessionSets([completionHandler = makeBlockPtr(completionHandler)] (size_t count) {
         completionHandler(count);
+    });
+}
+
+-(bool)_hasServiceWorkerBackgroundActivityForTesting
+{
+    return _websiteDataStore->hasServiceWorkerBackgroundActivityForTesting();
+}
+
+-(void)_processPushMessage:(NSData*) message registration:(NSURL *)registration completionHandler:(void(^)(bool wasProcessed))completionHandler
+{
+#if ENABLE(SERVICE_WORKER)
+    std::optional<Span<const uint8_t>> data;
+    if (message)
+        data = Span<const uint8_t> { reinterpret_cast<const uint8_t*>(message.bytes), message.length };
+    _websiteDataStore->networkProcess().processPushMessage(_websiteDataStore->sessionID(), data, registration, [completionHandler = makeBlockPtr(completionHandler)] (bool wasProcessed) {
+        completionHandler(wasProcessed);
+    });
+#endif
+}
+
+-(void)_deletePushAndNotificationRegistration:(WKSecurityOrigin *)securityOrigin completionHandler:(void(^)(NSError *))completionHandler
+{
+    auto completionHandlerCopy = makeBlockPtr(completionHandler);
+    _websiteDataStore->networkProcess().deletePushAndNotificationRegistration(_websiteDataStore->sessionID(), securityOrigin->_securityOrigin->securityOrigin(), [completionHandlerCopy](const String& errorString) {
+        if (errorString.isEmpty()) {
+            completionHandlerCopy(nil);
+            return;
+        }
+        completionHandlerCopy([NSError errorWithDomain:@"WKWebSiteDataStore" code:WKErrorUnknown userInfo:@{ NSLocalizedDescriptionKey:(NSString *)errorString }]);
+    });
+}
+
+-(void)_getOriginsWithPushAndNotificationPermissions:(void(^)(NSSet<WKSecurityOrigin *> *))completionHandler
+{
+    auto completionHandlerCopy = makeBlockPtr(completionHandler);
+    _websiteDataStore->networkProcess().getOriginsWithPushAndNotificationPermissions(_websiteDataStore->sessionID(), [completionHandlerCopy](const Vector<WebCore::SecurityOriginData>& origins) {
+        auto set = adoptNS([[NSMutableSet alloc] initWithCapacity:origins.size()]);
+        for (auto& origin : origins) {
+            auto apiOrigin = API::SecurityOrigin::create(origin);
+            [set addObject:wrapper(apiOrigin.get())];
+        }
+        completionHandlerCopy(set.get());
     });
 }
 

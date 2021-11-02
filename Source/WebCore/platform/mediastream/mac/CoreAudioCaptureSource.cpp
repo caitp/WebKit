@@ -77,8 +77,6 @@ public:
     static BaseAudioSharedUnit& singleton()  { return unit(); }
     CoreAudioSharedUnit();
 
-    void devicesChanged(const Vector<CaptureDevice>&);
-
 private:
     static size_t preferredIOBufferSize();
 
@@ -86,7 +84,7 @@ private:
     const CAAudioStreamDescription& microphoneFormat() const { return m_microphoneProcFormat; }
 
     bool hasAudioUnit() const final { return m_ioUnit; }
-    void setCaptureDevice(String&&, uint32_t) final;
+    void captureDeviceChanged() final;
     OSStatus reconfigureAudioUnit() final;
 
     OSStatus setupAudioUnit();
@@ -110,16 +108,11 @@ private:
     void unduck();
 
     void verifyIsCapturing();
-    void devicesChanged();
 
     AudioUnit m_ioUnit { nullptr };
 
     // Only read/modified from the IO thread.
     Vector<Ref<AudioSampleDataSource>> m_activeSources;
-
-#if PLATFORM(MAC)
-    uint32_t m_captureDeviceID { 0 };
-#endif
 
     CAAudioStreamDescription m_microphoneProcFormat;
     RefPtr<AudioSampleBufferList> m_microphoneSampleBuffer;
@@ -143,8 +136,6 @@ private:
     uint64_t m_speakerProcsCalled { 0 };
 #endif
 
-    String m_persistentID;
-
     uint64_t m_microphoneProcsCalled { 0 };
     uint64_t m_microphoneProcsCalledLastTime { 0 };
     Timer m_verifyCapturingTimer;
@@ -161,34 +152,13 @@ CoreAudioSharedUnit::CoreAudioSharedUnit()
 {
 }
 
-void CoreAudioSharedUnit::setCaptureDevice(String&& persistentID, uint32_t captureDeviceID)
+void CoreAudioSharedUnit::captureDeviceChanged()
 {
-    if (m_persistentID == persistentID)
-        return;
-
-    m_persistentID = WTFMove(persistentID);
-
 #if PLATFORM(MAC)
-    if (m_captureDeviceID == captureDeviceID)
-        return;
-
-    m_captureDeviceID = captureDeviceID;
     reconfigureAudioUnit();
 #else
-    UNUSED_PARAM(captureDeviceID);
-    AVAudioSessionCaptureDeviceManager::singleton().setPreferredAudioSessionDeviceUID(m_persistentID);
+    AVAudioSessionCaptureDeviceManager::singleton().setPreferredAudioSessionDeviceUID(persistentID());
 #endif
-}
-
-void CoreAudioSharedUnit::devicesChanged(const Vector<CaptureDevice>& devices)
-{
-    if (!m_ioUnit)
-        return;
-
-    if (WTF::anyOf(devices, [this] (auto& device) { return m_persistentID == device.persistentId(); }))
-        return;
-
-    captureFailed();
 }
 
 size_t CoreAudioSharedUnit::preferredIOBufferSize()
@@ -254,15 +224,16 @@ OSStatus CoreAudioSharedUnit::setupAudioUnit()
         return err;
     }
 #else
-    if (!m_captureDeviceID) {
-        err = defaultInputDevice(&m_captureDeviceID);
+    auto deviceID = captureDeviceID();
+    if (!deviceID) {
+        err = defaultInputDevice(&deviceID);
         if (err)
             return err;
     }
 
-    err = PAL::AudioUnitSetProperty(m_ioUnit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, inputBus, &m_captureDeviceID, sizeof(m_captureDeviceID));
+    err = PAL::AudioUnitSetProperty(m_ioUnit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, inputBus, &deviceID, sizeof(deviceID));
     if (err) {
-        RELEASE_LOG_ERROR(WebRTC, "CoreAudioSharedUnit::setupAudioUnit(%p) unable to set vpio unit capture device ID %d, error %d (%.4s)", this, (int)m_captureDeviceID, (int)err, (char*)&err);
+        RELEASE_LOG_ERROR(WebRTC, "CoreAudioSharedUnit::setupAudioUnit(%p) unable to set vpio unit capture device ID %d, error %d (%.4s)", this, (int)deviceID, (int)err, (char*)&err);
         return err;
     }
 #endif
@@ -395,7 +366,7 @@ OSStatus CoreAudioSharedUnit::provideSpeakerData(AudioUnitRenderActionFlags& /*i
 
     bool firstSource = true;
     for (auto& source : m_activeSources) {
-        source->pullSamples(*m_speakerSampleBuffer.get(), inNumberFrames, adjustedHostTime, sampleTime, firstSource ? AudioSampleDataSource::Copy : AudioSampleDataSource::Mix);
+        source->pullSamples(bufferList, inNumberFrames, adjustedHostTime, sampleTime, firstSource ? AudioSampleDataSource::Copy : AudioSampleDataSource::Mix);
         firstSource = false;
     }
 
@@ -470,7 +441,6 @@ void CoreAudioSharedUnit::cleanupAudioUnit()
 
     m_microphoneSampleBuffer = nullptr;
     m_speakerSampleBuffer = nullptr;
-    m_persistentID = emptyString();
 #if !LOG_DISABLED
     m_ioUnitName = emptyString();
 #endif

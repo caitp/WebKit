@@ -41,6 +41,7 @@
 #include "InspectorInstrumentation.h"
 #include "Logging.h"
 #include "ProcessingInstruction.h"
+#include "SVGElementTypeHelpers.h"
 #include "SVGStyleElement.h"
 #include "Settings.h"
 #include "ShadowRoot.h"
@@ -654,6 +655,13 @@ void Scope::scheduleUpdate(UpdateType update)
 
 void Scope::evaluateMediaQueriesForViewportChange()
 {
+    auto viewportState = mediaQueryViewportStateForDocument(m_document);
+
+    if (m_viewportStateOnPreviousMediaQueryEvaluation && *m_viewportStateOnPreviousMediaQueryEvaluation == viewportState)
+        return;
+    // This doesn't need to be invalidated as any changes to the rules will compute their media queries to correct values.
+    m_viewportStateOnPreviousMediaQueryEvaluation = viewportState;
+
     evaluateMediaQueries([] (Resolver& resolver) {
         return resolver.evaluateDynamicMediaQueries();
     });

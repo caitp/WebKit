@@ -531,6 +531,7 @@ public:
     OptionSet<Containment> contain() const { return m_rareNonInheritedData->contain; }
     bool containsLayout() const { return m_rareNonInheritedData->contain.contains(Containment::Layout); }
     bool containsSize() const { return m_rareNonInheritedData->contain.contains(Containment::Size); }
+    bool containsStyle() const { return m_rareNonInheritedData->contain.contains(Containment::Style); }
     BoxAlignment boxAlign() const { return static_cast<BoxAlignment>(m_rareNonInheritedData->deprecatedFlexibleBox->align); }
     BoxDirection boxDirection() const { return static_cast<BoxDirection>(m_inheritedFlags.boxDirection); }
     float boxFlex() const { return m_rareNonInheritedData->deprecatedFlexibleBox->flex; }
@@ -610,6 +611,7 @@ public:
     MarqueeDirection marqueeDirection() const { return static_cast<MarqueeDirection>(m_rareNonInheritedData->marquee->direction); }
     UserModify userModify() const { return static_cast<UserModify>(m_rareInheritedData->userModify); }
     UserDrag userDrag() const { return static_cast<UserDrag>(m_rareNonInheritedData->userDrag); }
+    UserSelect userSelectIncludingInert() const { return effectiveInert() ? UserSelect::None : userSelect(); }
     UserSelect userSelect() const { return static_cast<UserSelect>(m_rareInheritedData->userSelect); }
     TextOverflow textOverflow() const { return static_cast<TextOverflow>(m_rareNonInheritedData->textOverflow); }
     MarginCollapse marginBeforeCollapse() const { return static_cast<MarginCollapse>(m_rareNonInheritedData->marginBeforeCollapse); }
@@ -880,7 +882,8 @@ public:
     void setMinHeight(Length&& length) { SET_VAR(m_boxData, m_minHeight, WTFMove(length)); }
     void setMaxHeight(Length&& length) { SET_VAR(m_boxData, m_maxHeight, WTFMove(length)); }
 
-    void resetBorder() { resetBorderImage(); resetBorderTop(); resetBorderRight(); resetBorderBottom(); resetBorderLeft(); resetBorderRadius(); }
+    void resetBorder() { resetBorderExceptRadius(); resetBorderRadius(); }
+    void resetBorderExceptRadius() { resetBorderImage(); resetBorderTop(); resetBorderRight(); resetBorderBottom(); resetBorderLeft(); }
     void resetBorderTop() { SET_VAR(m_surroundData, border.m_top, BorderValue()); }
     void resetBorderRight() { SET_VAR(m_surroundData, border.m_right, BorderValue()); }
     void resetBorderBottom() { SET_VAR(m_surroundData, border.m_bottom, BorderValue()); }
@@ -1132,6 +1135,8 @@ public:
     void setTextFillColor(const Color& c) { SET_VAR(m_rareInheritedData, textFillColor, c); }
     void setCaretColor(const Color& c) { SET_VAR(m_rareInheritedData, caretColor, c); SET_VAR(m_rareInheritedData, hasAutoCaretColor, false);  }
     void setHasAutoCaretColor() { SET_VAR(m_rareInheritedData, hasAutoCaretColor, true); SET_VAR(m_rareInheritedData, caretColor, currentColor()); }
+    void setAccentColor(const Color& c) { SET_VAR(m_rareInheritedData, accentColor, c); SET_VAR(m_rareInheritedData, hasAutoAccentColor, false);  }
+    void setHasAutoAccentColor() { SET_VAR(m_rareInheritedData, hasAutoAccentColor, true); SET_VAR(m_rareInheritedData, accentColor, currentColor()); }
     void setOpacity(float f) { float v = clampTo<float>(f, 0.f, 1.f); SET_VAR(m_rareNonInheritedData, opacity, v); }
     void setAppearance(ControlPart a) { SET_VAR(m_rareNonInheritedData, appearance, a); SET_VAR(m_rareNonInheritedData, effectiveAppearance, a); }
     void setEffectiveAppearance(ControlPart a) { SET_VAR(m_rareNonInheritedData, effectiveAppearance, a); }
@@ -1463,14 +1468,16 @@ public:
     void setShapeImageThreshold(float);
     static float initialShapeImageThreshold() { return 0; }
 
-    void setClipPath(RefPtr<ClipPathOperation>&&);
-    ClipPathOperation* clipPath() const { return m_rareNonInheritedData->clipPath.get(); }
-    static ClipPathOperation* initialClipPath() { return nullptr; }
+    void setClipPath(RefPtr<PathOperation>&&);
+    PathOperation* clipPath() const { return m_rareNonInheritedData->clipPath.get(); }
+    static PathOperation* initialClipPath() { return nullptr; }
 
     bool hasContent() const { return contentData(); }
     const ContentData* contentData() const { return m_rareNonInheritedData->content.get(); }
     bool contentDataEquivalent(const RenderStyle* otherStyle) const { return const_cast<RenderStyle*>(this)->m_rareNonInheritedData->contentDataEquivalent(*const_cast<RenderStyle*>(otherStyle)->m_rareNonInheritedData); }
     void clearContent();
+    void setHasExplicitlyClearedContent(bool v) { m_nonInheritedFlags.hasExplicitlyClearedContent = v; }
+    bool hasExplicitlyClearedContent() const { return m_nonInheritedFlags.hasExplicitlyClearedContent; };
     void setContent(const String&, bool add = false);
     void setContent(RefPtr<StyleImage>&&, bool add = false);
     void setContent(std::unique_ptr<CounterContent>, bool add = false);
@@ -1876,6 +1883,22 @@ public:
     const Color& floodColor() const { return svgStyle().floodColor(); }
     const Color& lightingColor() const { return svgStyle().lightingColor(); }
 
+    Color effectiveAccentColor() const;
+    const Color& accentColor() const { return m_rareInheritedData->accentColor; }
+    bool hasAutoAccentColor() const { return m_rareInheritedData->hasAutoAccentColor; }
+
+    const Length& offsetDistance() const { return m_rareNonInheritedData->offsetDistance; }
+    void setOffsetDistance(Length&& distance) { SET_VAR(m_rareNonInheritedData, offsetDistance, WTFMove(distance)); }
+    static Length initialOffsetDistance() { return Length(0, LengthType::Fixed); }
+
+    LengthPoint offsetPosition() const { return m_rareNonInheritedData->offsetPosition; }
+    void setOffsetPosition(LengthPoint&& position) { SET_VAR(m_rareNonInheritedData, offsetPosition, WTFMove(position)); }
+    static LengthPoint initialOffsetPosition() { return LengthPoint(Length(LengthType::Auto), Length(LengthType::Auto)); }
+
+    LengthPoint offsetAnchor() const { return m_rareNonInheritedData->offsetAnchor; }
+    void setOffsetAnchor(LengthPoint&& position) { SET_VAR(m_rareNonInheritedData, offsetAnchor, WTFMove(position)); }
+    static LengthPoint initialOffsetAnchor() { return LengthPoint(Length(LengthType::Auto), Length(LengthType::Auto)); }
+
 private:
     struct NonInheritedFlags {
         bool operator==(const NonInheritedFlags&) const;
@@ -1912,6 +1935,7 @@ private:
         unsigned firstChildState : 1;
         unsigned lastChildState : 1;
         unsigned isLink : 1;
+        unsigned hasExplicitlyClearedContent : 1;
 
         unsigned styleType : 4; // PseudoId
         unsigned pseudoBits : (static_cast<unsigned>(PseudoId::FirstInternalPseudoId) - static_cast<unsigned>(PseudoId::FirstPublicPseudoId));
@@ -2050,6 +2074,7 @@ inline bool RenderStyle::NonInheritedFlags::operator==(const NonInheritedFlags& 
         && firstChildState == other.firstChildState
         && lastChildState == other.lastChildState
         && isLink == other.isLink
+        && hasExplicitlyClearedContent == other.hasExplicitlyClearedContent
         && styleType == other.styleType
         && pseudoBits == other.pseudoBits;
 }
@@ -2329,7 +2354,7 @@ inline void RenderStyle::setShapeImageThreshold(float shapeImageThreshold)
     SET_VAR(m_rareNonInheritedData, shapeImageThreshold, clampedShapeImageThreshold);
 }
 
-inline void RenderStyle::setClipPath(RefPtr<ClipPathOperation>&& operation)
+inline void RenderStyle::setClipPath(RefPtr<PathOperation>&& operation)
 {
     if (m_rareNonInheritedData->clipPath != operation)
         m_rareNonInheritedData.access().clipPath = WTFMove(operation);

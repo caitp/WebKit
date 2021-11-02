@@ -412,12 +412,12 @@ ScrollPosition ScrollView::maximumScrollPosition() const
     return maximumPosition;
 }
 
-ScrollPosition ScrollView::adjustScrollPositionWithinRange(const ScrollPosition& scrollPoint) const
+ScrollPosition ScrollView::adjustScrollPositionWithinRange(const ScrollPosition& scrollPosition) const
 {
-    if (!constrainsScrollingToContentEdge() || m_allowsUnclampedScrollPosition)
-        return scrollPoint;
+    if (scrollClamping() == ScrollClamping::Unclamped || m_allowsUnclampedScrollPosition)
+        return scrollPosition;
 
-    return scrollPoint.constrainedBetween(minimumScrollPosition(), maximumScrollPosition());
+    return scrollPosition.constrainedBetween(minimumScrollPosition(), maximumScrollPosition());
 }
 
 ScrollPosition ScrollView::documentScrollPositionRelativeToViewOrigin() const
@@ -434,10 +434,10 @@ ScrollPosition ScrollView::documentScrollPositionRelativeToScrollableAreaOrigin(
 
 void ScrollView::setScrollOffset(const ScrollOffset& offset)
 {
-    LOG_WITH_STREAM(Scrolling, stream << "\nScrollView::setScrollOffset " << offset << " constrains " << constrainsScrollingToContentEdge());
+    LOG_WITH_STREAM(Scrolling, stream << "\nScrollView::setScrollOffset " << offset << " clamping " << scrollClamping());
 
-    IntPoint constrainedOffset = offset;
-    if (constrainsScrollingToContentEdge())
+    auto constrainedOffset = offset;
+    if (scrollClamping() == ScrollClamping::Clamped)
         constrainedOffset = constrainedOffset.constrainedBetween(minimumScrollOffset(), maximumScrollOffset());
 
     scrollTo(scrollPositionFromOffset(constrainedOffset));
@@ -454,6 +454,7 @@ void ScrollView::scrollOffsetChangedViaPlatformWidget(const ScrollOffset& oldOff
     }
 
     scrollOffsetChangedViaPlatformWidgetImpl(oldOffset, newOffset);
+    scrollAnimator().setCurrentPosition(scrollPosition());
 }
 
 void ScrollView::handleDeferredScrollUpdateAfterContentSizeChange()
@@ -481,6 +482,11 @@ void ScrollView::scrollTo(const ScrollPosition& newPosition)
     IntSize scrollDelta = newPosition - m_scrollPosition;
     if (scrollDelta.isZero())
         return;
+
+    if (platformWidget()) {
+        platformSetScrollPosition(newPosition);
+        return;
+    }
 
     m_scrollPosition = newPosition;
 
@@ -518,22 +524,24 @@ void ScrollView::setScrollPosition(const ScrollPosition& scrollPosition, const S
     if (prohibitsScrolling())
         return;
 
+    if (scrollAnimationStatus() == ScrollAnimationStatus::Animating) {
+        scrollAnimator().cancelAnimations();
+        stopAsyncAnimatedScroll();
+    }
+
     if (platformWidget()) {
         platformSetScrollPosition(scrollPosition);
         return;
     }
 
-    if (currentScrollBehaviorStatus() == ScrollBehaviorStatus::InNonNativeAnimation)
-        scrollAnimator().cancelAnimations();
-
     ScrollPosition newScrollPosition = (!delegatesScrolling() && options.clamping == ScrollClamping::Clamped) ? adjustScrollPositionWithinRange(scrollPosition) : scrollPosition;
-    if ((!delegatesScrolling() || currentScrollType() == ScrollType::User) && currentScrollBehaviorStatus() == ScrollBehaviorStatus::NotInAnimation && newScrollPosition == this->scrollPosition())
+    if ((!delegatesScrolling() || currentScrollType() == ScrollType::User) && newScrollPosition == this->scrollPosition()) {
+        LOG_WITH_STREAM(Scrolling, stream << "ScrollView::setScrollPosition " << scrollPosition << " return for no change");
         return;
+    }
 
     if (!requestScrollPositionUpdate(newScrollPosition, currentScrollType(), options.clamping))
         updateScrollbars(newScrollPosition);
-
-    setScrollBehaviorStatus(ScrollBehaviorStatus::NotInAnimation);
 }
 
 bool ScrollView::scroll(ScrollDirection direction, ScrollGranularity granularity)
@@ -1567,7 +1575,7 @@ std::unique_ptr<ScrollView::ProhibitScrollingWhenChangingContentSizeForScope> Sc
 }
 
 ScrollView::ProhibitScrollingWhenChangingContentSizeForScope::ProhibitScrollingWhenChangingContentSizeForScope(ScrollView& scrollView)
-    : m_scrollView(makeWeakPtr(scrollView))
+    : m_scrollView(scrollView)
 {
     scrollView.incrementProhibitsScrollingWhenChangingContentSizeCount();
 }

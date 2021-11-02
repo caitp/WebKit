@@ -151,12 +151,6 @@ public:
 #if ENABLE(WEB_RTC)
     bool webRTCDTMFEnabled() const { return m_isWebRTCDTMFEnabled; }
     void setWebRTCDTMFEnabled(bool isEnabled) { m_isWebRTCDTMFEnabled = isEnabled; }
-    bool webRTCH265CodecEnabled() const { return m_isWebRTCH265CodecEnabled; }
-    void setWebRTCH265CodecEnabled(bool isEnabled) { m_isWebRTCH265CodecEnabled = isEnabled; }
-    bool webRTCVP9Profile0CodecEnabled() const { return m_isWebRTCVP9Profile0CodecEnabled; }
-    void setWebRTCVP9Profile0CodecEnabled(bool isEnabled) { m_isWebRTCVP9Profile0CodecEnabled = isEnabled; }
-    bool webRTCVP9Profile2CodecEnabled() const { return m_isWebRTCVP9Profile2CodecEnabled; }
-    void setWebRTCVP9Profile2CodecEnabled(bool isEnabled) { m_isWebRTCVP9Profile2CodecEnabled = isEnabled; }
     bool webRTCH264LowLatencyEncoderEnabled() const { return m_isWebRTCH264LowLatencyEncoderEnabled; }
     void setWebRTCH264LowLatencyEncoderEnabled(bool isEnabled) { m_isWebRTCH264LowLatencyEncoderEnabled = isEnabled; }
     bool webRTCMDNSICECandidatesEnabled() const { return m_isWebRTCMDNSICECandidatesEnabled; }
@@ -180,6 +174,8 @@ public:
     bool transformStreamAPIEnabled() const { return m_isTransformStreamAPIEnabled; }
 
 #if ENABLE(SERVICE_WORKER)
+    bool pushAPIEnabled() const { return m_pushAPIEnabled; }
+    void setPushAPIEnabled(bool isEnabled) { m_pushAPIEnabled = isEnabled; }
     bool serviceWorkerEnabled() const { return m_serviceWorkerEnabled; }
     void setServiceWorkerEnabled(bool isEnabled) { m_serviceWorkerEnabled = isEnabled; }
 #endif
@@ -260,6 +256,11 @@ public:
     bool mediaSourceInlinePaintingEnabled() const { return m_mediaSourceInlinePaintingEnabled; }
 #endif
 
+#if ENABLE(BUILT_IN_NOTIFICATIONS)
+    void setBuiltInNotificationsEnabled(bool isEnabled) { m_builtInNotificationsEnabled = isEnabled; }
+    bool builtInNotificationsEnabled() const { return m_builtInNotificationsEnabled; }
+#endif
+
 private:
     // Never instantiate.
     RuntimeEnabledFeatures();
@@ -320,9 +321,6 @@ private:
     bool m_isWebRTCDTMFEnabled { true };
     bool m_isWebRTCH264SimulcastEnabled { true };
     bool m_isWebRTCMDNSICECandidatesEnabled { false };
-    bool m_isWebRTCH265CodecEnabled { false };
-    bool m_isWebRTCVP9Profile0CodecEnabled { false };
-    bool m_isWebRTCVP9Profile2CodecEnabled { false };
     bool m_isWebRTCH264LowLatencyEncoderEnabled { false };
     bool m_isWebRTCPlatformTCPSocketsEnabled { false };
     bool m_isWebRTCPlatformUDPSocketsEnabled { false };
@@ -336,6 +334,7 @@ private:
     bool m_isTransformStreamAPIEnabled { false };
 
 #if ENABLE(SERVICE_WORKER)
+    bool m_pushAPIEnabled { false };
     bool m_serviceWorkerEnabled { false };
 #endif
 
@@ -399,7 +398,11 @@ private:
     bool m_mediaSourceInlinePaintingEnabled { false };
 #endif
 
-    friend class WTF::NeverDestroyed<RuntimeEnabledFeatures>;
+#if ENABLE(BUILT_IN_NOTIFICATIONS)
+    bool m_builtInNotificationsEnabled { false };
+#endif
+
+    friend class NeverDestroyed<RuntimeEnabledFeatures>;
 };
 
 } // namespace WebCore

@@ -46,7 +46,7 @@ using namespace WebCore;
 Ref<RealtimeMediaSource> RemoteRealtimeAudioSource::create(const CaptureDevice& device, const MediaConstraints* constraints, String&& name, String&& hashSalt, UserMediaCaptureManager& manager, bool shouldCaptureInGPUProcess)
 {
     auto source = adoptRef(*new RemoteRealtimeAudioSource(RealtimeMediaSourceIdentifier::generate(), device, constraints, WTFMove(name), WTFMove(hashSalt), manager, shouldCaptureInGPUProcess));
-    manager.addAudioSource(source.copyRef());
+    manager.addSource(source.copyRef());
     manager.remoteCaptureSampleManager().addSource(source.copyRef());
     source->createRemoteMediaSource();
     return source;
@@ -120,7 +120,7 @@ void RemoteRealtimeAudioSource::remoteAudioSamplesAvailable(const MediaTime& tim
 void RemoteRealtimeAudioSource::hasEnded()
 {
     m_proxy.hasEnded();
-    m_manager.removeAudioSource(identifier());
+    m_manager.removeSource(identifier());
     m_manager.remoteCaptureSampleManager().removeSource(identifier());
 }
 

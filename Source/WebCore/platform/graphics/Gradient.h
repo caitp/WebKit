@@ -31,7 +31,7 @@
 #include "Color.h"
 #include "FloatPoint.h"
 #include "GraphicsTypes.h"
-#include <wtf/Variant.h>
+#include <variant>
 #include <wtf/Vector.h>
 
 #if USE(CG)
@@ -100,7 +100,7 @@ public:
         template<typename Decoder> static std::optional<ConicData> decode(Decoder&);
     };
 
-    using Data = Variant<LinearData, RadialData, ConicData>;
+    using Data = std::variant<LinearData, RadialData, ConicData>;
 
     WEBCORE_EXPORT static Ref<Gradient> create(Data&&);
 

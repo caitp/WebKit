@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include "CallFrameShuffleData.h"
 #include "CallMode.h"
 #include "CodeLocation.h"
 #include "CodeSpecializationKind.h"
@@ -41,7 +42,6 @@ class CCallHelpers;
 class FunctionCodeBlock;
 class JSFunction;
 enum OpcodeID : unsigned;
-struct CallFrameShuffleData;
 
 struct UnlinkedCallLinkInfo;
 
@@ -75,8 +75,24 @@ public:
         }
     }
 
-    CallLinkInfo(CodeOrigin);
-        
+    CallLinkInfo(CodeOrigin codeOrigin)
+        : m_codeOrigin(codeOrigin)
+        , m_hasSeenShouldRepatch(false)
+        , m_hasSeenClosure(false)
+        , m_clearedByGC(false)
+        , m_clearedByVirtual(false)
+        , m_allowStubs(true)
+        , m_clearedByJettison(false)
+        , m_callType(None)
+        , m_useDataIC(static_cast<unsigned>(UseDataIC::Yes))
+    {
+    }
+
+    CallLinkInfo()
+        : CallLinkInfo(CodeOrigin { })
+    {
+    }
+
     ~CallLinkInfo();
     
     static CodeSpecializationKind specializationKindFor(CallType callType)
@@ -313,6 +329,13 @@ public:
     {
         return OBJECT_OFFSETOF(CallLinkInfo, m_maxArgumentCountIncludingThis);
     }
+
+#if USE(JSVALUE32_64)
+    uint32_t* addressOfMaxArgumentCountIncludingThis()
+    {
+        return &m_maxArgumentCountIncludingThis;
+    }
+#endif
 
     uint32_t maxArgumentCountIncludingThis()
     {

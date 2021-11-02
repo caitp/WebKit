@@ -35,7 +35,6 @@
 #import "MediaUtilities.h"
 #import "NativeWebWheelEvent.h"
 #import "NavigationActionData.h"
-#import "TapHandlingResult.h"
 #import "UserMediaPermissionCheckProxy.h"
 #import "UserMediaPermissionRequestManagerProxy.h"
 #import "UserMediaPermissionRequestProxy.h"
@@ -46,9 +45,8 @@
 #import "WKOpenPanelParametersInternal.h"
 #import "WKSecurityOriginInternal.h"
 #import "WKStorageAccessAlert.h"
-#import <WebKit/WKUIDelegatePrivate.h>
+#import "WKUIDelegatePrivate.h"
 #import "WKWebViewConfigurationInternal.h"
-#import "WKWebViewIOS.h"
 #import "WKWebViewInternal.h"
 #import "WKWindowFeaturesInternal.h"
 #import "WebEventFactory.h"
@@ -66,6 +64,11 @@
 #import <WebCore/SecurityOrigin.h>
 #import <wtf/BlockPtr.h>
 #import <wtf/URL.h>
+
+#if PLATFORM(IOS_FAMILY)
+#import "TapHandlingResult.h"
+#import "WKWebViewIOS.h"
+#endif
 
 #import <pal/cocoa/AVFoundationSoftLink.h>
 
@@ -197,7 +200,7 @@ void UIDelegate::setDelegate(id <WKUIDelegate> delegate)
 
 #if ENABLE(CONTEXT_MENUS)
 UIDelegate::ContextMenuClient::ContextMenuClient(UIDelegate& uiDelegate)
-    : m_uiDelegate(makeWeakPtr(uiDelegate))
+    : m_uiDelegate(uiDelegate)
 {
 }
 
@@ -242,7 +245,7 @@ void UIDelegate::ContextMenuClient::menuFromProposedMenu(WebPageProxy&, NSMenu *
 #endif
 
 UIDelegate::UIClient::UIClient(UIDelegate& uiDelegate)
-    : m_uiDelegate(makeWeakPtr(uiDelegate))
+    : m_uiDelegate(uiDelegate)
 {
 }
 
@@ -423,7 +426,7 @@ void UIDelegate::UIClient::decidePolicyForGeolocationPermissionRequest(WebKit::W
     if (m_uiDelegate->m_delegateMethods.webViewRequestGeolocationPermissionForOriginDecisionHandler) {
         auto securityOrigin = WebCore::SecurityOrigin::createFromString(page.pageLoadState().activeURL());
         auto checker = CompletionHandlerCallChecker::create(delegate.get(), @selector(_webView:requestGeolocationPermissionForOrigin:initiatedByFrame:decisionHandler:));
-        auto decisionHandler = makeBlockPtr([completionHandler = std::exchange(completionHandler, nullptr), securityOrigin = securityOrigin->data(), checker = WTFMove(checker), page = makeWeakPtr(page)] (WKPermissionDecision decision) mutable {
+        auto decisionHandler = makeBlockPtr([completionHandler = std::exchange(completionHandler, nullptr), securityOrigin = securityOrigin->data(), checker = WTFMove(checker), page = WeakPtr { page }] (WKPermissionDecision decision) mutable {
             if (checker->completionHandlerHasBeenCalled())
                 return;
             checker->didCallCompletionHandler();
@@ -745,35 +748,6 @@ void UIDelegate::UIClient::unfocus(WebPageProxy*)
     [(id <WKUIDelegatePrivate>)delegate _unfocusWebView:m_uiDelegate->m_webView.get().get()];
 }
 
-static _WKPlugInUnavailabilityReason toWKPlugInUnavailabilityReason(WKPluginUnavailabilityReason reason)
-{
-    switch (reason) {
-    case kWKPluginUnavailabilityReasonPluginMissing:
-        return _WKPlugInUnavailabilityReasonPluginMissing;
-    case kWKPluginUnavailabilityReasonPluginCrashed:
-        return _WKPlugInUnavailabilityReasonPluginCrashed;
-    case kWKPluginUnavailabilityReasonInsecurePluginVersion:
-        return _WKPlugInUnavailabilityReasonInsecurePluginVersion;
-    }
-    ASSERT_NOT_REACHED();
-    return _WKPlugInUnavailabilityReasonPluginMissing;
-}
-    
-void UIDelegate::UIClient::unavailablePluginButtonClicked(WebPageProxy&, WKPluginUnavailabilityReason reason, API::Dictionary& plugInInfo)
-{
-    if (!m_uiDelegate)
-        return;
-
-    if (!m_uiDelegate->m_delegateMethods.webViewUnavailablePlugInButtonClicked)
-        return;
-    
-    auto delegate = m_uiDelegate->m_delegate.get();
-    if (!delegate)
-        return;
-
-    [(id <WKUIDelegatePrivate>)delegate _webView:m_uiDelegate->m_webView.get().get() unavailablePlugInButtonClickedWithReason:toWKPlugInUnavailabilityReason(reason) plugInInfo:wrapper(plugInInfo)];
-}
-    
 static _WKResourceLimit toWKResourceLimit(WKResourceLimit limit)
 {
     switch (limit) {
@@ -1061,7 +1035,7 @@ void UIDelegate::UIClient::shouldAllowDeviceOrientationAndMotionAccess(WebKit::W
 
     auto delegate = m_uiDelegate->m_delegate.get();
     auto checker = CompletionHandlerCallChecker::create(delegate.get(), @selector(webView:requestDeviceOrientationAndMotionPermissionForOrigin:initiatedByFrame:decisionHandler:));
-    auto decisionHandler = makeBlockPtr([completionHandler = WTFMove(completionHandler), securityOrigin = securityOrigin->data(), checker = WTFMove(checker), page = makeWeakPtr(page)](WKPermissionDecision decision) mutable {
+    auto decisionHandler = makeBlockPtr([completionHandler = WTFMove(completionHandler), securityOrigin = securityOrigin->data(), checker = WTFMove(checker), page = WeakPtr { page }](WKPermissionDecision decision) mutable {
         if (checker->completionHandlerHasBeenCalled())
             return;
         checker->didCallCompletionHandler();
@@ -1117,6 +1091,11 @@ void UIDelegate::UIClient::decidePolicyForUserMediaPermissionRequest(WebPageProx
         return;
     }
 
+    if (request.requiresDisplayCapture() && request.canPromptForGetDisplayMedia()) {
+        request.promptForGetDisplayMedia();
+        return;
+    }
+
     // FIXME: Provide a specific delegate for display capture.
     if (!request.requiresDisplayCapture() && respondsToRequestMediaCapturePermission) {
         auto checker = CompletionHandlerCallChecker::create(delegate, @selector(webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:));
@@ -1127,7 +1106,7 @@ void UIDelegate::UIClient::decidePolicyForUserMediaPermissionRequest(WebPageProx
 
             switch (decision) {
             case WKPermissionDecisionPrompt:
-                protectedRequest->prompt();
+                protectedRequest->promptForGetUserMedia();
                 break;
             case WKPermissionDecisionGrant: {
                 const String& videoDeviceUID = protectedRequest->requiresVideoCapture() ? protectedRequest->videoDeviceUIDs().first() : String();
@@ -1144,7 +1123,7 @@ void UIDelegate::UIClient::decidePolicyForUserMediaPermissionRequest(WebPageProx
         std::optional<WebCore::FrameIdentifier> mainFrameID;
         if (auto* mainFrame = frame.page() ? frame.page()->mainFrame() : nullptr)
             mainFrameID = mainFrame->frameID();
-        FrameInfoData frameInfo { frame.isMainFrame(), { }, userMediaOrigin.securityOrigin(), frame.frameID(), mainFrameID };
+        FrameInfoData frameInfo { frame.isMainFrame(), { }, userMediaOrigin.securityOrigin(), { }, frame.frameID(), mainFrameID };
         RetainPtr<WKFrameInfo> frameInfoWrapper = wrapper(API::FrameInfo::create(WTFMove(frameInfo), frame.page()));
 
         WKMediaCaptureType type = WKMediaCaptureTypeCamera;
@@ -1227,7 +1206,7 @@ void UIDelegate::UIClient::checkUserMediaPermissionForOrigin(WebPageProxy& page,
     [(id <WKUIDelegatePrivate>)delegate _webView:m_uiDelegate->m_webView.get().get() checkUserMediaPermissionForURL:requestFrameURL mainFrameURL:mainFrameURL frameIdentifier:frame.frameID().toUInt64() decisionHandler:decisionHandler.get()];
 }
 
-void UIDelegate::UIClient::mediaCaptureStateDidChange(WebCore::MediaProducer::MediaStateFlags state)
+void UIDelegate::UIClient::mediaCaptureStateDidChange(WebCore::MediaProducerMediaStateFlags state)
 {
     if (!m_uiDelegate)
         return;

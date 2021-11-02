@@ -54,7 +54,9 @@
     (subpath "/Library/Apple/System")
     (subpath "/Library/Preferences/Logging")      ; Logging Rethink
     (subpath "/System")
+#if __MAC_OS_X_VERSION_MIN_REQUIRED < 110000
     (subpath "/private/var/db/dyld")
+#endif
     (subpath "/private/var/db/timezone")
     (subpath "/usr/lib")
     (subpath "/usr/share"))))
@@ -306,10 +308,8 @@
             (global-name "com.apple.cvmsServ")
         )
     )
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101400 || PLATFORM(MACCATALYST)
     (allow file-read*
         (prefix "/private/var/db/CVMS/cvmsCodeSignObj"))
-#endif
     ;; OpenCL
     (if (equal? (param "ENABLE_SANDBOX_MESSAGE_FILTER") "YES")
         (allow iokit-open
@@ -578,20 +578,24 @@
 (allow sysctl-read
     (sysctl-name
         "hw.activecpu" ;; <rdar://problem/56795575>
+        "hw.availcpu"
         "hw.byteorder"
+        "hw.busfrequency"
         "hw.busfrequency_max"
         "hw.cacheconfig" ;; <rdar://problem/78213563>
         "hw.cachelinesize" ;; <rdar://problem/56795575>
         "hw.cachesize" ;; <rdar://problem/78213563>
         "hw.cpufamily" ;; <rdar://problem/58416475>
+        "hw.cpufrequency"
+        "hw.cpufrequency_max"
         "hw.cpusubfamily"
-        "hw.cputype"
         "hw.cputhreadtype"
+        "hw.cputype"
         "hw.l1dcachesize" ;; <rdar://problem/56795575>
         "hw.l1icachesize" ;; <rdar://problem/56795575>
         "hw.l2cachesize" ;; <rdar://problem/56795575>
         "hw.l3cachesize" ;; <rdar://problem/56795575>
-        "hw.logicalcpu"
+        "hw.logicalcpu" ;; <rdar://problem/56795575>
         "hw.logicalcpu_max" ;; <rdar://problem/56795575>
         "hw.machine"
         "hw.memsize"
@@ -602,6 +606,8 @@
         "hw.pagesize_compat" ;; <rdar://problem/76783596>
         "hw.physicalcpu" ;; <rdar://problem/58416475>
         "hw.physicalcpu_max" ;; <rdar://problem/58416475>
+        "hw.tbfrequency"
+        "hw.tbfrequency_compat"
         "hw.vectorunit"
         "kern.bootargs" ;; <rdar://problem/47738015>
         "kern.hostname"
@@ -609,7 +615,9 @@
         "kern.maxfilesperproc"
         "kern.memorystatus_level"
         "kern.osproductversion" ;; <rdar://problem/51756739>
+        "kern.osrelease"
         "kern.ostype"
+        "kern.osvariant_status"
         "kern.osversion"
         "kern.safeboot"
         "kern.version"
@@ -619,12 +627,7 @@
         "kern.tcsm_enable"
         "kern.tcsm_available"
         "vm.footprint_suspend")
-    (sysctl-name-regex #"^hw\.(active|avail)cpu")
-    (sysctl-name-regex #"^hw\.(busfrequency|cachelinesize|cpufrequency(|_max)|pagesize|tbfrequency)(|_compat)")
-    (sysctl-name-regex #"^hw\.l.+cachesize")
-    (sysctl-name-regex #"^hw\.(logical|physical)cpu_max")
-    (sysctl-name-regex #"^kern\.os(release|type|variant_status|version)")
-    (sysctl-name-regex #"^net\.routetable")
+    (sysctl-name-prefix "net.routetable")
     (sysctl-name-prefix "hw.optional.") ;; <rdar://problem/71462790>
     (sysctl-name-prefix "hw.perflevel") ;; <rdar://problem/76783596>
 )
@@ -637,22 +640,39 @@
 (allow iokit-get-properties
     (iokit-property "AAPL,LCD-PowerState-ON") ;; <rdar://problem/47738015>
     (iokit-property "AGCInfo")
-    (iokit-property-regex #"^Accel(Caps|NativeDMARowByteAlignment)")
-    (iokit-property-regex #"^(Accurate|Extended)MaxDigitizerPressureValue")
-    (iokit-property-regex #"^(Activation|Animation)Thresholds")
+    (iokit-property "AccelCaps")
+    (iokit-property "AccelNativeDMARowByteAlignment")
+    (iokit-property "AccurateMaxDigitizerPressureValue")
+    (iokit-property "ActivationThresholds")
     (iokit-property "ActuationSupported")
+    (iokit-property "AnimationThresholds")
     (iokit-property "AllowDisplaySleep")
     (iokit-property "AlwaysNeedsVelocityCalculated")
-    (iokit-property-regex #"Apple(GVAKeyDoesNotExist|IntelMEVABundleName)")
-    (iokit-property-regex #"^AAPL,(DisplayPipe|OpenCLdisabled|IOGraphics_LER(|_RegTag_1|_RegTag_0|_Busy_2)|alias-policy|boot-display|display-alias|mux-switch-state|ndrv-dev|primary-display|slot-name)")
-    (iokit-property-regex #"^ATY,(cbits|fb_(linebytes|offset|size)|intrev)")
+    (iokit-property "AppleGVAKeyDoesNotExist")
+    (iokit-property "AppleIntelMEVABundleName")
+    (iokit-property "AAPL,DisplayPipe")
+    (iokit-property "AAPL,OpenCLdisabled")
+    (iokit-property-prefix "AAPL,IOGraphics_LER")
+    (iokit-property "AAPL,alias-policy")
+    (iokit-property "AAPL,boot-display")
+    (iokit-property "AAPL,display-alias")
+    (iokit-property "AAPL,mux-switch-state")
+    (iokit-property "AAPL,ndrv-dev")
+    (iokit-property "AAPL,primary-display")
+    (iokit-property "AAPL,slot-name")
+    (iokit-property "ATY,cbits")
+    (iokit-property "ATY,fb_linebytes")
+    (iokit-property "ATY,fb_offset")
+    (iokit-property "ATY,fb_size")
+    (iokit-property "ATY,intrev")
     (iokit-property "ATY,DeviceName") ;; Needed by Metal compilers
     (iokit-property "ATY,EFIDisplay")
     (iokit-property "ATY,FamilyName") ;; Ditto
     (iokit-property "AVCSupported")
     (iokit-property "BacklightHandle")
     (iokit-property "BlockSize")
-    (iokit-property-regex #"^CEA(ModeID|PixelRepetition)")
+    (iokit-property "CEAModeID")
+    (iokit-property "CEAPixelRepetition")
     (iokit-property "CFBundleIdentifier")
     (iokit-property "CFBundleIdentifierKernel") ;; <rdar://problem/47738015>
     (iokit-property "CapsLockDelay")
@@ -663,7 +683,8 @@
     (iokit-property "DPLinkRate")
     (iokit-property "Description")
     (iokit-property "Development")
-    (iokit-property-regex #"^Device( Characteristics|EqID)")
+    (iokit-property "Device Characteristics")
+    (iokit-property "DeviceEqID")
     (iokit-property "DiskImageURL")
     (iokit-property "DisplayRouting")
     (iokit-property "Driver is Ready")
@@ -671,6 +692,7 @@
     (iokit-property "EnableLPVP")
     (iokit-property "Encrypted")
     (iokit-property "Endianness")
+    (iokit-property "ExtendedMaxDigitizerPressureValue")
     (iokit-property "Family ID")
     (iokit-property "ForceSupported")
     (iokit-property "Formats")
@@ -685,123 +707,150 @@
     (iokit-property "HEVCSupported")
     (iokit-property "HIDPointerAccelerationType")
     (iokit-property "HwCtxCacheUpdate")
-    (iokit-property-regex #"^IOAccel(DisplayPipeCapabilities|Index|Types|Revision)")
-    (iokit-property-regex #"^IO(Class|MatchCategory|NameMatch)")
-    (iokit-property-regex #"^IOAudioControl(ChannelID|ID|SubType|Usage|Value)")
-    (iokit-property-regex #"^IOAudioDevice(CanBeDefaults|TransportType)")
-    (iokit-property-regex #"^IOAudioEngine(ChannelNames|ClientDescription|CoreAudioPlugIn|(|Device)Description|Flavor|GlobalUniqueID|IsHidden|OutputChannelLayout|SampleOffset|State)")
-    (iokit-property-regex #"^IOAudioEngineClock(Domain|IsStable)")
-    (iokit-property "IOAudioEngineDisableClockBoundsCheck")
-    (iokit-property-regex #"^IOAudioEngine(Input|Output)Sample(Latency|Offset)")
-    (iokit-property-regex #"^IOAudioEngineNum(ActiveUserClients|SampleFramesPerBuffer)")
+    (iokit-property "IOAccelDisplayPipeCapabilities")
+    (iokit-property "IOAccelIndex")
+    (iokit-property "IOAccelTypes")
+    (iokit-property "IOAccelRevision")
+    (iokit-property-prefix "IOAudioControl")
+    (iokit-property "IOAudioDeviceCanBeDefaults")
+    (iokit-property "IOAudioDeviceTransportType")
+    (iokit-property-prefix "IOAudioEngine")
     (iokit-property "IOAudioSampleRate")
     (iokit-property "IOAudioStreamSampleFormatByteOrder")
-    (iokit-property-regex #"^IOAV(.*)(De|En)code$")
+    (iokit-property-prefix "IOAV")
     (iokit-property "IOBacklightHandlerID")
     (iokit-property "IOBusyInterest")
     (iokit-property "IOCFPlugInTypes")
     (iokit-property "IOChildIndex")
-    (iokit-property-regex #"^IOClass(|NameOverride)")
+    (iokit-property "IOClass")
+    (iokit-property "IOClassNameOverride")
     (iokit-property "IOConsoleUsers")
     (iokit-property "IODVDBundleName")
     (iokit-property "IODeviceMemory")
     (iokit-property "IODisplayParameters")
-    (iokit-property-regex #"^IOFB(CLUTDefer|Config|CursorInfo|Dependent(ID|Index))")
-    (iokit-property "IOFBCurrentPixelClock")
-    (iokit-property-regex #"^IOFBCurrentPixelCount(|Real)")
-    (iokit-property-regex #"^IOFB(DetailedTimings|Gamma(Count|HeaderSize|Width))")
-    (iokit-property-regex #"^IOFB(Blue|Green|Red)GammaScale")
-    (iokit-property-regex #"^IOFBI2CInterface(IDs|Info)")
-    (iokit-property-regex #"^IOFB(HDMIDongleROM|Integrated|MemorySize|NeedsRefresh|ProbeOptions|ScalerInfo|TimingRange|Transform|UIScale|WaitCursor(Frames|Period))")
+    (iokit-property-prefix "IOFB")
     (iokit-property "IOFramebufferOpenGLIndex")
     (iokit-property "IOGeneralInterest")
     (iokit-property "IOGLBundleName")
-    (iokit-property-regex #"^IOGVA(BGRAEnc|Codec|EncoderRestricted|Scaler|VTCapabilities|HEVCDecodeCapabilities|HEVCEncodeCapabilities)")
-    (iokit-property-regex #"^IOGVA(.*)(De|En)code$")
+    (iokit-property-prefix "IOGVA")
     (iokit-property "IOHibernateState")
     (iokit-property "IOI2CTransactionTypes")
-    (iokit-property-regex #"^IOInterrupt(Controllers|Specifiers)")
+    (iokit-property "IOInterruptControllers")
+    (iokit-property "IOInterruptSpecifiers")
     (iokit-property "IOKitDebug")
     (iokit-property "IOMatchCategory")
     (iokit-property "IOMediaIcon")
     (iokit-property "IONDRVFramebufferGeneration")
     (iokit-property "IONVRAMProperty")
-    (iokit-property-regex #"^IOName(|Match(|ed))")
+    (iokit-property "IOName")
+    (iokit-property "IONameMatch")
+    (iokit-property "IONameMatched")
     (iokit-property "IOOCDBundleName")
     (iokit-property "IOPCITunnelled")
     (iokit-property "IOPCITunnelCompatible")
     (iokit-property "IOPMStrictTreeOrder")
     (iokit-property "IOParentMatch")
-    (iokit-property-regex #"^IOPCI((Class|Primary|Property|)Match|Express(Capabilities|Link(Status|Capabilities))|MSIMode|Resourced|Tunnelled)")
+    (iokit-property-prefix "IOPCI")
     (iokit-property "IOPMIsPowerManaged")
     (iokit-property "IOPersonalityPublisher")
-    (iokit-property-regex #"^IOPlatform(SerialNumber|UUID)")
+    (iokit-property "IOPlatformSerialNumber")
+    (iokit-property "IOPlatformUUID")
     (iokit-property "IOPowerManagement")
     (iokit-property "IOProbeScore")
     (iokit-property "IOPropertyMatch")
     (iokit-property "IOProviderClass")
-    (iokit-property-regex #"^IOReport(Lures|Legend(|Public))")
+    (iokit-property "IOReportLures")
+    (iokit-property "IOReportLegend")
+    (iokit-property "IOReportLegendPublic")
     (iokit-property "IOScreenRestoreState")
     (iokit-property "IOSourceVersion")
-    (iokit-property-regex #"^IOVA(BundleName|Renderer(|Sub)ID)")
-    (iokit-property-regex #"^InternalStatistics(|Accm)")
-    (iokit-property-regex #"^MetalPlugin(Name|ClassName)")
+    (iokit-property "IOVABundleName")
+    (iokit-property "IOVARendererID")
+    (iokit-property "IOVARendererSubID")
+    (iokit-property "InternalStatistics")
+    (iokit-property "InternalStatisticsAccm")
+    (iokit-property "MetalPluginClassName")
+    (iokit-property "MetalPluginName")
     (iokit-property "MetalStatisticsName")
     (iokit-property "MTHIDDevice")
     (iokit-property "MT Built-In")
     (iokit-property "MaintainPowerInUILock")
     (iokit-property "Max Packet Size")
+    (iokit-property "MaximumBootBeepVolume")
     (iokit-property "MinDigitizerPressureValue")
+    (iokit-property "Multitouch ID")
     (iokit-property "Multitouch Serial Number")
-    (iokit-property-regex #"^Multitouch (Subdevice |)ID")
+    (iokit-property "Multitouch Subdevice ID")
     (iokit-property "NVArch")
-    (iokit-property-regex #"^NVC(AP|LASS)")
-    (iokit-property-regex #"^NVDA,(Features|NVPresentment-version|accel-loaded|invalid-config|mm-version)")
+    (iokit-property "NVCAP")
+    (iokit-property "NVCLASS")
     (iokit-property "NVDA,Enable-A2R10G10B10Format")
-    (iokit-property-regex #"^NVDA(Type|initgl_created)")
+    (iokit-property "NVDA,Features")
+    (iokit-property "NVDA,NVPresentment-version")
+    (iokit-property "NVDA,accel-loaded")
+    (iokit-property "NVDA,invalid-config")
+    (iokit-property "NVDA,mm-version")
+    (iokit-property "NVDAType")
+    (iokit-property "NVDAinitgl_created")
     (iokit-property "NVRAMProperty")
     (iokit-property "NXSystemInfo")
-    (iokit-property-regex #"^VRAM,(memvendorID|total(MB|size))")
+    (iokit-property "VRAM,memvendorID")
+    (iokit-property "VRAM,totalsize")
     (iokit-property "NoAutoRoute")
-    (iokit-property-regex #"^Num(Blocks|Streams)")
-    (iokit-property-regex #"^PerformanceStatistics(|Accum)")
+    (iokit-property "NumBlocks")
+    (iokit-property "NumStreams")
+    (iokit-property "PerformanceStatistics")
+    (iokit-property "PerformanceStatisticsAccum")
+    (iokit-property "PinConfigurations")
     (iokit-property "Protocol Characteristics")
     (iokit-property "Removable")
-    (iokit-property-regex #"^ResetOn(Lock|Unlock)Ms")
+    (iokit-property "ResetOnLockMs")
+    (iokit-property "ResetOnUnlockMs")
     (iokit-property "SWIP_properties")
     (iokit-property "SafeEjectRequested")
     (iokit-property "SampleRates")
+    (iokit-property "Sensor Columns")
+    (iokit-property "Sensor Rows")
+    (iokit-property "Sensor Region Descriptor")
+    (iokit-property "Sensor Region Param")
+    (iokit-property "Sensor Region Rows")
+    (iokit-property "Sensor Surface Descriptor")
+    (iokit-property "Sensor Surface Height")
+    (iokit-property "Sensor Surface Width")
     (iokit-property "Serial Number")
     (iokit-property "StartupDisplay")
     (iokit-property "SurfaceList")
-    (iokit-property-regex #"^Support(AudioAUUC|sSilentClick|TapToWake)")
-    (iokit-property-regex #"^Sensor (Columns|Rows)")
-    (iokit-property-regex #"^Sensor Region (Descriptor|Param|Rows)")
-    (iokit-property-regex #"^Sensor Surface (Descriptor|Height|Width)")
-    (iokit-property "SurfaceList")
+    (iokit-property "SupportAudioAUUC")
+    (iokit-property "SupportsSilentClick")
+    (iokit-property "SupportTapToWake")
     (iokit-property "TimeStampFiltering")
     (iokit-property "Transport")
     (iokit-property "USBADC") ;; Needed for Audio support on older hardware
     (iokit-property "UserClientEnabled")
     (iokit-property "VRAM,totalMB")
     (iokit-property "WANTS_FRAMES_IGNORED")
-    (iokit-property-regex #"^acpi-(device|path)")
+    (iokit-property "acpi-device")
+    (iokit-property "acpi-path")
     (iokit-property "assigned-addresses")
     (iokit-property "attached-gpu-control-path")
-    (iokit-property-regex #"^audio-(codec-info|device-mvalue|device-nvalue|selector)")
+    (iokit-property "audio-codec-info")
+    (iokit-property "audio-device-mvalue")
+    (iokit-property "audio-device-nvalue")
+    (iokit-property "audio-selector")
     (iokit-property "av-signal-type")
     (iokit-property "backlight-PWM-freq")
     (iokit-property "bcdVersion")
-    (iokit-property-regex #"^(board|device|revision|subsystem|vendor)-id")
+    (iokit-property "board-id")
     (iokit-property "boot-gamma-restored")
     (iokit-property "built-in")
     (iokit-property "cail_properties")
-    (iokit-property-regex #"^canvas-(height|width)")
+    (iokit-property "canvas-height")
+    (iokit-property "canvas-width")
     (iokit-property "class-code")
     (iokit-property "color-accuracy-index")
     (iokit-property "compatible")
     (iokit-property "connector-type")
-    (iokit-property-regex #"^(device|revision|subsystem-vendor|touch-size)-id")
+    (iokit-property "device-id")
     (iokit-property "device_type")
     (iokit-property "display-bpc")
     (iokit-property "display-connect-flags")
@@ -814,44 +863,44 @@
     (iokit-property "graphic-options")
     (iokit-property "hda-gfx")
     (iokit-property "housing-color")
-    (iokit-property-regex #"^id(Product|Vendor)")
+    (iokit-property "idProduct")
+    (iokit-property "idVendor")
     (iokit-property "iofb_version")
     (iokit-property "image-encrypted")
     (iokit-property "image-path") ;; Needed by LaunchServices
+    (iokit-property "layout-id")
     (iokit-property "locationID") ;; Needed for Audio support on older hardware
     (iokit-property "model")
     (iokit-property "mt-device-id")
     (iokit-property "name")
     (iokit-property "nv-stats")
+#if __MAC_OS_X_VERSION_MIN_REQUIRED < 110000
     (iokit-property "od-server-name") ;; Needed by LaunchServices
-    (iokit-property-regex #"^parser-(options|type)")
-    (iokit-property-regex #"^pci(-aspm-default|debug)")
+#endif
+    (iokit-property "parser-options")
+    (iokit-property "parser-type")
+    (iokit-property "pci-aspm-default")
+    (iokit-property "pcidebug")
     (iokit-property "port-number")
     (iokit-property "reg")
+    (iokit-property "revision-id")
     (iokit-property "rm_board_number")
-    (iokit-property-regex #"^(rom|vbios)-revision")
+    (iokit-property "rom-revision")
     (iokit-property "saved-config")
     (iokit-property "startup-timing")
+    (iokit-property "subsystem-id")
+    (iokit-property "subsystem-vendor-id")
     (iokit-property "touch-size-id")
-#if !PLATFORM(MAC) || __MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
-    (iokit-property "ATY,cbits")
-    (iokit-property "ATY,intrev")
-    (iokit-property "AccelNativeDMARowByteAlignment")
+    (iokit-property "vendor-id")
+    (iokit-property "vbios-revision")
     (iokit-property "CompactVRAM")
     (iokit-property "EnableBlitLib")
     (iokit-property "ForceDisableEDRAM")
-    (iokit-property "GPUConfigurationVariable")
-    (iokit-property "GpuDebugPolicy")
-    (iokit-property "IOKitDebug")
     (iokit-property "IOPCIMatch")
-    (iokit-property "IOOCDBundleName")
     (iokit-property "MetalStatisticsScriptName")
     (iokit-property "MetalCoalesce")
     (iokit-property "PanicOnGPUHang")
     (iokit-property "TelemetryDisable")
-    (iokit-property "cail_properties")
-    (iokit-property "dpm")
-#endif
     (iokit-property "IOGVAH264EncodeCapabilities") ;; <rdar://problem/49498040>
 #if !PLATFORM(MAC) || __MAC_OS_X_VERSION_MIN_REQUIRED > 101500
     (iokit-property "IOAVDHEVCDecodeCapabilities") ;; <rdar://problem/71100188>
@@ -1053,9 +1102,8 @@
 
 ;; Allow the OpenGL Profiler to attach.
 (with-filter (system-attribute apple-internal)
-    (if (defined? 'mach-register)
-        (allow mach-register
-            (global-name-regex #"^_oglprof_attach_<[0-9]+>$")))
+    (allow mach-register
+        (global-name-regex #"^_oglprof_attach_<[0-9]+>$"))
 )
 
 (if (positive? (string-length (param "DARWIN_USER_CACHE_DIR")))
@@ -1308,7 +1356,7 @@
 (allow ipc-posix-shm-read-data
     (ipc-posix-name "FNetwork.defaultStorageSession")
     (ipc-posix-name-regex #"\.PrivateBrowsing-")
-    (ipc-posix-name-regex #"^WebKit Test-"))
+    (ipc-posix-name-prefix "WebKit Test-"))
 #endif
 
 ;; Audio
@@ -1316,7 +1364,7 @@
 #if __MAC_OS_X_VERSION_MIN_REQUIRED >= 110000
     (with telemetry)
 #endif
-    (ipc-posix-name-regex #"^AudioIO"))
+    (ipc-posix-name-prefix "AudioIO"))
 
 #if !ENABLE(SET_WEBCONTENT_PROCESS_INFORMATION_IN_NETWORK_PROCESS)
 (allow mach-lookup
@@ -1348,16 +1396,9 @@
 
 ;; Various services required by AppKit and other frameworks
 (allow mach-lookup
-#if __MAC_OS_X_VERSION_MIN_REQUIRED < 101400
-       (global-name "com.apple.FontObjectsServer")
-#endif
        (global-name "com.apple.logd")
        (global-name "com.apple.logd.events")
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101400 || PLATFORM(MACCATALYST)
        (global-name "com.apple.CARenderServer") ; Needed for [CAContext remoteContextWithOptions]
-#else
-       (global-name "com.apple.windowserver.active")
-#endif
 )
 
 #if __MAC_OS_X_VERSION_MIN_REQUIRED <= 110000
@@ -1389,7 +1430,6 @@
     (global-name "com.apple.lsd.mapdb")
 )
 
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101400 || PLATFORM(MACCATALYST)
 ;; <rdar://problem/47268166>
 (allow mach-lookup
     (require-all
@@ -1404,15 +1444,12 @@
         (xpc-service-name "com.apple.MTLCompilerService")
     )
 )
-#endif
 
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101400 || PLATFORM(MACCATALYST)
 (deny mach-lookup (with no-log)
     (global-name "com.apple.CoreServices.coreservicesd")
     (global-name "com.apple.DiskArbitration.diskarbitrationd")
     (global-name "com.apple.ViewBridgeAuxiliary")
     (global-name "com.apple.windowserver.active"))
-#endif
 
 #if __MAC_OS_X_VERSION_MIN_REQUIRED >= 110000
 (deny mach-lookup (with no-log)
@@ -1453,11 +1490,11 @@
 
 #if __MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
 (deny mach-lookup
-    (global-name-regex #"^com.apple.distributed_notifications")
+    (global-name-prefix "com.apple.distributed_notifications")
 )
 #else
 (allow mach-lookup
-    (global-name-regex #"^com.apple.distributed_notifications")
+    (global-name-prefix "com.apple.distributed_notifications")
 )
 #endif
 
@@ -1465,7 +1502,7 @@
     (literal "/dev/autofs_nowait")) ; Used by CF to circumvent automount triggers
 #if __MAC_OS_X_VERSION_MIN_REQUIRED <= 110000
 (allow ipc-posix-shm
-    (ipc-posix-name-regex #"^CFPBS:")) ; <rdar://problem/13757475>
+    (ipc-posix-name-prefix "CFPBS:")) ; <rdar://problem/13757475>
 #endif
 
 ;; Graphics
@@ -1535,11 +1572,10 @@
         (global-name "com.apple.system.logger"))
 )
 
-(if (defined? 'vnode-type)
-        (deny file-write-create (vnode-type SYMLINK)))
+(deny file-write-create (vnode-type SYMLINK))
 
 ;; Reserve a namespace for additional protected extended attributes.
-(deny file-read-xattr file-write-xattr (xattr-regex #"^com\.apple\.security\.private\."))
+(deny file-read-xattr file-write-xattr (xattr-prefix "com.apple.security.private."))
 
 (deny file-read* file-write* (with no-log)
        ;; FIXME: Should be removed after <rdar://problem/10463881> is fixed.
@@ -1711,11 +1747,7 @@
         (global-name
             "com.apple.analyticsd"
             "com.apple.nehelper"
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500 || PLATFORM(MACCATALYST)
             "com.apple.nesessionmanager.content-filter"
-#else
-            "com.apple.nesessionmanager"
-#endif
             "com.apple.webinspector"
             "com.apple.cfprefsd.agent"
             "com.apple.cfprefsd.daemon"
@@ -1731,10 +1763,20 @@
             "com.apple.audio.AudioComponentRegistrar" "com.apple.audio.audiohald" "com.apple.coremedia.endpoint.xpc" "com.apple.coremedia.endpointstream.xpc"
             "com.apple.coremedia.endpointplaybacksession.xpc" "com.apple.coremedia.endpointremotecontrolsession.xpc" "com.apple.coremedia.routediscoverer.xpc"
             "com.apple.coremedia.routingcontext.xpc" "com.apple.coremedia.volumecontroller.xpc" "com.apple.lskdd" "com.apple.mediaremoted.xpc" "com.apple.trustd.agent"
+#if __MAC_OS_X_VERSION_MIN_REQUIRED > 120000
+            "com.apple.coremedia.samplebufferconsumer.xpc"
+#endif
             ;;; FIXME(207716): End services to remove.
         )
     )
 )
+
+#if __MAC_OS_X_VERSION_MIN_REQUIRED < 110000
+(allow mach-lookup
+    (require-all
+        (require-not (extension "com.apple.webkit.extension.mach"))
+        (global-name "com.apple.audio.AudioComponentRegistrar")))
+#endif
 
 (allow mach-lookup
     (require-all
@@ -1754,14 +1796,9 @@
     (fsctl-command (_IO "h" 47))) ;; See <rdar://74387453>
 
 #if __MAC_OS_X_VERSION_MIN_REQUIRED >= 110000
-(when (defined? 'file-ioctl)
-    (deny file-ioctl (with telemetry))
-    (allow file-ioctl (literal "/dev/dtracehelper"))
-)
-
-(when (defined? 'socket-ioctl)
-    (deny socket-ioctl (with telemetry))
-)
+(deny file-ioctl (with telemetry))
+(allow file-ioctl (literal "/dev/dtracehelper"))
+(deny socket-ioctl (with telemetry))
 
 (when (defined? 'system-fcntl)
     (deny system-fcntl (with telemetry))
@@ -1826,169 +1863,170 @@
 (when (defined? 'syscall-unix)
     (deny syscall-unix (with send-signal SIGKILL))
     (allow syscall-unix
-        (syscall-number SYS_abort_with_payload)
-        (syscall-number SYS_exit)
-        (syscall-number SYS_read)
-        (syscall-number SYS_write)
-        (syscall-number SYS_open)
-        (syscall-number SYS_close)
-        (syscall-number SYS_unlink)
-        (syscall-number SYS_chmod)
-        (syscall-number SYS_chmod_extended)
-        (syscall-number SYS_getuid)
-        (syscall-number SYS_geteuid)
-        (syscall-number SYS_recvfrom)
-        (syscall-number SYS_getpeername)
-        (syscall-number SYS_access)
-        (syscall-number SYS_dup)
-        (syscall-number SYS_pipe)
-        (syscall-number SYS_getegid)
-        (syscall-number SYS_getgid)
-        (syscall-number SYS_sigprocmask)
-        (syscall-number SYS_sigaltstack)
-        (syscall-number SYS_ioctl)
-        (syscall-number SYS_readlink)
-        (syscall-number SYS_umask)
-        (syscall-number SYS_msync)
-        (syscall-number SYS_munmap)
-        (syscall-number SYS_mprotect)
-        (syscall-number SYS_madvise)
-        (syscall-number SYS_mincore)
-        (syscall-number SYS_fcntl)
-        (syscall-number SYS_select)
-        (syscall-number SYS_fsync)
-        (syscall-number SYS_setpriority)
-        (syscall-number SYS_socket)
-        (syscall-number SYS_connect)
-        (syscall-number SYS_setsockopt)
-        (syscall-number SYS_gettimeofday)
-        (syscall-number SYS_getrusage)
-        (syscall-number SYS_getsockopt)
-        (syscall-number SYS_writev)
-        (syscall-number SYS_fchmod)
-        (syscall-number SYS_rename)
-        (syscall-number SYS_flock)
-        (syscall-number SYS_sendto)
-        (syscall-number SYS_shutdown)
-        (syscall-number SYS_socketpair)
-        (syscall-number SYS_mkdir)
-        (syscall-number SYS_rmdir)
-        (syscall-number SYS_pread)
-        (syscall-number SYS_pwrite)
-        (syscall-number SYS_csops)
-        (syscall-number SYS_csops_audittoken)
-        (syscall-number SYS_kdebug_trace64)
-        (syscall-number SYS_kdebug_trace)
-        (syscall-number SYS_sigaction)
-        (syscall-number SYS_sigreturn)
-        (syscall-number SYS_pathconf)
-        (syscall-number SYS_getrlimit)
-        (syscall-number SYS_setrlimit)
-        (syscall-number SYS_mmap)
-        (syscall-number SYS_lseek)
-        (syscall-number SYS_ftruncate)
-        (syscall-number SYS_sysctl)
-        (syscall-number SYS_mlock)
-        (syscall-number SYS_munlock)
-        (syscall-number SYS_getattrlist)
-        (syscall-number SYS_getxattr)
-        (syscall-number SYS_fgetxattr)
-        (syscall-number SYS_listxattr)
-        (syscall-number SYS_shm_open)
-        (syscall-number SYS_sem_wait)
-        (syscall-number SYS_sem_post)
-        (syscall-number SYS_sysctlbyname)
-        (syscall-number SYS_psynch_mutexwait)
-        (syscall-number SYS_psynch_mutexdrop)
-        (syscall-number SYS_psynch_cvbroad)
-        (syscall-number SYS_psynch_cvsignal)
-        (syscall-number SYS_psynch_cvwait)
-        (syscall-number SYS_psynch_rw_wrlock)
-        (syscall-number SYS_psynch_rw_unlock)
-        (syscall-number SYS_psynch_cvclrprepost)
-        (syscall-number SYS_process_policy)
-        (syscall-number SYS_issetugid)
+        (syscall-number SYS___disable_threadsignal)
+        (syscall-number SYS___mac_syscall)
         (syscall-number SYS___pthread_kill)
         (syscall-number SYS___pthread_markcancel)
         (syscall-number SYS___pthread_sigmask)
-        (syscall-number SYS___disable_threadsignal)
         (syscall-number SYS___semwait_signal)
         (syscall-number SYS___semwait_signal_nocancel)
-        (syscall-number SYS_proc_info)
-        (syscall-number SYS_stat64)
-        (syscall-number SYS_fstat64)
-        (syscall-number SYS_lstat64)
-        (syscall-number SYS_getdirentries64)
-        (syscall-number SYS_statfs64)
-        (syscall-number SYS_fstatfs64)
-        (syscall-number SYS_getfsstat64)
-        (syscall-number SYS_getaudit_addr)
+        (syscall-number SYS_abort_with_payload)
+        (syscall-number SYS_access)
         (syscall-number SYS_bsdthread_create)
-        (syscall-number SYS_bsdthread_terminate)
-        (syscall-number SYS_workq_kernreturn)
-        (syscall-number SYS_thread_selfid)
-        (syscall-number SYS_thread_selfusage)
-        (syscall-number SYS_kevent)
-        (syscall-number SYS_kevent_qos)
-        (syscall-number SYS_kevent_id)
-        (syscall-number SYS___mac_syscall)
-        (syscall-number SYS_read_nocancel)
-        (syscall-number SYS_write_nocancel)
-        (syscall-number SYS_open_nocancel)
-        (syscall-number SYS_close_nocancel)
-        (syscall-number SYS_sendmsg_nocancel)
-        (syscall-number SYS_recvfrom_nocancel)
-        (syscall-number SYS_fcntl_nocancel)
-        (syscall-number SYS_select_nocancel)
-        (syscall-number SYS_connect_nocancel)
-        (syscall-number SYS_sendto_nocancel)
-        (syscall-number SYS_fsgetpath)
-        (syscall-number SYS_fileport_makeport)
-        (syscall-number SYS_guarded_open_np)
-        (syscall-number SYS_guarded_close_np)
-        (syscall-number SYS_guarded_write_np)
-        (syscall-number SYS_change_fdguard_np)
-        (syscall-number SYS_proc_rlimit_control)
-        (syscall-number SYS_connectx)
-        (syscall-number SYS_getattrlistbulk)
-        (syscall-number SYS_openat)
-        (syscall-number SYS_openat_nocancel)
-        (syscall-number SYS_fstatat64)
-        (syscall-number SYS_mkdirat)
         (syscall-number SYS_bsdthread_ctl)
+        (syscall-number SYS_bsdthread_terminate)
+        (syscall-number SYS_change_fdguard_np)
+        (syscall-number SYS_chmod)
+        (syscall-number SYS_chmod_extended)
+        (syscall-number SYS_close)
+        (syscall-number SYS_close_nocancel)
+        (syscall-number SYS_connect)
+        (syscall-number SYS_connect_nocancel)
+        (syscall-number SYS_connectx)
+        (syscall-number SYS_csops)
+        (syscall-number SYS_csops_audittoken)
         (syscall-number SYS_csrctl)
-        (syscall-number SYS_guarded_pwrite_np)
-        (syscall-number SYS_getentropy)
-        (syscall-number SYS_necp_open)
-        (syscall-number SYS_necp_client_action)
-        (syscall-number SYS_ulock_wait)
-        (syscall-number SYS_ulock_wake)
-        (syscall-number SYS_work_interval_ctl)
-        (syscall-number SYS_kdebug_typefilter)
-        (syscall-number SYS_gettid) ;; Needed for base system, see <rdar://problem/48651255>
-        (syscall-number SYS_memorystatus_control) ;; Needed for memory measurement infrastructure, see <rdar://problem/48647263>
-        (syscall-number SYS_kdebug_trace_string) ;; Needed for performance sampling, see <rdar://problem/48829655>.
-        (syscall-number SYS_psynch_rw_rdlock) ;; <rdar://problem/49060359>
-        (syscall-number SYS_terminate_with_payload) ;; <rdar://problem/50026580>
-        (syscall-number SYS_quotactl) ;; <rdar://problem/49945031>
-        (syscall-number SYS_stat64_extended) ;; <rdar://problem/50473330>
-        (syscall-number SYS_lstat_extended)
-        (syscall-number SYS_lstat64_extended)
+        (syscall-number SYS_dup)
+        (syscall-number SYS_exit)
+        (syscall-number SYS_faccessat) ;; <rdar://problem/56690456>
+        (syscall-number SYS_fchmod)
+        (syscall-number SYS_fcntl)
+        (syscall-number SYS_fcntl_nocancel)
         (syscall-number SYS_fgetattrlist) ;; <rdar://problem/50931110>
+        (syscall-number SYS_fgetxattr)
+        (syscall-number SYS_fileport_makefd)
+        (syscall-number SYS_fileport_makeport)
+        (syscall-number SYS_flock)
+        (syscall-number SYS_fsetxattr) ;; <rdar://problem/56332491>
+        (syscall-number SYS_fsgetpath)
+        (syscall-number SYS_fstat64)
+        (syscall-number SYS_fstat64_extended) ;; <rdar://problem/61310019>
+        (syscall-number SYS_fstatat64)
+        (syscall-number SYS_fstatfs64)
+        (syscall-number SYS_fsync)
+        (syscall-number SYS_ftruncate)
+        (syscall-number SYS_getattrlist)
+        (syscall-number SYS_getattrlistbulk)
+        (syscall-number SYS_getaudit_addr)
+        (syscall-number SYS_getdirentries64)
+        (syscall-number SYS_getegid)
+        (syscall-number SYS_getentropy)
+        (syscall-number SYS_geteuid)
+        (syscall-number SYS_getfsstat64)
+        (syscall-number SYS_getgid)
+        (syscall-number SYS_gethostuuid)
+        (syscall-number SYS_getpeername)
+        (syscall-number SYS_getpriority) ;; rdar://81727094. Required for CoreAudio AudioOutputUnitStart call. Remove when GPU process is enabled by default.
+        (syscall-number SYS_getrlimit)
+        (syscall-number SYS_getrusage)
+        (syscall-number SYS_getsockopt)
+        (syscall-number SYS_gettid) ;; Needed for base system, see <rdar://problem/48651255>
+        (syscall-number SYS_gettimeofday)
+        (syscall-number SYS_getuid)
+        (syscall-number SYS_getxattr)
+        (syscall-number SYS_guarded_close_np)
+        (syscall-number SYS_guarded_open_np)
+        (syscall-number SYS_guarded_pwrite_np)
+        (syscall-number SYS_guarded_write_np)
+        (syscall-number SYS_ioctl)
+        (syscall-number SYS_issetugid)
+        (syscall-number SYS_kdebug_trace)
+        (syscall-number SYS_kdebug_trace64)
+        (syscall-number SYS_kdebug_trace_string) ;; Needed for performance sampling, see <rdar://problem/48829655>.
+        (syscall-number SYS_kdebug_typefilter)
+        (syscall-number SYS_kevent)
+        (syscall-number SYS_kevent_id)
+        (syscall-number SYS_kevent_qos)
         (syscall-number SYS_kqueue) ;; <rdar://problem/49609201>
         (syscall-number SYS_kqueue_workloop_ctl) ;; <rdar://problem/50999499>
-        (syscall-number SYS_faccessat) ;; <rdar://problem/56690456>
-        (syscall-number SYS_fsetxattr) ;; <rdar://problem/56332491>
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 110000
-        (syscall-number SYS_ulock_wait2) ;; <rdar://problem/58743778>
-#endif
-        (syscall-number SYS_fstat64_extended) ;; <rdar://problem/61310019>
-        (syscall-number SYS_gethostuuid)
+        (syscall-number SYS_listxattr)
+        (syscall-number SYS_lseek)
+        (syscall-number SYS_lstat64)
+        (syscall-number SYS_lstat64_extended)
+        (syscall-number SYS_lstat_extended)
+        (syscall-number SYS_madvise)
+        (syscall-number SYS_memorystatus_control) ;; Needed for memory measurement infrastructure, see <rdar://problem/48647263>
+        (syscall-number SYS_mincore)
+        (syscall-number SYS_mkdir)
+        (syscall-number SYS_mkdirat)
+        (syscall-number SYS_mlock)
+        (syscall-number SYS_mmap)
+        (syscall-number SYS_mprotect)
+        (syscall-number SYS_msync)
+        (syscall-number SYS_munlock)
+        (syscall-number SYS_munmap)
+        (syscall-number SYS_necp_client_action)
+        (syscall-number SYS_necp_open)
+        (syscall-number SYS_open)
+        (syscall-number SYS_open_dprotected_np) ;; <rdar://problem/74473824>
+        (syscall-number SYS_open_nocancel)
+        (syscall-number SYS_openat)
+        (syscall-number SYS_openat_nocancel)
+        (syscall-number SYS_pathconf)
+        (syscall-number SYS_pipe)
+        (syscall-number SYS_pread)
+        (syscall-number SYS_proc_info)
+        (syscall-number SYS_proc_rlimit_control)
+        (syscall-number SYS_process_policy)
+        (syscall-number SYS_psynch_cvbroad)
+        (syscall-number SYS_psynch_cvclrprepost)
+        (syscall-number SYS_psynch_cvsignal)
+        (syscall-number SYS_psynch_cvwait)
+        (syscall-number SYS_psynch_mutexdrop)
+        (syscall-number SYS_psynch_mutexwait)
+        (syscall-number SYS_psynch_rw_rdlock) ;; <rdar://problem/49060359>
+        (syscall-number SYS_psynch_rw_unlock)
+        (syscall-number SYS_psynch_rw_wrlock)
+        (syscall-number SYS_pwrite)
+        (syscall-number SYS_quotactl) ;; <rdar://problem/49945031>
+        (syscall-number SYS_read)
+        (syscall-number SYS_read_nocancel)
+        (syscall-number SYS_readlink)
+        (syscall-number SYS_recvfrom)
+        (syscall-number SYS_recvfrom_nocancel)
+        (syscall-number SYS_rename)
+        (syscall-number SYS_rmdir)
+        (syscall-number SYS_select)
+        (syscall-number SYS_select_nocancel)
+        (syscall-number SYS_sem_post)
+        (syscall-number SYS_sem_wait)
+        (syscall-number SYS_sendmsg_nocancel)
+        (syscall-number SYS_sendto)
+        (syscall-number SYS_sendto_nocancel)
 #if __MAC_OS_X_VERSION_MIN_REQUIRED < 120000
         (syscall-number SYS_setattrlist) ;; rdar://problem/74162777
 #endif
-        (syscall-number SYS_open_dprotected_np) ;; <rdar://problem/74473824>
-        (syscall-number SYS_getpriority) ;; rdar://81727094. Required for CoreAudio AudioOutputUnitStart call. Remove when GPU process is enabled by default.
+        (syscall-number SYS_setpriority)
+        (syscall-number SYS_setrlimit)
+        (syscall-number SYS_setsockopt)
+        (syscall-number SYS_shm_open)
+        (syscall-number SYS_shutdown)
+        (syscall-number SYS_sigaction)
+        (syscall-number SYS_sigaltstack)
+        (syscall-number SYS_sigprocmask)
+        (syscall-number SYS_sigreturn)
+        (syscall-number SYS_socket)
+        (syscall-number SYS_socketpair)
+        (syscall-number SYS_stat64)
+        (syscall-number SYS_stat64_extended) ;; <rdar://problem/50473330>
+        (syscall-number SYS_statfs64)
+        (syscall-number SYS_sysctl)
+        (syscall-number SYS_sysctlbyname)
+        (syscall-number SYS_terminate_with_payload) ;; <rdar://problem/50026580>
+        (syscall-number SYS_thread_selfid)
+        (syscall-number SYS_thread_selfusage)
+        (syscall-number SYS_ulock_wait)
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 110000
+        (syscall-number SYS_ulock_wait2) ;; <rdar://problem/58743778>
+#endif
+        (syscall-number SYS_ulock_wake)
+        (syscall-number SYS_umask)
+        (syscall-number SYS_unlink)
+        (syscall-number SYS_work_interval_ctl)
+        (syscall-number SYS_workq_kernreturn)
+        (syscall-number SYS_write)
+        (syscall-number SYS_write_nocancel)
+        (syscall-number SYS_writev)
     )
 
     (if (equal? (param "CPU") "arm64")
@@ -2281,9 +2319,11 @@
 )
 
 #if __MAC_OS_X_VERSION_MIN_REQUIRED > 110000
-(when (defined? 'darwin-notification-post)
-    (allow darwin-notification-post (with telemetry))
-)
+(deny darwin-notification-post (with telemetry))
+(allow darwin-notification-post
+    (notification-name
+        "com.apple.accessibility.AirPodsSpatialAudioLockToDeviceChanged"
+        "com.apple.webinspectord.availability_check"))
 #endif
 
 #if __MAC_OS_X_VERSION_MIN_REQUIRED > 110000

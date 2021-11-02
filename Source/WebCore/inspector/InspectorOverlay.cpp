@@ -38,7 +38,7 @@
 #include "CSSStyleDeclaration.h"
 #include "DOMCSSNamespace.h"
 #include "DOMTokenList.h"
-#include "Element.h"
+#include "ElementInlines.h"
 #include "FloatLine.h"
 #include "FloatPoint.h"
 #include "FloatRoundedRect.h"
@@ -606,7 +606,7 @@ ErrorStringOr<void> InspectorOverlay::setGridOverlayForNode(Node& node, const In
 
     removeGridOverlayForNode(node);
 
-    m_activeGridOverlays.append({ makeWeakPtr(node), gridOverlayConfig });
+    m_activeGridOverlays.append({ node, gridOverlayConfig });
 
     update();
 

@@ -141,7 +141,7 @@ void WebSWServerConnection::controlClient(ServiceWorkerClientIdentifier clientId
     // As per step 12 of https://w3c.github.io/ServiceWorker/#on-fetch-request-algorithm, the active service worker should be controlling the document.
     // We register a temporary service worker client using the identifier provided by DocumentLoader and notify DocumentLoader about it.
     // If notification is successful, DocumentLoader will unregister the temporary service worker client just after the document is created and registered as a client.
-    sendWithAsyncReply(Messages::WebSWClientConnection::SetDocumentIsControlled { clientIdentifier.contextIdentifier, registration.data() }, [weakThis = makeWeakPtr(this), this, clientIdentifier](bool isSuccess) {
+    sendWithAsyncReply(Messages::WebSWClientConnection::SetDocumentIsControlled { clientIdentifier.contextIdentifier, registration.data() }, [weakThis = WeakPtr { *this }, this, clientIdentifier](bool isSuccess) {
         if (!weakThis || isSuccess)
             return;
         unregisterServiceWorkerClient(clientIdentifier);
@@ -205,7 +205,7 @@ std::unique_ptr<ServiceWorkerFetchTask> WebSWServerConnection::createFetchTask(N
 
 void WebSWServerConnection::startFetch(ServiceWorkerFetchTask& task, SWServerWorker& worker)
 {
-    auto runServerWorkerAndStartFetch = [weakThis = makeWeakPtr(this), this, task = makeWeakPtr(task)](bool success) mutable {
+    auto runServerWorkerAndStartFetch = [weakThis = WeakPtr { *this }, this, task = WeakPtr { task }](bool success) mutable {
         if (!task)
             return;
 
@@ -227,7 +227,7 @@ void WebSWServerConnection::startFetch(ServiceWorkerFetchTask& task, SWServerWor
         }
 
         if (!worker->contextConnection())
-            server().createContextConnection(worker->registrableDomain());
+            server().createContextConnection(worker->registrableDomain(), worker->serviceWorkerPageIdentifier());
 
         auto identifier = task->serviceWorkerIdentifier();
         server().runServiceWorkerIfNecessary(identifier, [weakThis = WTFMove(weakThis), this, task = WTFMove(task)](auto* contextConnection) mutable {
@@ -446,6 +446,35 @@ void WebSWServerConnection::updateThrottleState()
             connection.setThrottleState(newThrottleState);
         }
     }
+}
+
+void WebSWServerConnection::subscribeToPushService(WebCore::ServiceWorkerRegistrationIdentifier registrationIdentifier, Vector<uint8_t>&& applicationServerKey, CompletionHandler<void(Expected<PushSubscriptionData, ExceptionData>&&)>&& completionHandler)
+{
+    UNUSED_PARAM(registrationIdentifier);
+    UNUSED_PARAM(applicationServerKey);
+    
+    completionHandler(makeUnexpected(ExceptionData { NotAllowedError, "Push permission was denied"_s }));
+}
+
+void WebSWServerConnection::unsubscribeFromPushService(WebCore::ServiceWorkerRegistrationIdentifier registrationIdentifier, CompletionHandler<void(Expected<bool, ExceptionData>&&)>&& completionHandler)
+{
+    UNUSED_PARAM(registrationIdentifier);
+    
+    completionHandler(false);
+}
+
+void WebSWServerConnection::getPushSubscription(WebCore::ServiceWorkerRegistrationIdentifier registrationIdentifier, CompletionHandler<void(Expected<std::optional<PushSubscriptionData>, ExceptionData>&&)>&& completionHandler)
+{
+    UNUSED_PARAM(registrationIdentifier);
+    
+    completionHandler(std::optional<PushSubscriptionData>(std::nullopt));
+}
+
+void WebSWServerConnection::getPushPermissionState(WebCore::ServiceWorkerRegistrationIdentifier registrationIdentifier, CompletionHandler<void(Expected<uint8_t, ExceptionData>&&)>&& completionHandler)
+{
+    UNUSED_PARAM(registrationIdentifier);
+    
+    completionHandler(static_cast<uint8_t>(PushPermissionState::Denied));
 }
 
 void WebSWServerConnection::contextConnectionCreated(SWServerToContextConnection& contextConnection)

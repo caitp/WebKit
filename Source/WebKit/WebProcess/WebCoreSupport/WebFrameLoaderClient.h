@@ -164,6 +164,10 @@ private:
     void didRunInsecureContent(WebCore::SecurityOrigin&, const URL&) final;
     void didDetectXSS(const URL&, bool didBlockEntirePage) final;
 
+#if ENABLE(SERVICE_WORKER)
+    void didFinishServiceWorkerPageRegistration(bool success) final;
+#endif
+
     WebCore::ResourceError cancelledError(const WebCore::ResourceRequest&) const final;
     WebCore::ResourceError blockedError(const WebCore::ResourceRequest&) const final;
     WebCore::ResourceError blockedByContentBlockerError(const WebCore::ResourceRequest&) const final;
@@ -229,6 +233,7 @@ private:
     void dispatchDidClearWindowObjectInWorld(WebCore::DOMWrapperWorld&) final;
     
     void dispatchGlobalObjectAvailable(WebCore::DOMWrapperWorld&) final;
+    void dispatchServiceWorkerGlobalObjectAvailable(WebCore::DOMWrapperWorld&) final;
     void dispatchWillDisconnectDOMWindowExtensionFromGlobalObject(WebCore::DOMWindowExtension*) final;
     void dispatchDidReconnectDOMWindowExtensionToGlobalObject(WebCore::DOMWindowExtension*) final;
     void dispatchWillDestroyGlobalObjectForDOMWindowExtension(WebCore::DOMWindowExtension*) final;

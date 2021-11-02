@@ -61,6 +61,8 @@ public:
 
     double& operator[](size_t i) { return m_data[i]; }
     const double& operator[](size_t i) const { return m_data[i]; }
+    double& operator[](TemporalUnit u) { return m_data[static_cast<uint8_t>(u)]; }
+    const double& operator[](TemporalUnit u) const { return m_data[static_cast<uint8_t>(u)]; }
     const_iterator begin() const { return m_data.begin(); }
     const_iterator end() const { return m_data.end(); }
     void clear() { m_data.fill(0); }
@@ -144,14 +146,14 @@ private:
     uint8_t m_day { 1 };
 };
 
-using TimeZone = Variant<TimeZoneID, int64_t>;
+using TimeZone = std::variant<TimeZoneID, int64_t>;
 
 // https://tc39.es/proposal-temporal/#sec-temporal-parsetemporaltimezonestring
 // Record { [[Z]], [[OffsetString]], [[Name]] }
 struct TimeZoneRecord {
     bool m_z { false };
     std::optional<int64_t> m_offset;
-    Variant<Vector<LChar>, int64_t> m_nameOrOffset;
+    std::variant<Vector<LChar>, int64_t> m_nameOrOffset;
 };
 
 // https://tc39.es/proposal-temporal/#sup-isvalidtimezonename

@@ -32,8 +32,8 @@
 
 #include "File.h"
 #include "TextEncoding.h"
+#include <variant>
 #include <wtf/RefCounted.h>
-#include <wtf/Variant.h>
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
@@ -43,7 +43,7 @@ class HTMLFormElement;
 
 class DOMFormData : public RefCounted<DOMFormData> {
 public:
-    using FormDataEntryValue = Variant<RefPtr<File>, String>;
+    using FormDataEntryValue = std::variant<RefPtr<File>, String>;
 
     struct Item {
         String name;

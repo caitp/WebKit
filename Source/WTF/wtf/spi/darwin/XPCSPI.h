@@ -68,6 +68,12 @@ enum {
 typedef long xpc_activity_state_t;
 typedef const struct _xpc_type_s* xpc_type_t;
 extern "C" const xpc_object_t XPC_ACTIVITY_CHECK_IN;
+extern "C" const char * const XPC_ACTIVITY_INTERVAL;
+extern "C" const char * const XPC_ACTIVITY_GRACE_PERIOD;
+extern "C" const char * const XPC_ACTIVITY_PRIORITY;
+extern "C" const char * const XPC_ACTIVITY_PRIORITY_MAINTENANCE;
+extern "C" const char * const XPC_ACTIVITY_ALLOW_BATTERY;
+extern "C" const char * const XPC_ACTIVITY_REPEATING;
 
 #if PLATFORM(IOS_FAMILY) && __has_attribute(noescape)
 #define XPC_NOESCAPE __attribute__((__noescape__))
@@ -132,6 +138,10 @@ extern "C" void xpc_activity_register(const char *identifier, xpc_object_t crite
 extern "C" const char * const XPC_ACTIVITY_RANDOM_INITIAL_DELAY;
 extern "C" const char * const XPC_ACTIVITY_REQUIRE_NETWORK_CONNECTIVITY;
 
+#if HAVE(XPC_CONNECTION_COPY_INVALIDATION_REASON)
+extern "C" char * xpc_connection_copy_invalidation_reason(xpc_connection_t connection);
+#endif
+
 #if OS_OBJECT_USE_OBJC
 OS_OBJECT_DECL(os_transaction);
 #else
@@ -194,6 +204,8 @@ void xpc_dictionary_set_bool(xpc_object_t, const char* key, bool value);
 void xpc_dictionary_set_fd(xpc_object_t, const char* key, int fd);
 void xpc_dictionary_set_string(xpc_object_t, const char* key, const char* string);
 void xpc_dictionary_set_uint64(xpc_object_t, const char* key, uint64_t value);
+void xpc_dictionary_set_data(xpc_object_t, const char *key, const void *bytes,
+    size_t length);
 void xpc_dictionary_set_value(xpc_object_t, const char* key, xpc_object_t value);
 xpc_type_t xpc_get_type(xpc_object_t);
 const char* xpc_type_get_name(xpc_type_t);

@@ -40,14 +40,21 @@ WI.WebInspectorExtensionTabContentView = class WebInspectorExtensionTabContentVi
         this._tabInfo = tabInfo;
         this._sourceURL = sourceURL;
 
-        // FIXME: the <iframe>'s document is implicitly reloaded when this
-        // content view's element is detached and later re-attached to the DOM.
-        // This is a bug and will be addressed in <https://webkit.org/b/230758>.
         this._iframeElement = this.element.appendChild(document.createElement("iframe"));
         this._iframeElement.addEventListener("load", this._extensionFrameDidLoad.bind(this));
         this._iframeElement.src = this._sourceURL;
 
         this._frameContentDidLoad = false;
+    }
+
+    // Static
+
+    static shouldSaveTab() { return false; }
+    static shouldNotRemoveFromDOMWhenHidden() { return true; }
+
+    static isTabAllowed()
+    {
+        return InspectorFrontendHost.supportsWebExtensions;
     }
 
     // Public
@@ -80,12 +87,22 @@ WI.WebInspectorExtensionTabContentView = class WebInspectorExtensionTabContentVi
         super.detached();
     }
 
+    dispose()
+    {
+        this.element?.remove();
+    }
+
     tabInfo()
     {
         return this._tabInfo;
     }
 
     static shouldSaveTab() { return false; }
+
+    static shouldNotRemoveFromDOMWhenHidden() {
+        // This is necessary to avoid the <iframe> content from being reloaded when the extension tab is hidden.
+        return true;
+    }
 
     // Private
 

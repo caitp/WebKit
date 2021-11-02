@@ -4980,7 +4980,7 @@ template <class TreeBuilder> TreeArguments Parser<LexerType>::parseArguments(Tre
     consumeOrFailWithFlags(OPENPAREN, TreeBuilder::DontBuildStrings, "Expected opening '(' at start of argument list");
     JSTokenLocation location(tokenLocation());
     if (match(CLOSEPAREN)) {
-        next(TreeBuilder::DontBuildStrings);
+        next();
         return context.createArguments();
     }
     auto argumentsStart = m_token.m_startPosition;
@@ -5096,7 +5096,7 @@ template <class TreeBuilder> TreeExpression Parser<LexerType>::parseMemberExpres
             newCount--;
             next();
         } else {
-            failIfTrue(match(IDENT), "\"new.\" can only followed with target");
+            failIfTrue(match(IDENT), "\"new.\" can only be followed with target");
             failDueToUnexpectedToken();
         }
     }
@@ -5131,7 +5131,7 @@ template <class TreeBuilder> TreeExpression Parser<LexerType>::parseMemberExpres
                 base = context.createImportMetaExpr(location, createResolveAndUseVariable(context, &m_vm.propertyNames->metaPrivateName, false, expressionStart, location));
                 next();
             } else {
-                failIfTrue(match(IDENT), "\"import.\" can only followed with meta");
+                failIfTrue(match(IDENT), "\"import.\" can only be followed with meta");
                 failDueToUnexpectedToken();
             }
         } else {

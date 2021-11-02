@@ -66,9 +66,6 @@ void ItemHandle::apply(GraphicsContext& context)
     case ItemType::SetCTM:
         get<SetCTM>().apply(context);
         return;
-    case ItemType::SetInlineFillGradient:
-        get<SetInlineFillGradient>().apply(context);
-        return;
     case ItemType::SetInlineFillColor:
         get<SetInlineFillColor>().apply(context);
         return;
@@ -424,9 +421,6 @@ void ItemHandle::destroy()
     case ItemType::SetInlineFillColor:
         static_assert(std::is_trivially_destructible<SetInlineFillColor>::value);
         return;
-    case ItemType::SetInlineFillGradient:
-        static_assert(std::is_trivially_destructible<SetInlineFillGradient>::value);
-        return;
     case ItemType::SetInlineStrokeColor:
         static_assert(std::is_trivially_destructible<SetInlineStrokeColor>::value);
         return;
@@ -616,8 +610,6 @@ bool ItemHandle::safeCopy(ItemType itemType, ItemHandle destination) const
         return copyInto<SetCTM>(itemOffset, *this);
     case ItemType::SetInlineFillColor:
         return copyInto<SetInlineFillColor>(itemOffset, *this);
-    case ItemType::SetInlineFillGradient:
-        return copyInto<SetInlineFillGradient>(itemOffset, *this);
     case ItemType::SetInlineStrokeColor:
         return copyInto<SetInlineStrokeColor>(itemOffset, *this);
     case ItemType::SetLineCap:
@@ -650,7 +642,7 @@ bool ItemHandle::safeCopy(ItemType itemType, ItemHandle destination) const
 
 bool safeCopy(ItemHandle destination, const DisplayListItem& source)
 {
-    return WTF::visit([&](const auto& source) {
+    return std::visit([&](const auto& source) {
         using DisplayListItemType = typename WTF::RemoveCVAndReference<decltype(source)>::type;
         constexpr auto itemType = DisplayListItemType::itemType;
         destination.data[0] = static_cast<uint8_t>(itemType);

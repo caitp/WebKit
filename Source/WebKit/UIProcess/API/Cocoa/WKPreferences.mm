@@ -27,7 +27,7 @@
 #import "WKPreferencesInternal.h"
 
 #import "APIArray.h"
-#import "PluginProcessManager.h"
+#import "Logging.h"
 #import "WKNSArray.h"
 #import "WebPreferences.h"
 #import "_WKExperimentalFeatureInternal.h"
@@ -151,6 +151,16 @@ ALLOW_DEPRECATED_DECLARATIONS_END
 - (void)setTextInteractionEnabled:(BOOL)textInteractionEnabled
 {
     _preferences->setTextInteractionEnabled(textInteractionEnabled);
+}
+
+- (BOOL)isSiteSpecificQuirksModeEnabled
+{
+    return _preferences->needsSiteSpecificQuirks();
+}
+
+- (void)setSiteSpecificQuirksModeEnabled:(BOOL)enabled
+{
+    _preferences->setNeedsSiteSpecificQuirks(enabled);
 }
 
 #pragma mark OS X-specific methods
@@ -1096,9 +1106,6 @@ static WebCore::EditableLinkBehavior toEditableLinkBehavior(_WKEditableLinkBehav
 
 - (void)_setExperimentalPlugInSandboxProfilesEnabled:(BOOL)enabled
 {
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    WebKit::PluginProcessManager::singleton().setExperimentalPlugInSandboxProfilesEnabled(enabled);
-#endif
     _preferences->setExperimentalPlugInSandboxProfilesEnabled(enabled);
 }
 
@@ -1515,6 +1522,36 @@ static WebCore::EditableLinkBehavior toEditableLinkBehavior(_WKEditableLinkBehav
 - (void)_setRequiresPageVisibilityToPlayAudio:(BOOL)requires
 {
     _preferences->setRequiresPageVisibilityToPlayAudio(requires);
+}
+
+- (BOOL)_fileSystemAccessEnabled
+{
+    return _preferences->fileSystemAccessEnabled();
+}
+
+- (void)_setFileSystemAccessEnabled:(BOOL)fileSystemAccessEnabled
+{
+    _preferences->setFileSystemAccessEnabled(fileSystemAccessEnabled);
+}
+
+- (BOOL)_storageAPIEnabled
+{
+    return _preferences->storageAPIEnabled();
+}
+
+- (void)_setStorageAPIEnabled:(BOOL)storageAPIEnabled
+{
+    _preferences->setStorageAPIEnabled(storageAPIEnabled);
+}
+
+- (BOOL)_accessHandleEnabled
+{
+    return _preferences->accessHandleEnabled();
+}
+
+- (void)_setAccessHandleEnabled:(BOOL)accessHandleEnabled
+{
+    _preferences->setAccessHandleEnabled(accessHandleEnabled);
 }
 
 @end

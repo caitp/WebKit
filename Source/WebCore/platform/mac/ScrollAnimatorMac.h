@@ -49,17 +49,15 @@ private:
     bool platformAllowsScrollAnimation() const;
 
     void handleWheelEventPhase(PlatformWheelEventPhase) final;
-    
-    bool isUserScrollInProgress() const final;
+
     bool isRubberBandInProgress() const final;
-    bool isScrollSnapInProgress() const final;
 
     bool processWheelEventForScrollSnap(const PlatformWheelEvent&) final;
 
     // ScrollingEffectsControllerClient.
     bool allowsHorizontalStretching(const PlatformWheelEvent&) const final;
     bool allowsVerticalStretching(const PlatformWheelEvent&) const final;
-    bool shouldRubberBandInDirection(ScrollDirection) const final;
+    bool shouldRubberBandOnSide(BoxSide) const final;
 };
 
 } // namespace WebCore

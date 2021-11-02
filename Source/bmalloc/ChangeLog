@@ -1,3 +1,256 @@
+2021-10-26  David Kilzer  <ddkilzer@apple.com>
+
+        [libpas] Add printf format attributes
+        <https://webkit.org/b/232291>
+        <rdar://problem/84643135>
+
+        Reviewed by Yusuke Suzuki.
+
+        Define PAS_FORMAT_PRINTF() macro in pas_utils.h, apply it to
+        functions that take format strings, then fix all the issues
+        found during compilation.
+
+        These changes also let us remove the clang pragma macros that
+        ignored -Wformat-nonliteral warnings in pas_log.c and
+        pas_string_stream.c.
+
+        * libpas/src/libpas/pas_all_heaps.c:
+        (verify_in_steady_state_segregated_directory_callback):
+        * libpas/src/libpas/pas_bitfit_directory.c:
+        (pas_bitfit_directory_take_last_empty):
+        * libpas/src/libpas/pas_bitfit_heap.c:
+        (pas_bitfit_heap_select_variant):
+        * libpas/src/libpas/pas_bitfit_page_inlines.h:
+        (pas_bitfit_page_allocate):
+        (pas_bitfit_page_deallocate_with_page_impl):
+        * libpas/src/libpas/pas_commit_span.c:
+        (pas_commit_span_construct):
+        (pas_commit_span_add_unchanged):
+        * libpas/src/libpas/pas_enumerate_large_heaps.c:
+        (record_span):
+        (pas_enumerate_large_heaps):
+        * libpas/src/libpas/pas_fd_stream.c:
+        (fd_stream_vprintf):
+        * libpas/src/libpas/pas_fd_stream.h:
+        * libpas/src/libpas/pas_hashtable.h:
+        * libpas/src/libpas/pas_large_map.c:
+        (pas_large_map_add):
+        (pas_large_map_take):
+        * libpas/src/libpas/pas_large_sharing_pool.c:
+        (validate_min_heap):
+        * libpas/src/libpas/pas_local_allocator_inlines.h:
+        (pas_local_allocator_scan_bits_to_set_up_free_bits):
+        (pas_local_allocator_return_memory_to_page):
+        (pas_local_allocator_try_allocate_inline_cases):
+        * libpas/src/libpas/pas_log.c:
+        * libpas/src/libpas/pas_log.h:
+        * libpas/src/libpas/pas_page_sharing_pool.c:
+        (pas_page_sharing_pool_add_at_index):
+        * libpas/src/libpas/pas_segregated_directory_inlines.h:
+        (pas_segregated_directory_iterate_iterate_callback):
+        (pas_segregated_directory_iterate_forward):
+        * libpas/src/libpas/pas_segregated_heap.c:
+        (pas_segregated_heap_ensure_size_directory_for_count):
+        * libpas/src/libpas/pas_segregated_shared_page_directory.c:
+        (pas_segregated_shared_page_directory_find_first_eligible):
+        * libpas/src/libpas/pas_segregated_shared_view.c:
+        (compute_summary):
+        * libpas/src/libpas/pas_segregated_view.c:
+        (for_each_live_object):
+        (should_be_eligible):
+        * libpas/src/libpas/pas_status_reporter.c:
+        (pas_status_reporter_dump_large_map):
+        * libpas/src/libpas/pas_stream.h:
+        * libpas/src/libpas/pas_string_stream.c:
+        (string_stream_vprintf):
+        * libpas/src/libpas/pas_string_stream.h:
+        * libpas/src/libpas/pas_thread_local_cache.c:
+        (suspend):
+        * libpas/src/libpas/pas_tiny_large_map_entry.h:
+        (pas_tiny_large_map_entry_can_create):
+        * libpas/src/libpas/pas_try_allocate_common.h:
+        (pas_try_allocate_common_impl_fast):
+        (pas_try_allocate_common_impl_slow):
+        * libpas/src/libpas/pas_try_allocate_intrinsic.h:
+        * libpas/src/libpas/pas_utils.h:
+
+2021-10-20  Michael Catanzaro  <mcatanzaro@gnome.org>
+
+        Do not use strerror()
+        https://bugs.webkit.org/show_bug.cgi?id=231913
+
+        Reviewed by Chris Dumez.
+
+        * libpas/src/libpas/pas_page_malloc.c:
+        (pas_page_malloc_commit):
+
+2021-10-20  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [WPE] Reenable -fvisibility=hidden and -fvisibility-inlines-hidden
+        https://bugs.webkit.org/show_bug.cgi?id=222860
+
+        Reviewed by Don Olmstead.
+
+        * bmalloc/AvailableMemory.h: Export memoryStatus.
+
+2021-10-16  Commit Queue  <commit-queue@webkit.org>
+
+        Unreviewed, reverting r284305.
+        https://bugs.webkit.org/show_bug.cgi?id=231859
+
+        webaudio-tests
+
+        Reverted changeset:
+
+        "[libpas] Enable libpas on macOS"
+        https://bugs.webkit.org/show_bug.cgi?id=231815
+        https://commits.webkit.org/r284305
+
+2021-10-15  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [libpas] Enable libpas on macOS
+        https://bugs.webkit.org/show_bug.cgi?id=231815
+
+        Reviewed by Saam Barati.
+
+        Enabling libpas on x64 macOS. Previously, we enabled it only on AppleSilicon.
+        This helps stressing libpas on fuzzers more. And it offers large performance
+        improvement.
+
+        1. Speedometer2 is 2.1% improved on low-end macOS (MBA8,2) and 1.7% improved on high-end macOS (MBP14,1).
+        2. JetStream2 is neutral on both.
+
+        * bmalloc/BPlatform.h:
+
+2021-10-14  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [libpas] Use `enum { ... }` instead of `static const size_t` for constant values used for array size
+        https://bugs.webkit.org/show_bug.cgi?id=231778
+
+        Reviewed by Chris Dumez.
+
+        Since libpas is written in C (not C++), we cannot use `static const size_t` value for array's size.
+        In C, it is not usable as a constant expression for array size. Use `enum` hack instead.
+
+        * libpas/src/libpas/pas_generic_large_free_heap.h:
+        (pas_generic_large_free_heap_try_allocate):
+        * libpas/src/libpas/pas_large_sharing_pool.c:
+        (pas_large_sharing_pool_allocate_and_commit):
+        * libpas/src/libpas/pas_segregated_view_allocator_inlines.h:
+        (pas_segregated_view_will_start_allocating):
+        * libpas/src/libpas/pas_simple_large_free_heap.c:
+        (merge):
+
+2021-10-14  Myles C. Maxfield  <mmaxfield@apple.com>
+
+        All the SDKVariant.xcconfig files should match
+        https://bugs.webkit.org/show_bug.cgi?id=231663
+
+        Reviewed by Youenn Fablet.
+
+        * Configurations/SDKVariant.xcconfig:
+
+2021-09-30  Filip Pizlo  <fpizlo@apple.com>
+
+        [libpas] Change the names of libpas heap runtime configs to something simpler (intrinsic, primitive, typed, and flex) and add comments describing what they are (update to 32abc1fd5489e01aa1c504ae4654967047d3f072)
+        https://bugs.webkit.org/show_bug.cgi?id=231040
+
+        Reviewed by Saam Barati.
+
+        At some point a long time ago, libpas had sensible names for heap runtime configs: primitive
+        and typed. Then I added the "objc" category, not realizing that I was really adding support for
+        flexible array members. And then I added "intrinsic_primitive", but wow, what a mouthful.
+
+        This changes the heap names to:
+
+        intrinsic: singleton heaps for primitive data, like the normal fastMalloc heap
+        primitive: isoheaps for primitive data
+        typed: isoheaps for fixed-size types
+        flex: isoheaps for types with flexible array members
+
+        Also adds comments explaining the exact behaviors of these heaps.
+
+        Also exposes isoheaped array allocation through the bmalloc_heap API. That's not yet exposed
+        via the IsoHeap API, but the idea is that it will be -- just need to figure out a clean way to
+        do it.
+
+        * bmalloc.xcodeproj/project.pbxproj:
+        * bmalloc/bmalloc.cpp:
+        (bmalloc::api::enableMiniMode):
+        * libpas/common.sh:
+        * libpas/src/chaos/Chaos.cpp:
+        (main):
+        * libpas/src/libpas/bmalloc_heap.c:
+        (bmalloc_try_iso_allocate_array):
+        (bmalloc_iso_allocate_array):
+        (bmalloc_try_iso_allocate_array_with_alignment):
+        (bmalloc_iso_allocate_array_with_alignment):
+        * libpas/src/libpas/bmalloc_heap.h:
+        * libpas/src/libpas/bmalloc_heap_config.c:
+        * libpas/src/libpas/bmalloc_heap_inlines.h:
+        (bmalloc_try_reallocate_inline):
+        (bmalloc_reallocate_inline):
+        (bmalloc_try_iso_allocate_array_inline):
+        (bmalloc_try_iso_allocate_array_with_alignment_inline):
+        (bmalloc_iso_allocate_array_inline):
+        (bmalloc_iso_allocate_array_with_alignment_inline):
+        * libpas/src/libpas/hotbit_heap.c:
+        * libpas/src/libpas/hotbit_heap_config.c:
+        * libpas/src/libpas/hotbit_heap_inlines.h:
+        (hotbit_try_reallocate_inline):
+        * libpas/src/libpas/iso_heap.c:
+        (iso_try_allocate_for_flex):
+        (iso_try_allocate_for_objc): Deleted.
+        * libpas/src/libpas/iso_heap.h:
+        * libpas/src/libpas/iso_heap_config.c:
+        * libpas/src/libpas/iso_heap_inlines.h:
+        (iso_try_reallocate_common_primitive_inline):
+        (iso_reallocate_common_primitive_inline):
+        (iso_try_allocate_for_flex_inline):
+        (iso_try_allocate_for_objc_inline): Deleted.
+        * libpas/src/libpas/iso_heap_innards.h:
+        * libpas/src/libpas/iso_test_heap.c:
+        * libpas/src/libpas/iso_test_heap_config.c:
+        * libpas/src/libpas/jit_heap.c:
+        * libpas/src/libpas/minalign32_heap.c:
+        * libpas/src/libpas/minalign32_heap_config.c:
+        * libpas/src/libpas/pagesize64k_heap.c:
+        * libpas/src/libpas/pagesize64k_heap_config.c:
+        * libpas/src/libpas/pas_heap_config_utils.h:
+        * libpas/src/libpas/pas_heap_config_utils_inlines.h:
+        * libpas/src/libpas/pas_internal_config.h:
+        * libpas/src/libpas/pas_large_heap.c:
+        (pas_large_heap_construct):
+        * libpas/src/libpas/pas_try_allocate.h:
+        * libpas/src/libpas/pas_try_allocate_array.h:
+        * libpas/src/libpas/pas_try_allocate_intrinsic.h: Added.
+        (pas_try_allocate_intrinsic_impl_medium_slow_case):
+        (pas_try_allocate_intrinsic_impl_inline_only):
+        * libpas/src/libpas/pas_try_allocate_intrinsic_primitive.h: Removed.
+        * libpas/src/libpas/pas_try_allocate_primitive.h:
+        * libpas/src/libpas/pas_try_reallocate.h:
+        (pas_try_reallocate_intrinsic_allocate_callback):
+        (pas_try_reallocate_intrinsic):
+        (pas_try_reallocate_intrinsic_primitive_allocate_callback): Deleted.
+        (pas_try_reallocate_intrinsic_primitive): Deleted.
+        * libpas/src/libpas/thingy_heap.c:
+        (thingy_try_reallocate_primitive):
+        * libpas/src/libpas/thingy_heap_config.c:
+        * libpas/src/test/IsoHeapChaosTests.cpp:
+        (addIsoHeapChaosTests):
+        * libpas/src/test/TestHarness.cpp:
+
+2021-09-29  Basuke Suzuki  <basuke.suzuki@sony.com>
+
+        [bmalloc] ChunkHash is not used since r261667
+        https://bugs.webkit.org/show_bug.cgi?id=230762
+
+        Reviewed by Alex Christensen.
+
+        The structure is the leftover when ObjectTypeTable was introduced at r261667.
+
+        * bmalloc/Chunk.h:
+
 2021-09-29  Eric Hutchison  <ehutchison@apple.com>
 
         Unreviewed, reverting r282850.

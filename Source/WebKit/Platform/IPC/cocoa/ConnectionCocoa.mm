@@ -237,14 +237,11 @@ bool Connection::open()
         mach_port_mod_refs(mach_task_self(), receivePort, MACH_PORT_RIGHT_RECEIVE, -1);
     });
 
-    ref();
-    dispatch_async(m_connectionQueue->dispatchQueue(), ^{
+    m_connectionQueue->dispatch([strongRef = Ref { *this }, this] {
         dispatch_resume(m_receiveSource.get());
 
         if (m_sendSource)
             dispatch_resume(m_sendSource.get());
-
-        deref();
     });
 
     return true;
@@ -545,7 +542,7 @@ void Connection::receiveSourceEventHandler()
         return;
 
 #if PLATFORM(MAC)
-    decoder->setImportanceAssertion(makeUnique<ImportanceAssertion>(header));
+    decoder->setImportanceAssertion(ImportanceAssertion { header });
 #endif
 
     if (decoder->messageName() == MessageName::InitializeConnection) {

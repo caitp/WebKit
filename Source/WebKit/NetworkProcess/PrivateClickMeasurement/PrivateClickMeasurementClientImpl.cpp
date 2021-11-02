@@ -29,12 +29,10 @@
 #include "NetworkProcess.h"
 #include "NetworkSession.h"
 
-namespace WebKit {
-
-namespace PCM {
+namespace WebKit::PCM {
 
 ClientImpl::ClientImpl(NetworkSession& session, NetworkProcess& networkProcess)
-    : m_networkSession(makeWeakPtr(session))
+    : m_networkSession(session)
     , m_networkProcess(networkProcess) { }
 
 void ClientImpl::broadcastConsoleMessage(JSC::MessageLevel messageLevel, const String& message)
@@ -55,10 +53,8 @@ bool ClientImpl::featureEnabled() const
 bool ClientImpl::debugModeEnabled() const
 {
     return m_networkSession
-        && m_networkProcess->privateClickMeasurementDebugModeEnabled()
+        && m_networkSession->privateClickMeasurementDebugModeEnabled()
         && !m_networkSession->sessionID().isEphemeral();
 }
 
-} // namespace PCM
-
-} // namespace WebKit
+} // namespace WebKit::PCM

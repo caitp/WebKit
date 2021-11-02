@@ -1134,15 +1134,6 @@ void LegacyInlineFlowBox::paint(PaintInfo& paintInfo, const LayoutPoint& paintOf
     }
 }
 
-bool LegacyInlineFlowBox::boxShadowCanBeAppliedToBackground(const FillLayer& lastBackgroundLayer) const
-{
-    // The checks here match how paintFillLayer() decides whether to clip (if it does, the shadow
-    // would be clipped out, so it has to be drawn separately).
-    StyleImage* image = lastBackgroundLayer.image();
-    bool hasFillImage = image && image->canRender(&renderer(), renderer().style().effectiveZoom());
-    return (!hasFillImage && !renderer().style().hasBorderRadius()) || (!prevLineBox() && !nextLineBox()) || !parent();
-}
-
 LegacyInlineBox* LegacyInlineFlowBox::firstLeafDescendant() const
 {
     LegacyInlineBox* leaf = nullptr;
@@ -1302,59 +1293,6 @@ LayoutUnit LegacyInlineFlowBox::computeUnderAnnotationAdjustment(LayoutUnit allo
         }
     }
     return result;
-}
-
-void LegacyInlineFlowBox::collectLeafBoxesInLogicalOrder(Vector<LegacyInlineBox*>& leafBoxesInLogicalOrder, CustomInlineBoxRangeReverse customReverseImplementation, void* userData) const
-{
-    LegacyInlineBox* leaf = firstLeafDescendant();
-
-    // FIXME: The reordering code is a copy of parts from BidiResolver::createBidiRunsForLine, operating directly on InlineBoxes, instead of BidiRuns.
-    // Investigate on how this code could possibly be shared.
-    unsigned char minLevel = 128;
-    unsigned char maxLevel = 0;
-
-    // First find highest and lowest levels, and initialize leafBoxesInLogicalOrder with the leaf boxes in visual order.
-    for (; leaf; leaf = leaf->nextLeafOnLine()) {
-        minLevel = std::min(minLevel, leaf->bidiLevel());
-        maxLevel = std::max(maxLevel, leaf->bidiLevel());
-        leafBoxesInLogicalOrder.append(leaf);
-    }
-
-    if (renderer().style().rtlOrdering() == Order::Visual)
-        return;
-
-    // Reverse of reordering of the line (L2 according to Bidi spec):
-    // L2. From the highest level found in the text to the lowest odd level on each line,
-    // reverse any contiguous sequence of characters that are at that level or higher.
-
-    // Reversing the reordering of the line is only done up to the lowest odd level.
-    if (!(minLevel % 2))
-        ++minLevel;
-
-    Vector<LegacyInlineBox*>::iterator end = leafBoxesInLogicalOrder.end();
-    while (minLevel <= maxLevel) {
-        Vector<LegacyInlineBox*>::iterator it = leafBoxesInLogicalOrder.begin();
-        while (it != end) {
-            while (it != end) {
-                if ((*it)->bidiLevel() >= minLevel)
-                    break;
-                ++it;
-            }
-            Vector<LegacyInlineBox*>::iterator first = it;
-            while (it != end) {
-                if ((*it)->bidiLevel() < minLevel)
-                    break;
-                ++it;
-            }
-            Vector<LegacyInlineBox*>::iterator last = it;
-            if (customReverseImplementation) {
-                ASSERT(userData);
-                (*customReverseImplementation)(userData, first, last);
-            } else
-                std::reverse(first, last);
-        }                
-        ++minLevel;
-    }
 }
 
 void LegacyInlineFlowBox::computeReplacedAndTextLineTopAndBottom(LayoutUnit& lineTop, LayoutUnit& lineBottom) const

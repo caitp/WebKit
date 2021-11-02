@@ -29,17 +29,14 @@
 #include <wtf/FastMalloc.h>
 #include <wtf/WeakPtr.h>
 
-namespace WebKit {
-
-namespace PCM {
+namespace WebKit::PCM {
 
 class DaemonClient : public Client, public CanMakeWeakPtr<DaemonClient> {
     WTF_MAKE_FAST_ALLOCATED;
     void broadcastConsoleMessage(JSC::MessageLevel, const String&) final;
     bool featureEnabled() const final;
     bool debugModeEnabled() const final;
+    bool runningInDaemon() const final { return true; }
 };
 
-} // namespace PCM
-
-} // namespace WebKit
+} // namespace WebKit::PCM

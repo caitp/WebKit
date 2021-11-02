@@ -51,7 +51,12 @@ public:
     void nodeWillBeDestroyed();
 
     bool handleWheelEvent(const PlatformWheelEvent&);
-    
+
+    bool startAnimatedScrollToPosition(FloatPoint) final;
+    void stopAnimatedScroll() final;
+
+    void serviceScrollAnimation() final;
+
     void willDoProgrammaticScroll(const FloatPoint&);
     void currentScrollPositionChanged();
 
@@ -68,8 +73,6 @@ public:
     void removeWheelEventTestCompletionDeferralForReason(WheelEventTestMonitor::ScrollableAreaIdentifier, WheelEventTestMonitor::DeferReason) const override;
 
 private:
-    bool isPinnedForScrollDeltaOnAxis(float scrollDelta, ScrollEventAxis, float scrollLimit = 0) const;
-
     // ScrollingEffectsControllerClient.
     std::unique_ptr<ScrollingEffectsControllerTimer> createTimer(Function<void()>&&) final;
     void startAnimationCallback(ScrollingEffectsController&) final;
@@ -78,27 +81,28 @@ private:
     bool allowsHorizontalStretching(const PlatformWheelEvent&) const final;
     bool allowsVerticalStretching(const PlatformWheelEvent&) const final;
     IntSize stretchAmount() const final;
-    bool isPinnedForScrollDelta(const FloatSize&) const final;
+    bool isPinnedOnSide(BoxSide) const final;
+
     RectEdges<bool> edgePinnedState() const final;
     bool allowsHorizontalScrolling() const final;
     bool allowsVerticalScrolling() const final;
-    void setScrollBehaviorStatus(ScrollBehaviorStatus status) final { m_scrollBehaviorStatus = status; }
-    ScrollBehaviorStatus scrollBehaviorStatus() const final { return m_scrollBehaviorStatus; }
 
-    bool shouldRubberBandInDirection(ScrollDirection) const final;
-    void immediateScrollBy(const FloatSize&) final;
-    void immediateScrollByWithoutContentEdgeConstraints(const FloatSize&) final;
-    void didStopRubberbandSnapAnimation() final;
+    bool shouldRubberBandOnSide(BoxSide) const final;
+    void immediateScrollBy(const FloatSize&, ScrollClamping = ScrollClamping::Clamped) final;
+    void didStopRubberBandAnimation() final;
     void rubberBandingStateChanged(bool) final;
     void adjustScrollPositionToBoundsIfNecessary() final;
 
     bool scrollPositionIsNotRubberbandingEdge(const FloatPoint&) const;
-    void scrollControllerAnimationTimerFired();
 
     FloatPoint scrollOffset() const final;
     float pageScaleFactor() const final;
+
+    void didStopAnimatedScroll() final;
+
     void willStartScrollSnapAnimation() final;
     void didStopScrollSnapAnimation() final;
+
     ScrollExtents scrollExtents() const final;
 
     void releaseReferencesToScrollerImpsOnTheMainThread();
@@ -108,9 +112,6 @@ private:
     RetainPtr<NSScrollerImp> m_verticalScrollerImp;
     RetainPtr<NSScrollerImp> m_horizontalScrollerImp;
 
-    std::unique_ptr<RunLoop::Timer<ScrollingTreeScrollingNodeDelegateMac>> m_scrollControllerAnimationTimer;
-
-    ScrollBehaviorStatus m_scrollBehaviorStatus { ScrollBehaviorStatus::NotInAnimation };
     bool m_inMomentumPhase { false };
 };
 

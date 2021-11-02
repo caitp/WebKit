@@ -30,7 +30,6 @@
 
 #include "ContentType.h"
 #include "DeprecatedGlobalSettings.h"
-#include "Document.h"
 #include "GraphicsContext.h"
 #include "IntRect.h"
 #include "LegacyCDMSession.h"
@@ -41,6 +40,8 @@
 #include "PlatformScreen.h"
 #include "PlatformTextTrack.h"
 #include "PlatformTimeRanges.h"
+#include "SecurityOrigin.h"
+#include <JavaScriptCore/ArrayBuffer.h>
 #include <wtf/Lock.h>
 #include <wtf/NeverDestroyed.h>
 #include <wtf/text/CString.h>
@@ -156,6 +157,7 @@ public:
     void setSize(const IntSize&) final { }
 
     void paint(GraphicsContext&, const FloatRect&) final { }
+    DestinationColorSpace colorSpace() final { return DestinationColorSpace::SRGB(); }
 
     bool hasSingleSecurityOrigin() const final { return true; }
 };
@@ -823,7 +825,7 @@ RetainPtr<PlatformLayer> MediaPlayer::createVideoFullscreenLayer()
     return m_private->createVideoFullscreenLayer();
 }
 
-void MediaPlayer::setVideoFullscreenLayer(PlatformLayer* layer, WTF::Function<void()>&& completionHandler)
+void MediaPlayer::setVideoFullscreenLayer(PlatformLayer* layer, Function<void()>&& completionHandler)
 {
     m_private->setVideoFullscreenLayer(layer, WTFMove(completionHandler));
 }
@@ -1070,6 +1072,11 @@ RetainPtr<CVPixelBufferRef> MediaPlayer::pixelBufferForCurrentTime()
 RefPtr<NativeImage> MediaPlayer::nativeImageForCurrentTime()
 {
     return m_private->nativeImageForCurrentTime();
+}
+
+DestinationColorSpace MediaPlayer::colorSpace()
+{
+    return m_private->colorSpace();
 }
 
 MediaPlayer::SupportsType MediaPlayer::supportsType(const MediaEngineSupportParameters& parameters)
@@ -1673,7 +1680,7 @@ AVPlayer* MediaPlayer::objCAVFoundationAVPlayer() const
 
 #endif
 
-bool MediaPlayer::performTaskAtMediaTime(WTF::Function<void()>&& task, const MediaTime& time)
+bool MediaPlayer::performTaskAtMediaTime(Function<void()>&& task, const MediaTime& time)
 {
     return m_private->performTaskAtMediaTime(WTFMove(task), time);
 }
@@ -1707,6 +1714,11 @@ void MediaPlayer::audioOutputDeviceChanged()
 MediaPlayerIdentifier MediaPlayer::identifier() const
 {
     return m_private->identifier();
+}
+
+std::optional<VideoFrameMetadata> MediaPlayer::videoFrameMetadata()
+{
+    return m_private->videoFrameMetadata();
 }
 
 String MediaPlayer::elementId() const

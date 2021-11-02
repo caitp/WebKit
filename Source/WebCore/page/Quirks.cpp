@@ -33,6 +33,7 @@
 #include "Document.h"
 #include "DocumentLoader.h"
 #include "DocumentStorageAccess.h"
+#include "ElementInlines.h"
 #include "EventNames.h"
 #include "FrameLoader.h"
 #include "HTMLBodyElement.h"
@@ -49,6 +50,7 @@
 #include "ResourceLoadObserver.h"
 #include "RuntimeApplicationChecks.h"
 #include "RuntimeEnabledFeatures.h"
+#include "SVGElementTypeHelpers.h"
 #include "SVGPathElement.h"
 #include "SVGSVGElement.h"
 #include "ScriptController.h"
@@ -84,7 +86,7 @@ static inline bool isYahooMail(Document& document)
 #endif
 
 Quirks::Quirks(Document& document)
-    : m_document(makeWeakPtr(document))
+    : m_document(document)
 {
 }
 
@@ -1224,7 +1226,7 @@ Quirks::StorageAccessResult Quirks::triggerOptionalStorageAccessQuirk(Element& e
 
         // If the click is synthetic, the user has already gone through the storage access flow and we should not request again.
         if (isStorageAccessQuirkDomainAndElement(m_document->url(), element) && isSyntheticClick == IsSyntheticClick::No) {
-            return requestStorageAccessAndHandleClick([element = makeWeakPtr(element), platformEvent, eventType, detail, relatedTarget] (ShouldDispatchClick shouldDispatchClick) mutable {
+            return requestStorageAccessAndHandleClick([element = WeakPtr { element }, platformEvent, eventType, detail, relatedTarget] (ShouldDispatchClick shouldDispatchClick) mutable {
                 RefPtr protectedElement { element.get() };
                 if (!protectedElement)
                     return;

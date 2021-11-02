@@ -156,7 +156,7 @@ private:
     void redirectReceived(PlatformMediaResource&, ResourceRequest&& request, const ResourceResponse&, CompletionHandler<void(ResourceRequest&&)>&& completionHandler) final { completionHandler(WTFMove(request)); }
     bool shouldCacheResponse(PlatformMediaResource&, const ResourceResponse&) final { return false; }
     void dataSent(PlatformMediaResource&, unsigned long long, unsigned long long) final { }
-    void dataReceived(PlatformMediaResource&, const uint8_t*, int) final;
+    void dataReceived(PlatformMediaResource&, Ref<SharedBuffer>&&) final;
     void accessControlCheckFailed(PlatformMediaResource&, const ResourceError& error) final { loadFailed(error); }
     void loadFailed(PlatformMediaResource&, const ResourceError& error) final { loadFailed(error); }
     void loadFinished(PlatformMediaResource&, const NetworkLoadMetrics&) final { loadFinished(); }
@@ -173,7 +173,7 @@ WeakPtr<PlatformResourceMediaLoader> PlatformResourceMediaLoader::create(WebCore
         return nullptr;
     auto* resourcePointer = resource.get();
     auto client = adoptRef(*new PlatformResourceMediaLoader { parent, resource.releaseNonNull() });
-    auto result = makeWeakPtr(client.get());
+    WeakPtr result = client;
 
     resourcePointer->setClient(WTFMove(client));
     return result;
@@ -211,12 +211,12 @@ void PlatformResourceMediaLoader::loadFinished()
     m_parent.loadFinished();
 }
 
-void PlatformResourceMediaLoader::dataReceived(PlatformMediaResource&, const uint8_t* data, int size)
+void PlatformResourceMediaLoader::dataReceived(PlatformMediaResource&, Ref<SharedBuffer>&& buffer)
 {
     if (!m_buffer)
-        m_buffer = SharedBuffer::create(data, size);
+        m_buffer = WTFMove(buffer);
     else
-        m_buffer->append(data, size);
+        m_buffer->append(WTFMove(buffer));
     m_parent.newDataStoredInSharedBuffer(*m_buffer);
 }
 
@@ -241,7 +241,7 @@ DataURLResourceMediaLoader::DataURLResourceMediaLoader(WebCoreAVFResourceLoader&
         m_buffer = SharedBuffer::create(WTFMove(result->data));
     }
 
-    callOnMainThread([this, weakThis = makeWeakPtr(*this)] {
+    callOnMainThread([this, weakThis = WeakPtr { *this }] {
         if (!weakThis)
             return;
 
@@ -284,7 +284,7 @@ void WebCoreAVFResourceLoader::startLoading()
     if (m_dataURLMediaLoader || m_resourceMediaLoader || m_platformMediaLoader || !m_parent)
         return;
 
-    NSURLRequest *nsRequest = [m_avRequest.get() request];
+    NSURLRequest *nsRequest = [m_avRequest request];
 
     ResourceRequest request(nsRequest);
     request.setPriority(ResourceLoadPriority::Low);
@@ -314,7 +314,7 @@ void WebCoreAVFResourceLoader::startLoading()
     }
 
     LOG_ERROR("Failed to start load for media at url %s", [[[nsRequest URL] absoluteString] UTF8String]);
-    [m_avRequest.get() finishLoadingWithError:0];
+    [m_avRequest finishLoadingWithError:0];
 }
 
 void WebCoreAVFResourceLoader::stopLoading()
@@ -346,7 +346,7 @@ void WebCoreAVFResourceLoader::responseReceived(const ResourceResponse& response
 {
     int status = response.httpStatusCode();
     if (status && (status < 200 || status > 299)) {
-        [m_avRequest.get() finishLoadingWithError:0];
+        [m_avRequest finishLoadingWithError:0];
         return;
     }
 
@@ -354,7 +354,7 @@ void WebCoreAVFResourceLoader::responseReceived(const ResourceResponse& response
     if (contentRange.isValid())
         m_responseOffset = static_cast<NSUInteger>(contentRange.firstBytePosition());
 
-    if (AVAssetResourceLoadingContentInformationRequest* contentInfo = [m_avRequest.get() contentInformationRequest]) {
+    if (AVAssetResourceLoadingContentInformationRequest* contentInfo = [m_avRequest contentInformationRequest]) {
         String uti = UTIFromMIMEType(response.mimeType());
 
         [contentInfo setContentType:uti];
@@ -366,7 +366,7 @@ void WebCoreAVFResourceLoader::responseReceived(const ResourceResponse& response
             [contentInfo setEntireLengthAvailableOnDemand:YES];
 
         if (![m_avRequest dataRequest]) {
-            [m_avRequest.get() finishLoading];
+            [m_avRequest finishLoading];
             stopLoading();
         }
     }
@@ -376,16 +376,16 @@ void WebCoreAVFResourceLoader::loadFailed(const ResourceError& error)
 {
     // <rdar://problem/13987417> Set the contentType of the contentInformationRequest to an empty
     // string to trigger AVAsset's playable value to complete loading.
-    if ([m_avRequest.get() contentInformationRequest] && ![[m_avRequest.get() contentInformationRequest] contentType])
-        [[m_avRequest.get() contentInformationRequest] setContentType:@""];
+    if ([m_avRequest contentInformationRequest] && ![[m_avRequest contentInformationRequest] contentType])
+        [[m_avRequest contentInformationRequest] setContentType:@""];
 
-    [m_avRequest.get() finishLoadingWithError:error.nsError()];
+    [m_avRequest finishLoadingWithError:error.nsError()];
     stopLoading();
 }
 
 void WebCoreAVFResourceLoader::loadFinished()
 {
-    [m_avRequest.get() finishLoading];
+    [m_avRequest finishLoading];
     stopLoading();
 }
 
@@ -430,7 +430,7 @@ void WebCoreAVFResourceLoader::newDataStoredInSharedBuffer(SharedBuffer& data)
         return;
 
     if (dataRequest.currentOffset + dataRequest.requestedLength >= dataRequest.requestedOffset) {
-        [m_avRequest.get() finishLoading];
+        [m_avRequest finishLoading];
         stopLoading();
     }
 }

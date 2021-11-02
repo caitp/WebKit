@@ -25,24 +25,73 @@
 
 #pragma once
 
-#include <wtf/Assertions.h>
-#include <wtf/RetainPtr.h>
+#import <wtf/Assertions.h>
+#import <wtf/RetainPtr.h>
+#import <wtf/cocoa/TollFreeBridging.h>
 
 namespace WTF {
 
+// Use bridge_cast() to convert between CF <-> NS types without ref churn.
+
+#if __has_feature(objc_arc)
+#define WTF_CF_TO_NS_BRIDGE_TRANSFER(type, value) ((__bridge_transfer type)value)
+#define WTF_NS_TO_CF_BRIDGE_TRANSFER(type, value) ((type)reinterpret_cast<uintptr_t>(value))
+#else
+#define WTF_CF_TO_NS_BRIDGE_TRANSFER(type, value) ((__bridge type)value)
+#define WTF_NS_TO_CF_BRIDGE_TRANSFER(type, value) ((__bridge type)value)
+#endif
+
+template<typename T> inline typename NSTollFreeBridgingTraits<std::remove_pointer_t<T>>::BridgedType bridge_cast(T object)
+{
+    return (__bridge typename NSTollFreeBridgingTraits<std::remove_pointer_t<T>>::BridgedType)object;
+}
+
+template<typename T> inline RetainPtr<typename NSTollFreeBridgingTraits<std::remove_pointer_t<T>>::BridgedType> bridge_cast(RetainPtr<T>&& object)
+{
+    return adoptCF(WTF_NS_TO_CF_BRIDGE_TRANSFER(typename NSTollFreeBridgingTraits<std::remove_pointer_t<T>>::BridgedType, object.leakRef()));
+}
+
+template<typename T> inline typename CFTollFreeBridgingTraits<T>::BridgedType bridge_cast(T object)
+{
+    return (__bridge typename CFTollFreeBridgingTraits<T>::BridgedType)object;
+}
+
+template<typename T> inline RetainPtr<std::remove_pointer_t<typename CFTollFreeBridgingTraits<T>::BridgedType>> bridge_cast(RetainPtr<T>&& object)
+{
+    return adoptNS(WTF_CF_TO_NS_BRIDGE_TRANSFER(typename CFTollFreeBridgingTraits<T>::BridgedType, object.leakRef()));
+}
+
+// Use bridge_id_cast to convert from CF -> id without ref churn.
+
+inline id bridge_id_cast(CFTypeRef object)
+{
+    return (__bridge id)object;
+}
+
+inline RetainPtr<id> bridge_id_cast(RetainPtr<CFTypeRef>&& object)
+{
+    return adoptNS(WTF_CF_TO_NS_BRIDGE_TRANSFER(id, object.leakRef()));
+}
+
+#undef WTF_NS_TO_CF_BRIDGE_TRANSFER
+#undef WTF_CF_TO_NS_BRIDGE_TRANSFER
+
 // Use checked_objc_cast<> instead of dynamic_objc_cast<> when a specific NS type is required.
 
-template<typename T> T* checked_objc_cast(id object)
-{
-    using ValueType = std::remove_pointer_t<T>;
-    using PtrType = ValueType*;
+// Because ARC enablement is a compile-time choice, and we compile this header
+// both ways, we need a separate copy of our code when ARC is enabled.
+#if __has_feature(objc_arc)
+#define checked_objc_cast checked_objc_castARC
+#endif
 
+template<typename T> inline T* checked_objc_cast(id object)
+{
     if (!object)
         return nullptr;
 
-    RELEASE_ASSERT_WITH_SECURITY_IMPLICATION([object isKindOfClass:[ValueType class]]);
+    RELEASE_ASSERT_WITH_SECURITY_IMPLICATION([object isKindOfClass:[T class]]);
 
-    return reinterpret_cast<PtrType>(object);
+    return reinterpret_cast<T*>(object);
 }
 
 // Use dynamic_objc_cast<> instead of checked_objc_cast<> when actively checking NS types,
@@ -60,4 +109,6 @@ template<typename T, typename U> RetainPtr<T> dynamic_objc_cast(RetainPtr<U>&& o
 
 } // namespace WTF
 
+using WTF::bridge_cast;
+using WTF::bridge_id_cast;
 using WTF::checked_objc_cast;

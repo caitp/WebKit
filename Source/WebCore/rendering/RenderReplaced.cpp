@@ -34,8 +34,8 @@
 #include "HTMLParserIdioms.h"
 #include "HighlightData.h"
 #include "HighlightRegister.h"
-#include "LayoutIntegrationLineIterator.h"
-#include "LayoutIntegrationRunIterator.h"
+#include "InlineIteratorBox.h"
+#include "InlineIteratorLine.h"
 #include "LayoutRepainter.h"
 #include "RenderBlock.h"
 #include "RenderFragmentedFlow.h"
@@ -138,7 +138,7 @@ bool RenderReplaced::shouldDrawSelectionTint() const
 inline static bool draggedContentContainsReplacedElement(const Vector<RenderedDocumentMarker*>& markers, const Element& element)
 {
     for (auto* marker : markers) {
-        if (WTF::get<RefPtr<Node>>(marker->data()) == &element)
+        if (std::get<RefPtr<Node>>(marker->data()) == &element)
             return true;
     }
     return false;
@@ -159,7 +159,7 @@ Color RenderReplaced::calculateHighlightColor() const
                     if (!isHighlighted(state, highlightData))
                         continue;
 
-                    OptionSet<StyleColor::Options> styleColorOptions = { StyleColor::Options::UseSystemAppearance };
+                    OptionSet<StyleColorOptions> styleColorOptions = { StyleColorOptions::UseSystemAppearance };
                     return theme().appHighlightColor(styleColorOptions);
                 }
             }
@@ -689,7 +689,7 @@ void RenderReplaced::computePreferredLogicalWidths()
 VisiblePosition RenderReplaced::positionForPoint(const LayoutPoint& point, const RenderFragmentContainer* fragment)
 {
     auto [top, bottom] = [&] {
-        if (auto run = LayoutIntegration::runFor(*this)) {
+        if (auto run = InlineIterator::boxFor(*this)) {
             auto line = run->line();
             return std::make_pair(line->selectionTopForHitTesting(), line->selectionBottom());
         }

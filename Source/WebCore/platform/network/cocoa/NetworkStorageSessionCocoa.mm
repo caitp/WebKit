@@ -122,7 +122,6 @@ void NetworkStorageSession::setAllCookiesToSameSiteStrict(const RegistrableDomai
 {
     ASSERT(hasProcessPrivilege(ProcessPrivilege::CanAccessRawCookies));
 
-#if HAVE(CFNETWORK_SAMESITE_COOKIE_API)
     RetainPtr<NSMutableArray<NSHTTPCookie *>> oldCookiesToDelete = adoptNS([[NSMutableArray alloc] init]);
     RetainPtr<NSMutableArray<NSHTTPCookie *>> newCookiesToAdd = adoptNS([[NSMutableArray alloc] init]);
 
@@ -143,9 +142,7 @@ void NetworkStorageSession::setAllCookiesToSameSiteStrict(const RegistrableDomai
     for (NSHTTPCookie *newCookie in newCookiesToAdd.get())
         [nsCookieStorage() setCookie:newCookie];
     END_BLOCK_OBJC_EXCEPTIONS
-#else
-    UNUSED_PARAM(domain);
-#endif
+
     completionHandler();
 }
 
@@ -618,7 +615,7 @@ void NetworkStorageSession::registerCookieChangeListenersIfNecessary()
 
     m_didRegisterCookieListeners = true;
 
-    [nsCookieStorage() _setCookiesChangedHandler:makeBlockPtr([this, weakThis = makeWeakPtr(*this)](NSArray<NSHTTPCookie *> *addedCookies, NSString *domainForChangedCookie) {
+    [nsCookieStorage() _setCookiesChangedHandler:makeBlockPtr([this, weakThis = WeakPtr { *this }](NSArray<NSHTTPCookie *> *addedCookies, NSString *domainForChangedCookie) {
         if (!weakThis)
             return;
         String host = domainForChangedCookie;
@@ -632,7 +629,7 @@ void NetworkStorageSession::registerCookieChangeListenersIfNecessary()
             observer->cookiesAdded(host, cookies);
     }).get() onQueue:dispatch_get_main_queue()];
 
-    [nsCookieStorage() _setCookiesRemovedHandler:makeBlockPtr([this, weakThis = makeWeakPtr(*this)](NSArray<NSHTTPCookie *> *removedCookies, NSString *domainForRemovedCookies, bool removeAllCookies) {
+    [nsCookieStorage() _setCookiesRemovedHandler:makeBlockPtr([this, weakThis = WeakPtr { *this }](NSArray<NSHTTPCookie *> *removedCookies, NSString *domainForRemovedCookies, bool removeAllCookies) {
         if (!weakThis)
             return;
         if (removeAllCookies) {

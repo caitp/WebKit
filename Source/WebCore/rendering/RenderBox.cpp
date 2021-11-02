@@ -26,7 +26,6 @@
 #include "RenderBox.h"
 
 #include "CSSFontSelector.h"
-#include "ClipPathOperation.h"
 #include "ControlStates.h"
 #include "Document.h"
 #include "Editing.h"
@@ -47,12 +46,14 @@
 #include "HTMLSelectElement.h"
 #include "HTMLTextAreaElement.h"
 #include "HitTestResult.h"
+#include "InlineIteratorInlineBox.h"
+#include "InlineIteratorLine.h"
 #include "InlineRunAndOffset.h"
-#include "LayoutIntegrationLineIterator.h"
 #include "LayoutIntegrationLineLayout.h"
 #include "LegacyInlineElementBox.h"
 #include "Page.h"
 #include "PaintInfo.h"
+#include "PathOperation.h"
 #include "RenderBoxFragmentInfo.h"
 #include "RenderChildIterator.h"
 #include "RenderDeprecatedFlexibleBox.h"
@@ -73,6 +74,7 @@
 #include "RenderView.h"
 #include "RuntimeApplicationChecks.h"
 #include "SVGClipPathElement.h"
+#include "SVGElementTypeHelpers.h"
 #include "ScrollAnimator.h"
 #include "ScrollbarTheme.h"
 #include "Settings.h"
@@ -100,12 +102,12 @@ COMPILE_ASSERT(sizeof(RenderBox) == sizeof(SameSizeAsRenderBox), RenderBox_shoul
 
 using namespace HTMLNames;
 
-typedef WTF::HashMap<const RenderBox*, LayoutUnit> OverrideSizeMap;
+typedef HashMap<const RenderBox*, LayoutUnit> OverrideSizeMap;
 static OverrideSizeMap* gOverridingLogicalHeightMap = nullptr;
 static OverrideSizeMap* gOverridingLogicalWidthMap = nullptr;
 
 // FIXME: We should store these based on physical direction.
-typedef WTF::HashMap<const RenderBox*, std::optional<LayoutUnit>> OverrideOptionalSizeMap;
+typedef HashMap<const RenderBox*, std::optional<LayoutUnit>> OverrideOptionalSizeMap;
 static OverrideOptionalSizeMap* gOverridingContainingBlockContentLogicalHeightMap = nullptr;
 static OverrideOptionalSizeMap* gOverridingContainingBlockContentLogicalWidthMap = nullptr;
 
@@ -1383,16 +1385,16 @@ bool RenderBox::hitTestClipPath(const HitTestLocation& hitTestLocation, const La
     auto offsetFromHitTestRoot = toLayoutSize(accumulatedOffset + location());
     auto hitTestLocationInLocalCoordinates = hitTestLocation.point() - offsetFromHitTestRoot;
     switch (style().clipPath()->type()) {
-    case ClipPathOperation::Shape: {
-        auto& clipPath = downcast<ShapeClipPathOperation>(*style().clipPath());
+    case PathOperation::Shape: {
+        auto& clipPath = downcast<ShapePathOperation>(*style().clipPath());
         auto referenceBoxRect = referenceBox(clipPath.referenceBox());
         if (!clipPath.pathForReferenceRect(referenceBoxRect).contains(hitTestLocationInLocalCoordinates, clipPath.windRule()))
             return false;
         break;
     }
-    case ClipPathOperation::Reference: {
-        const auto& referenceClipPathOperation = downcast<ReferenceClipPathOperation>(*style().clipPath());
-        auto* element = document().getElementById(referenceClipPathOperation.fragment());
+    case PathOperation::Reference: {
+        const auto& referencePathOperation = downcast<ReferencePathOperation>(*style().clipPath());
+        auto* element = document().getElementById(referencePathOperation.fragment());
         if (!element || !element->renderer())
             break;
         if (!is<SVGClipPathElement>(*element))
@@ -1402,7 +1404,7 @@ bool RenderBox::hitTestClipPath(const HitTestLocation& hitTestLocation, const La
             return false;
         break;
     }
-    case ClipPathOperation::Box:
+    case PathOperation::Box:
         break;
     }
 
@@ -1523,7 +1525,7 @@ void RenderBox::paintBoxDecorations(PaintInfo& paintInfo, const LayoutPoint& pai
 
     // FIXME: Should eventually give the theme control over whether the box shadow should paint, since controls could have
     // custom shadows of their own.
-    if (!boxShadowShouldBeAppliedToBackground(paintRect.location(), bleedAvoidance))
+    if (!boxShadowShouldBeAppliedToBackground(paintRect.location(), bleedAvoidance, { }))
         paintBoxShadow(paintInfo, paintRect, style(), ShadowStyle::Normal);
 
     GraphicsContextStateSaver stateSaver(paintInfo.context(), false);
@@ -1589,7 +1591,7 @@ void RenderBox::paintBackground(const PaintInfo& paintInfo, const LayoutRect& pa
     if (!paintsOwnBackground())
         return;
 
-    if (backgroundIsKnownToBeObscured(paintRect.location()) && !boxShadowShouldBeAppliedToBackground(paintRect.location(), bleedAvoidance))
+    if (backgroundIsKnownToBeObscured(paintRect.location()) && !boxShadowShouldBeAppliedToBackground(paintRect.location(), bleedAvoidance, { }))
         return;
 
     auto backgroundColor = style().visitedDependentColor(CSSPropertyBackgroundColor);
@@ -1881,7 +1883,7 @@ void RenderBox::paintFillLayers(const PaintInfo& paintInfo, const Color& color, 
 void RenderBox::paintFillLayer(const PaintInfo& paintInfo, const Color& c, const FillLayer& fillLayer, const LayoutRect& rect,
     BackgroundBleedAvoidance bleedAvoidance, CompositeOperator op, RenderElement* backgroundObject, BaseBackgroundColorUsage baseBgColorUsage)
 {
-    paintFillLayerExtended(paintInfo, c, fillLayer, rect, bleedAvoidance, nullptr, LayoutSize(), op, backgroundObject, baseBgColorUsage);
+    paintFillLayerExtended(paintInfo, c, fillLayer, rect, bleedAvoidance, { }, { }, op, backgroundObject, baseBgColorUsage);
 }
 
 static StyleImage* findLayerUsedImage(WrappedImagePtr image, const FillLayer& layers)
@@ -2692,8 +2694,10 @@ LayoutUnit RenderBox::fillAvailableMeasure(LayoutUnit availableLogicalWidth) con
 
 LayoutUnit RenderBox::fillAvailableMeasure(LayoutUnit availableLogicalWidth, LayoutUnit& marginStart, LayoutUnit& marginEnd) const
 {
-    marginStart = minimumValueForLength(style().marginStart(), availableLogicalWidth);
-    marginEnd = minimumValueForLength(style().marginEnd(), availableLogicalWidth);
+    bool isOrthogonalElement = isHorizontalWritingMode() != containingBlock()->isHorizontalWritingMode();
+    LayoutUnit availableSizeForResolvingMargin = isOrthogonalElement ? containingBlockLogicalWidthForContent() : availableLogicalWidth;
+    marginStart = minimumValueForLength(style().marginStart(), availableSizeForResolvingMargin);
+    marginEnd = minimumValueForLength(style().marginEnd(), availableSizeForResolvingMargin);
     return availableLogicalWidth - marginStart - marginEnd;
 }
 
@@ -3323,17 +3327,20 @@ LayoutUnit RenderBox::computeReplacedLogicalWidthUsing(SizeType widthType, Lengt
     case LengthType::FillAvailable:
     case LengthType::Percent:
     case LengthType::Calculated: {
-        // FIXME: containingBlockLogicalWidthForContent() is wrong if the replaced element's block-flow is perpendicular to the
-        // containing block's block-flow.
-        // https://bugs.webkit.org/show_bug.cgi?id=46496
-        const LayoutUnit cw = isOutOfFlowPositioned() ? containingBlockLogicalWidthForPositioned(downcast<RenderBoxModelObject>(*container())) : containingBlockLogicalWidthForContent();
+        LayoutUnit containerWidth;
+        if (isOutOfFlowPositioned())
+            containerWidth = containingBlockLogicalWidthForPositioned(downcast<RenderBoxModelObject>(*container()));
+        else if (isHorizontalWritingMode() == containingBlock()->isHorizontalWritingMode())
+            containerWidth = containingBlockLogicalWidthForContent();
+        else
+            containerWidth = perpendicularContainingBlockLogicalHeight();
         Length containerLogicalWidth = containingBlock()->style().logicalWidth();
         // FIXME: Handle cases when containing block width is calculated or viewport percent.
         // https://bugs.webkit.org/show_bug.cgi?id=91071
         if (logicalWidth.isIntrinsic())
-            return computeIntrinsicLogicalWidthUsing(logicalWidth, cw, borderAndPaddingLogicalWidth()) - borderAndPaddingLogicalWidth();
-        if (cw > 0 || (!cw && (containerLogicalWidth.isFixed() || containerLogicalWidth.isPercentOrCalculated())))
-            return adjustContentBoxLogicalWidthForBoxSizing(minimumValueForLength(logicalWidth, cw), logicalWidth.type());
+            return computeIntrinsicLogicalWidthUsing(logicalWidth, containerWidth, borderAndPaddingLogicalWidth()) - borderAndPaddingLogicalWidth();
+        if (containerWidth > 0 || (!containerWidth && (containerLogicalWidth.isFixed() || containerLogicalWidth.isPercentOrCalculated())))
+            return adjustContentBoxLogicalWidthForBoxSizing(minimumValueForLength(logicalWidth, containerWidth), logicalWidth.type());
         return 0_lu;
     }
     case LengthType::Intrinsic:
@@ -3469,9 +3476,6 @@ LayoutUnit RenderBox::computeReplacedLogicalHeightUsing(SizeType heightType, Len
             return adjustContentBoxLogicalHeightForBoxSizing(valueForLength(logicalHeight, newContentHeight));
         }
         
-        // FIXME: availableLogicalHeight() is wrong if the replaced element's block-flow is perpendicular to the
-        // containing block's block-flow.
-        // https://bugs.webkit.org/show_bug.cgi?id=46496
         LayoutUnit availableHeight;
         if (isOutOfFlowPositioned())
             availableHeight = containingBlockLogicalHeightForPositioned(downcast<RenderBoxModelObject>(*container));

@@ -25,6 +25,7 @@
 #include "FrameView.h"
 #include "GraphicsContext.h"
 #include "RenderSVGRoot.h"
+#include "SVGElementTypeHelpers.h"
 #include "SVGFitToViewBox.h"
 #include "SVGRenderingContext.h"
 #include "SVGResources.h"
@@ -110,7 +111,7 @@ PatternData* RenderSVGResourcePattern::buildPattern(RenderElement& renderer, Opt
     if (!tileImage)
         return nullptr;
 
-    const IntSize tileImageSize = tileImage->logicalSize();
+    auto tileImageSize = tileImage->logicalSize();
 
     auto copiedImage = ImageBuffer::sinkIntoNativeImage(WTFMove(tileImage));
     if (!copiedImage)

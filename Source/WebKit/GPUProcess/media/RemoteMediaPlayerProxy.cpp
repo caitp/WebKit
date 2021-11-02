@@ -48,10 +48,12 @@
 #include "TextTrackPrivateRemoteConfiguration.h"
 #include "TrackPrivateRemoteConfiguration.h"
 #include "WebCoreArgumentCoders.h"
+#include <JavaScriptCore/Uint8Array.h>
 #include <WebCore/LayoutRect.h>
 #include <WebCore/MediaPlayer.h>
 #include <WebCore/MediaPlayerPrivate.h>
 #include <WebCore/NotImplemented.h>
+#include <WebCore/SecurityOrigin.h>
 
 #if ENABLE(ENCRYPTED_MEDIA)
 #include "RemoteCDMFactoryProxy.h"
@@ -74,7 +76,7 @@ using namespace WebCore;
 RemoteMediaPlayerProxy::RemoteMediaPlayerProxy(RemoteMediaPlayerManagerProxy& manager, MediaPlayerIdentifier identifier, Ref<IPC::Connection>&& connection, MediaPlayerEnums::MediaEngineIdentifier engineIdentifier, RemoteMediaPlayerProxyConfiguration&& configuration)
     : m_id(identifier)
     , m_webProcessConnection(WTFMove(connection))
-    , m_manager(makeWeakPtr(manager))
+    , m_manager(manager)
     , m_engineIdentifier(engineIdentifier)
     , m_updateCachedStateMessageTimer(RunLoop::main(), this, &RemoteMediaPlayerProxy::timerFired)
     , m_configuration(configuration)
@@ -104,6 +106,9 @@ void RemoteMediaPlayerProxy::invalidate()
         m_sandboxExtension = nullptr;
     }
     m_renderingResourcesRequest = { };
+#if USE(AVFOUNDATION)
+    m_pixelBufferForCurrentTime = nullptr;
+#endif
 }
 
 void RemoteMediaPlayerProxy::getConfiguration(RemoteMediaPlayerConfiguration& configuration)
@@ -123,7 +128,7 @@ void RemoteMediaPlayerProxy::getConfiguration(RemoteMediaPlayerConfiguration& co
 #endif
     configuration.shouldIgnoreIntrinsicSize = m_player->shouldIgnoreIntrinsicSize();
 
-    m_observingTimeChanges = m_player->setCurrentTimeDidChangeCallback([this, weakThis = makeWeakPtr(this)] (auto currentTime) mutable {
+    m_observingTimeChanges = m_player->setCurrentTimeDidChangeCallback([this, weakThis = WeakPtr { *this }] (auto currentTime) mutable {
         if (!weakThis)
             return;
 
@@ -316,12 +321,13 @@ void RemoteMediaPlayerProxy::updateVideoFullscreenInlineImage()
 
 void RemoteMediaPlayerProxy::setVideoFullscreenMode(MediaPlayer::VideoFullscreenMode mode)
 {
+    m_fullscreenMode = mode;
     m_player->setVideoFullscreenMode(mode);
-
 }
 
-void RemoteMediaPlayerProxy::videoFullscreenStandbyChanged()
+void RemoteMediaPlayerProxy::videoFullscreenStandbyChanged(bool standby)
 {
+    m_videoFullscreenStandby = standby;
     m_player->videoFullscreenStandbyChanged();
 }
 #endif
@@ -814,14 +820,12 @@ double RemoteMediaPlayerProxy::mediaPlayerRequestedPlaybackRate() const
 #if ENABLE(VIDEO_PRESENTATION_MODE)
 MediaPlayerEnums::VideoFullscreenMode RemoteMediaPlayerProxy::mediaPlayerFullscreenMode() const
 {
-    notImplemented();
-    return MediaPlayerEnums::VideoFullscreenModeNone;
+    return m_fullscreenMode;
 }
 
 bool RemoteMediaPlayerProxy::mediaPlayerIsVideoFullscreenStandby() const
 {
-    notImplemented();
-    return false;
+    return m_videoFullscreenStandby;
 }
 #endif
 
@@ -907,7 +911,7 @@ void RemoteMediaPlayerProxy::setLegacyCDMSession(std::optional<RemoteLegacyCDMSe
     if (m_legacySession) {
         if (auto cdmSession = m_manager->gpuConnectionToWebProcess()->legacyCdmFactoryProxy().getSession(*m_legacySession)) {
             m_player->setCDMSession(cdmSession->session());
-            cdmSession->setPlayer(makeWeakPtr(this));
+            cdmSession->setPlayer(*this);
         }
     }
 }
@@ -1015,7 +1019,7 @@ void RemoteMediaPlayerProxy::performTaskAtMediaTime(const MediaTime& taskTime, M
     }
 
     m_performTaskAtMediaTimeCompletionHandler = WTFMove(completionHandler);
-    m_player->performTaskAtMediaTime([this, weakThis = makeWeakPtr(this)]() mutable {
+    m_player->performTaskAtMediaTime([this, weakThis = WeakPtr { *this }]() mutable {
         if (!weakThis || !m_performTaskAtMediaTimeCompletionHandler)
             return;
 

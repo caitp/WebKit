@@ -31,8 +31,9 @@
 
 #include "Chrome.h"
 #include "ChromeClient.h"
-#include "Document.h"
+#include "DocumentInlines.h"
 #include "DocumentLoader.h"
+#include "ElementInlines.h"
 #include "Frame.h"
 #include "FrameView.h"
 #include "FullscreenManager.h"
@@ -124,7 +125,7 @@ class MediaSessionObserver : public MediaSession::Observer {
 
 public:
     MediaSessionObserver(MediaElementSession& session, const Ref<MediaSession>& mediaSession)
-        : m_session(makeWeakPtr(session)), m_mediaSession(mediaSession)
+        : m_session(session), m_mediaSession(mediaSession)
     {
         m_mediaSession->addObserver(*this);
     }
@@ -384,7 +385,7 @@ Expected<void, MediaPlaybackDenialReason> MediaElementSession::playbackStateChan
     if (m_element.hasMediaStreamSrcObject()) {
         if (document.isCapturing())
             return { };
-        if (document.mediaState() & MediaProducer::MediaState::IsPlayingAudio)
+        if (document.mediaState() & MediaProducerMediaState::IsPlayingAudio)
             return { };
     }
 #endif
@@ -399,7 +400,7 @@ Expected<void, MediaPlaybackDenialReason> MediaElementSession::playbackStateChan
         return makeUnexpected(MediaPlaybackDenialReason::UserGestureRequired);
     }
 
-    if (topDocument.mediaState() & MediaProducer::MediaState::HasUserInteractedWithMediaElement && topDocument.quirks().needsPerDocumentAutoplayBehavior())
+    if (topDocument.mediaState() & MediaProducerMediaState::HasUserInteractedWithMediaElement && topDocument.quirks().needsPerDocumentAutoplayBehavior())
         return { };
 
     if (topDocument.hasHadUserInteraction() && document.quirks().shouldAutoplayForArbitraryUserGesture())
@@ -808,7 +809,7 @@ void MediaElementSession::playbackTargetPickerWasDismissed()
     client().playbackTargetPickerWasDismissed();
 }
 
-void MediaElementSession::mediaStateDidChange(MediaProducer::MediaStateFlags state)
+void MediaElementSession::mediaStateDidChange(MediaProducerMediaStateFlags state)
 {
     m_element.document().playbackTargetPickerClientStateDidChange(*this, state);
 }

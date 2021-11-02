@@ -132,7 +132,7 @@ static bool isAppleLegacyCssValueKeyword(const char* valueKeyword, unsigned leng
     && !hasPrefix(valueKeyword, length, appleSystemPrefix)
     && !hasPrefix(valueKeyword, length, applePayPrefix)
 #if PLATFORM(COCOA)
-    && !WTF::equal(reinterpret_cast<const LChar*>(valueKeyword), reinterpret_cast<const LChar*>(appleWirelessPlaybackTargetActive), length)
+    && !equal(reinterpret_cast<const LChar*>(valueKeyword), reinterpret_cast<const LChar*>(appleWirelessPlaybackTargetActive), length)
 #endif
     ;
 }
@@ -146,7 +146,7 @@ static CSSValueID cssValueKeywordID(const CharacterType* valueKeyword, unsigned 
         CharacterType c = valueKeyword[i];
         if (!c || c >= 0x7F)
             return CSSValueInvalid; // illegal keyword.
-        buffer[i] = WTF::toASCIILower(c);
+        buffer[i] = toASCIILower(c);
     }
     buffer[length] = '\0';
     
@@ -918,7 +918,7 @@ static RefPtr<CSSPrimitiveValue> consumeFontVariantCSS21(CSSParserTokenRange& ra
 static RefPtr<CSSPrimitiveValue> consumeFontWeight(CSSParserTokenRange& range)
 {
     if (auto result = consumeFontWeightRaw(range)) {
-        return switchOn(*result, [] (CSSValueID valueID) {
+        return WTF::switchOn(*result, [] (CSSValueID valueID) {
             return CSSValuePool::singleton().createIdentifierValue(valueID);
         }, [] (double weightNumber) {
             return CSSValuePool::singleton().createValue(weightNumber, CSSUnitType::CSS_NUMBER);
@@ -929,7 +929,7 @@ static RefPtr<CSSPrimitiveValue> consumeFontWeight(CSSParserTokenRange& range)
 
 static RefPtr<CSSPrimitiveValue> consumeFontPalette(CSSParserTokenRange& range)
 {
-    if (auto result = consumeIdent<CSSValueNone, CSSValueNormal, CSSValueLight, CSSValueDark>(range))
+    if (auto result = consumeIdent<CSSValueNormal, CSSValueLight, CSSValueDark>(range))
         return result;
     return consumeDashedIdent(range);
 }
@@ -1729,7 +1729,7 @@ static RefPtr<CSSValue> consumeTextEmphasisStyle(CSSParserTokenRange& range)
     return nullptr;
 }
 
-static RefPtr<CSSPrimitiveValue> consumeCaretColor(CSSParserTokenRange& range, const CSSParserContext& context)
+static RefPtr<CSSPrimitiveValue> consumeColorWithAuto(CSSParserTokenRange& range, const CSSParserContext& context)
 {
     if (range.peek().id() == CSSValueAuto)
         return consumeIdent(range);
@@ -3135,8 +3135,11 @@ static RefPtr<CSSValueList> consumeGridAutoFlow(CSSParserTokenRange& range)
             return nullptr;
     }
     RefPtr<CSSValueList> parsedValues = CSSValueList::createSpaceSeparated();
-    if (rowOrColumnValue)
-        parsedValues->append(rowOrColumnValue.releaseNonNull());
+    if (rowOrColumnValue) {
+        CSSValueID value = rowOrColumnValue->valueID();
+        if (value == CSSValueID::CSSValueColumn || (value == CSSValueID::CSSValueRow && !denseAlgorithm))
+            parsedValues->append(rowOrColumnValue.releaseNonNull());
+    }
     if (denseAlgorithm)
         parsedValues->append(denseAlgorithm.releaseNonNull());
     return parsedValues;
@@ -3867,7 +3870,7 @@ static RefPtr<CSSValue> consumeContain(CSSParserTokenRange& range)
     if (auto singleValue = consumeIdent<CSSValueNone, CSSValueStrict, CSSValueContent>(range))
         return singleValue;
     auto list = CSSValueList::createSpaceSeparated();
-    RefPtr<CSSPrimitiveValue> size, layout, paint;
+    RefPtr<CSSPrimitiveValue> size, layout, paint, style;
     while (!range.atEnd()) {
         switch (range.peek().id()) {
         case CSSValueSize:
@@ -3885,6 +3888,11 @@ static RefPtr<CSSValue> consumeContain(CSSParserTokenRange& range)
                 return nullptr;
             paint = consumeIdent(range);
             break;
+        case CSSValueStyle:
+            if (style)
+                return nullptr;
+            style = consumeIdent(range);
+            break;
         default:
             return nullptr;
         }
@@ -3893,6 +3901,8 @@ static RefPtr<CSSValue> consumeContain(CSSParserTokenRange& range)
         list->append(size.releaseNonNull());
     if (layout)
         list->append(layout.releaseNonNull());
+    if (style)
+        list->append(style.releaseNonNull());
     if (paint)
         list->append(paint.releaseNonNull());
     if (!list->length())
@@ -3990,6 +4000,14 @@ static RefPtr<CSSValue> consumeColorScheme(CSSParserTokenRange& range)
 }
 
 #endif
+
+static RefPtr<CSSPrimitiveValue> consumePositionOrAuto(CSSParserTokenRange& range, CSSParserMode parserMode, UnitlessQuirk unitless, PositionSyntax positionSyntax)
+{
+    if (range.peek().id() == CSSValueAuto)
+        return consumeIdent(range);
+
+    return consumePosition(range, parserMode, unitless, positionSyntax);
+}
 
 RefPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSPropertyID property, CSSPropertyID currentShorthand)
 {
@@ -4218,8 +4236,13 @@ RefPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSPropertyID property, CSS
     case CSSPropertyLightingColor:
     case CSSPropertyColumnRuleColor:
         return consumeColor(m_range, m_context);
+    case CSSPropertyAccentColor: {
+        if (!m_context.accentColorEnabled)
+            return nullptr;
+        return consumeColorWithAuto(m_range, m_context);
+    }
     case CSSPropertyCaretColor:
-        return consumeCaretColor(m_range, m_context);
+        return consumeColorWithAuto(m_range, m_context);
     case CSSPropertyColor:
     case CSSPropertyBackgroundColor:
         return consumeColor(m_range, m_context, inQuirksMode());
@@ -4326,6 +4349,11 @@ RefPtr<CSSValue> CSSPropertyParser::parseSingleValue(CSSPropertyID property, CSS
         if (auto parsedValue = consumeNumber(m_range, ValueRange::All))
             return parsedValue;
         return consumePercent(m_range, ValueRange::All);
+    case CSSPropertyOffsetDistance:
+        return consumeLengthOrPercent(m_range, m_context.mode, ValueRange::All, UnitlessQuirk::Forbid);
+    case CSSPropertyOffsetPosition:
+    case CSSPropertyOffsetAnchor:
+        return consumePositionOrAuto(m_range, m_context.mode, UnitlessQuirk::Forbid, PositionSyntax::Position);
     case CSSPropertyWebkitBoxFlex:
         return consumeNumber(m_range, ValueRange::All);
     case CSSPropertyBaselineShift:
@@ -4848,8 +4876,8 @@ bool CSSPropertyParser::parseFontFaceDescriptor(CSSPropertyID propId)
 
 static RefPtr<CSSPrimitiveValue> consumeBasePaletteDescriptor(CSSParserTokenRange& range)
 {
-    if (range.peek().type() == StringToken)
-        return consumeString(range);
+    if (auto result = consumeIdent<CSSValueLight, CSSValueDark>(range))
+        return result;
     return consumeInteger(range, 0);
 }
 
@@ -4857,15 +4885,11 @@ static RefPtr<CSSValueList> consumeOverrideColorsDescriptor(CSSParserTokenRange&
 {
     RefPtr<CSSValueList> list = CSSValueList::createCommaSeparated();
     do {
-        RefPtr<CSSPrimitiveValue> key;
-        if (range.peek().type() == StringToken)
-            key = consumeString(range);
-        else
-            key = consumeInteger(range, 0);
+        auto key = consumeInteger(range, 0);
         if (!key)
             return nullptr;
 
-        auto color = consumeColor(range, context);
+        auto color = consumeColor(range, context, false, { StyleColor::CSSColorType::Absolute });
         if (!color)
             return nullptr;
 

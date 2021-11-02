@@ -29,21 +29,23 @@
 #include "BoundaryPoint.h"
 #include "CSSComputedStyleDeclaration.h"
 #include "Editing.h"
+#include "ElementInlines.h"
 #include "HTMLBRElement.h"
 #include "HTMLBodyElement.h"
 #include "HTMLHtmlElement.h"
 #include "HTMLNames.h"
 #include "HTMLParserIdioms.h"
 #include "HTMLTableElement.h"
-#include "InlineIterator.h"
+#include "InlineIteratorLine.h"
+#include "InlineIteratorLogicalOrderTraversal.h"
+#include "InlineIteratorTextBox.h"
 #include "InlineRunAndOffset.h"
-#include "LayoutIntegrationLineIterator.h"
-#include "LayoutIntegrationRunIterator.h"
 #include "LegacyInlineTextBox.h"
 #include "Logging.h"
 #include "NodeTraversal.h"
 #include "PositionIterator.h"
 #include "RenderBlock.h"
+#include "RenderBlockFlow.h"
 #include "RenderFlexibleBox.h"
 #include "RenderGrid.h"
 #include "RenderInline.h"
@@ -69,11 +71,11 @@ using namespace HTMLNames;
 
 static bool hasInlineRun(RenderObject& renderer)
 {
-    if (is<RenderBox>(renderer) && LayoutIntegration::runFor(downcast<RenderBox>(renderer)))
+    if (is<RenderBox>(renderer) && InlineIterator::boxFor(downcast<RenderBox>(renderer)))
         return true;
-    if (is<RenderText>(renderer) && LayoutIntegration::firstTextRunFor(downcast<RenderText>(renderer)))
+    if (is<RenderText>(renderer) && InlineIterator::firstTextBoxFor(downcast<RenderText>(renderer)))
         return true;
-    if (is<RenderLineBreak>(renderer) && LayoutIntegration::runFor(downcast<RenderLineBreak>(renderer)))
+    if (is<RenderLineBreak>(renderer) && InlineIterator::boxFor(downcast<RenderLineBreak>(renderer)))
         return true;
     return false;
 }
@@ -739,7 +741,7 @@ Position Position::upstream(EditingBoundaryCrossingRule rule) const
         if (is<RenderText>(*renderer)) {
             auto& textRenderer = downcast<RenderText>(*renderer);
 
-            auto firstTextRun = LayoutIntegration::firstTextRunInTextOrderFor(textRenderer);
+            auto [firstTextRun, orderCache] = InlineIterator::firstTextBoxInLogicalOrderFor(textRenderer);
             if (!firstTextRun)
                 continue;
 
@@ -757,7 +759,7 @@ Position Position::upstream(EditingBoundaryCrossingRule rule) const
                 if (textOffset > run->start() && textOffset <= run->end())
                     return currentPosition;
 
-                auto nextRun = run->nextTextRunInTextOrder();
+                auto nextRun = InlineIterator::nextTextBoxInLogicalOrder(run, orderCache);
                 if (textOffset == run->end() + 1 && nextRun && run->line() != nextRun->line())
                     return currentPosition;
 
@@ -846,7 +848,7 @@ Position Position::downstream(EditingBoundaryCrossingRule rule) const
         if (is<RenderText>(*renderer)) {
             auto& textRenderer = downcast<RenderText>(*renderer);
 
-            auto firstTextRun = LayoutIntegration::firstTextRunInTextOrderFor(textRenderer);
+            auto [firstTextRun, orderCache] = InlineIterator::firstTextBoxInLogicalOrderFor(textRenderer);
             if (!firstTextRun)
                 continue;
 
@@ -863,7 +865,7 @@ Position Position::downstream(EditingBoundaryCrossingRule rule) const
                 if (textOffset >= run->start() && textOffset < run->end())
                     return currentPosition;
 
-                auto nextRun = run->nextTextRunInTextOrder();
+                auto nextRun = InlineIterator::nextTextBoxInLogicalOrder(run, orderCache);
                 if (textOffset == run->end() && nextRun && run->line() != nextRun->line())
                     return currentPosition;
 
@@ -935,18 +937,18 @@ bool Position::hasRenderedNonAnonymousDescendantsWithHeight(const RenderElement&
     return false;
 }
 
-bool Position::nodeIsInertOrUserSelectNone(Node* node)
+bool Position::nodeIsUserSelectNone(Node* node)
 {
     if (!node)
         return false;
-    return node->renderer() && (node->renderer()->style().userSelect() == UserSelect::None || node->renderer()->style().effectiveInert());
+    return node->renderer() && (node->renderer()->style().userSelectIncludingInert() == UserSelect::None);
 }
 
 bool Position::nodeIsUserSelectAll(const Node* node)
 {
     if (!node)
         return false;
-    return node->renderer() && (node->renderer()->style().userSelect() == UserSelect::All && !node->renderer()->style().effectiveInert());
+    return node->renderer() && (node->renderer()->style().userSelectIncludingInert() == UserSelect::All);
 }
 
 Node* Position::rootUserSelectAllForNode(Node* node)
@@ -986,16 +988,16 @@ bool Position::isCandidate() const
 
     if (renderer->isBR()) {
         // FIXME: The condition should be m_anchorType == PositionIsBeforeAnchor, but for now we still need to support legacy positions.
-        return !m_offset && m_anchorType != PositionIsAfterAnchor && !nodeIsInertOrUserSelectNone(deprecatedNode()->parentNode());
+        return !m_offset && m_anchorType != PositionIsAfterAnchor && !nodeIsUserSelectNone(deprecatedNode()->parentNode());
     }
 
     if (is<RenderText>(*renderer))
-        return !nodeIsInertOrUserSelectNone(deprecatedNode()) && downcast<RenderText>(*renderer).containsCaretOffset(m_offset);
+        return !nodeIsUserSelectNone(deprecatedNode()) && downcast<RenderText>(*renderer).containsCaretOffset(m_offset);
 
     if (positionBeforeOrAfterNodeIsCandidate(*deprecatedNode())) {
         return ((atFirstEditingPositionForNode() && m_anchorType == PositionIsBeforeAnchor)
             || (atLastEditingPositionForNode() && m_anchorType == PositionIsAfterAnchor))
-            && !nodeIsInertOrUserSelectNone(deprecatedNode()->parentNode());
+            && !nodeIsUserSelectNone(deprecatedNode()->parentNode());
     }
 
     if (is<HTMLHtmlElement>(*m_anchorNode))
@@ -1005,13 +1007,13 @@ bool Position::isCandidate() const
         auto& block = downcast<RenderBlock>(*renderer);
         if (block.logicalHeight() || is<HTMLBodyElement>(*m_anchorNode) || m_anchorNode->isRootEditableElement()) {
             if (!Position::hasRenderedNonAnonymousDescendantsWithHeight(block))
-                return atFirstEditingPositionForNode() && !Position::nodeIsInertOrUserSelectNone(deprecatedNode());
-            return m_anchorNode->hasEditableStyle() && !Position::nodeIsInertOrUserSelectNone(deprecatedNode()) && atEditingBoundary();
+                return atFirstEditingPositionForNode() && !Position::nodeIsUserSelectNone(deprecatedNode());
+            return m_anchorNode->hasEditableStyle() && !Position::nodeIsUserSelectNone(deprecatedNode()) && atEditingBoundary();
         }
         return false;
     }
 
-    return m_anchorNode->hasEditableStyle() && !Position::nodeIsInertOrUserSelectNone(deprecatedNode()) && atEditingBoundary();
+    return m_anchorNode->hasEditableStyle() && !Position::nodeIsUserSelectNone(deprecatedNode()) && atEditingBoundary();
 }
 
 bool Position::isRenderedCharacter() const
@@ -1160,7 +1162,7 @@ static bool isNonTextLeafChild(RenderObject& object)
     return !downcast<RenderElement>(object).firstChild();
 }
 
-static LayoutIntegration::TextRunIterator searchAheadForBetterMatch(RenderText& renderer)
+static InlineIterator::TextBoxIterator searchAheadForBetterMatch(RenderText& renderer)
 {
     RenderBlock* container = renderer.containingBlock();
     RenderObject* next = &renderer;
@@ -1172,7 +1174,7 @@ static LayoutIntegration::TextRunIterator searchAheadForBetterMatch(RenderText& 
         if (isNonTextLeafChild(*next))
             return { };
         if (is<RenderText>(*next)) {
-            if (auto run = LayoutIntegration::firstTextRunInTextOrderFor(downcast<RenderText>(*next)))
+            if (auto [run, orderCache] = InlineIterator::firstTextBoxInLogicalOrderFor(downcast<RenderText>(*next)); run)
                 return run;
         }
     }
@@ -1210,17 +1212,17 @@ InlineRunAndOffset Position::inlineRunAndOffset(Affinity affinity, TextDirection
     if (!renderer)
         return { { }, caretOffset };
 
-    LayoutIntegration::RunIterator run;
+    InlineIterator::LeafBoxIterator run;
 
     if (renderer->isBR()) {
         auto& lineBreakRenderer = downcast<RenderLineBreak>(*renderer);
         if (!caretOffset)
-            run = LayoutIntegration::runFor(lineBreakRenderer);
+            run = InlineIterator::boxFor(lineBreakRenderer);
     } else if (is<RenderText>(*renderer)) {
         auto& textRenderer = downcast<RenderText>(*renderer);
 
-        auto textRun = LayoutIntegration::firstTextRunFor(textRenderer);
-        LayoutIntegration::TextRunIterator candidate;
+        auto textRun = InlineIterator::firstTextBoxFor(textRenderer);
+        InlineIterator::TextBoxIterator candidate;
 
         for (; textRun; ++textRun) {
             unsigned caretMinOffset = textRun->minimumCaretOffset();
@@ -1247,7 +1249,7 @@ InlineRunAndOffset Position::inlineRunAndOffset(Affinity affinity, TextDirection
             candidate = textRun;
         }
 
-        if (candidate && !candidate->nextTextRun() && affinity == Affinity::Downstream) {
+        if (candidate && !candidate->nextTextBox() && affinity == Affinity::Downstream) {
             textRun = searchAheadForBetterMatch(textRenderer);
             if (textRun)
                 caretOffset = textRun->minimumCaretOffset();
@@ -1270,7 +1272,7 @@ InlineRunAndOffset Position::inlineRunAndOffset(Affinity affinity, TextDirection
             return equivalent.inlineRunAndOffset(Affinity::Upstream, primaryDirection);
         }
         if (is<RenderBox>(*renderer)) {
-            run = LayoutIntegration::runFor(downcast<RenderBox>(*renderer));
+            run = InlineIterator::boxFor(downcast<RenderBox>(*renderer));
             if (run && caretOffset > run->minimumCaretOffset() && caretOffset < run->maximumCaretOffset())
                 return { run, caretOffset };
         }

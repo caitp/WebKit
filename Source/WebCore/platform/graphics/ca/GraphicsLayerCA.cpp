@@ -29,7 +29,7 @@
 #if USE(CA)
 
 #include "Animation.h"
-#include "DisplayListRecorder.h"
+#include "DisplayListRecorderImpl.h"
 #include "DisplayListReplayer.h"
 #include "FloatConversion.h"
 #include "FloatRect.h"
@@ -1804,7 +1804,7 @@ void GraphicsLayerCA::recursiveCommitChanges(CommitState& commitState, const Tra
         
         FloatRect initialClip(boundsOrigin(), size());
 
-        DisplayList::Recorder context(*m_displayList, GraphicsContextState(), initialClip, AffineTransform());
+        DisplayList::RecorderImpl context(*m_displayList, GraphicsContextState(), initialClip, AffineTransform());
         paintGraphicsLayerContents(context, FloatRect(FloatPoint(), size()));
     }
 }
@@ -3217,7 +3217,7 @@ void GraphicsLayerCA::updateAnimations()
 
             LayerPropertyAnimation* earliestAnimation = nullptr;
             Vector<RefPtr<PlatformCAAnimation>> caAnimations;
-            for (auto* animation : WTF::makeReversedRange(animations)) {
+            for (auto* animation : makeReversedRange(animations)) {
                 if (auto beginTime = animation->computedBeginTime()) {
                     if (!earliestAnimation || *earliestAnimation->computedBeginTime() > *beginTime)
                         earliestAnimation = animation;

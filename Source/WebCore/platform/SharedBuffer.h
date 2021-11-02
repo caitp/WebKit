@@ -26,13 +26,13 @@
 
 #pragma once
 
-#include <JavaScriptCore/ArrayBuffer.h>
+#include <JavaScriptCore/Forward.h>
+#include <variant>
 #include <wtf/FileSystem.h>
 #include <wtf/Forward.h>
 #include <wtf/Function.h>
 #include <wtf/Span.h>
 #include <wtf/ThreadSafeRefCounted.h>
-#include <wtf/Variant.h>
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
 
@@ -150,8 +150,8 @@ public:
         static Ref<DataSegment> create(FileSystem::MappedFileData&& data) { return adoptRef(*new DataSegment(WTFMove(data))); }
 
         struct Provider {
-            WTF::Function<const uint8_t*()> data;
-            WTF::Function<size_t()> size;
+            Function<const uint8_t*()> data;
+            Function<size_t()> size;
         };
 
         static Ref<DataSegment> create(Provider&& provider) { return adoptRef(*new DataSegment(WTFMove(provider))); }
@@ -182,7 +182,7 @@ public:
         DataSegment(Provider&& provider)
             : m_immutableData(WTFMove(provider)) { }
 
-        Variant<Vector<uint8_t>,
+        std::variant<Vector<uint8_t>,
 #if USE(CF)
             RetainPtr<CFDataRef>,
 #endif
@@ -210,7 +210,7 @@ public:
     DataSegmentVector::const_iterator begin() const { return m_segments.begin(); }
     DataSegmentVector::const_iterator end() const { return m_segments.end(); }
     bool hasOneSegment() const;
-    
+
     // begin and end take O(1) time, this takes O(log(N)) time.
     SharedBufferDataView getSomeData(size_t position) const;
 
@@ -265,16 +265,19 @@ inline Vector<uint8_t> SharedBuffer::extractData()
 
 class WEBCORE_EXPORT SharedBufferDataView {
 public:
-    SharedBufferDataView(Ref<SharedBuffer::DataSegment>&&, size_t);
+    SharedBufferDataView(Ref<SharedBuffer::DataSegment>&&, size_t positionWithinSegment, std::optional<size_t> newSize = std::nullopt);
+    SharedBufferDataView(const SharedBufferDataView&, size_t newSize);
     size_t size() const;
     const uint8_t* data() const;
     const char* dataAsCharPtr() const { return reinterpret_cast<const char*>(data()); }
+    Ref<SharedBuffer> createSharedBuffer() const;
 #if USE(FOUNDATION)
     RetainPtr<NSData> createNSData() const;
 #endif
 private:
-    size_t m_positionWithinSegment;
-    Ref<SharedBuffer::DataSegment> m_segment;
+    const Ref<SharedBuffer::DataSegment> m_segment;
+    const size_t m_positionWithinSegment;
+    const size_t m_size;
 };
 
 RefPtr<SharedBuffer> utf8Buffer(const String&);

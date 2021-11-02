@@ -31,6 +31,7 @@
 #include <WebCore/DisplayList.h>
 #include <WebCore/DisplayListItems.h>
 #include <WebCore/DisplayListReplayer.h>
+#include <WebCore/DisplayListResourceHeap.h>
 #include <WebCore/Gradient.h>
 #include <WebCore/GraphicsContextCG.h>
 
@@ -72,10 +73,10 @@ TEST(DisplayListTests, ReplayWithMissingResource)
 
     {
         auto imageBuffer = ImageBuffer::create({ 100, 100 }, RenderingMode::Unaccelerated, 1, colorSpace, PixelFormat::BGRA8);
-        ImageBufferHashMap imageBufferMap;
-        imageBufferMap.set(imageBufferIdentifier, imageBuffer.releaseNonNull());
+        LocalResourceHeap resourceHeap;
+        resourceHeap.add(imageBufferIdentifier, imageBuffer.releaseNonNull());
 
-        Replayer replayer { context, list, &imageBufferMap };
+        Replayer replayer { context, list, &resourceHeap };
         auto result = replayer.replay();
         EXPECT_EQ(result.numberOfBytesRead, list.sizeInBytes());
         EXPECT_EQ(result.reasonForStopping, StopReplayReason::ReplayedAllItems);
@@ -147,7 +148,7 @@ TEST(DisplayListTests, InlineItemValidationFailure)
     auto cgContext = adoptCF(CGBitmapContextCreate(nullptr, contextWidth, contextHeight, 8, 4 * contextWidth, colorSpace.get(), kCGImageAlphaPremultipliedLast));
     GraphicsContextCG context { cgContext.get() };
 
-    auto runTestWithInvalidIdentifier = [&](FlushIdentifier identifier) {
+    auto runTestWithInvalidIdentifier = [&](GraphicsContextFlushIdentifier identifier) {
         EXPECT_FALSE(identifier.isValid());
 
         DisplayList list;
@@ -163,8 +164,8 @@ TEST(DisplayListTests, InlineItemValidationFailure)
         EXPECT_EQ(result.reasonForStopping, StopReplayReason::InvalidItemOrExtent);
     };
 
-    runTestWithInvalidIdentifier(FlushIdentifier { });
-    runTestWithInvalidIdentifier(FlushIdentifier { WTF::HashTableDeletedValue });
+    runTestWithInvalidIdentifier(GraphicsContextFlushIdentifier { });
+    runTestWithInvalidIdentifier(GraphicsContextFlushIdentifier { WTF::HashTableDeletedValue });
 }
 
 } // namespace TestWebKitAPI

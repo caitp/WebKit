@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include "AudioSampleBufferList.h"
+#include "CARingBuffer.h"
 #include <CoreAudio/CoreAudioTypes.h>
 #include <wtf/LoggerHelper.h>
 #include <wtf/MediaTime.h>
@@ -33,12 +33,13 @@
 #include <wtf/ThreadSafeRefCounted.h>
 #include <wtf/text/WTFString.h>
 
+typedef struct OpaqueAudioConverter* AudioConverterRef;
 typedef struct opaqueCMSampleBuffer *CMSampleBufferRef;
 
 namespace WebCore {
 
-class CAAudioStreamDescription;
-class CARingBuffer;
+class AudioSampleBufferList;
+class PlatformAudioData;
 
 class AudioSampleDataSource : public ThreadSafeRefCounted<AudioSampleDataSource, WTF::DestructionThread::MainRunLoop>
 #if !RELEASE_LOG_DISABLED
@@ -46,7 +47,7 @@ class AudioSampleDataSource : public ThreadSafeRefCounted<AudioSampleDataSource,
 #endif
     {
 public:
-    static Ref<AudioSampleDataSource> create(size_t, WTF::LoggerHelper&, size_t waitToStartForPushCount = 2);
+    static Ref<AudioSampleDataSource> create(size_t, LoggerHelper&, size_t waitToStartForPushCount = 2);
 
     ~AudioSampleDataSource();
 
@@ -57,10 +58,10 @@ public:
     void pushSamples(const AudioStreamBasicDescription&, CMSampleBufferRef);
 
     enum PullMode { Copy, Mix };
-    bool pullSamples(AudioSampleBufferList&, size_t, uint64_t, double, PullMode);
     bool pullSamples(AudioBufferList&, size_t, uint64_t, double, PullMode);
 
     bool pullAvailableSamplesAsChunks(AudioBufferList&, size_t frameCount, uint64_t timeStamp, Function<void()>&&);
+    bool pullAvailableSampleChunk(AudioBufferList&, size_t frameCount, uint64_t timeStamp, PullMode);
 
     void setVolume(float volume) { m_volume = volume; }
     float volume() const { return m_volume; }
@@ -69,6 +70,9 @@ public:
     bool muted() const { return m_muted; }
 
     const CAAudioStreamDescription* inputDescription() const { return m_inputDescription ? &m_inputDescription.value() : nullptr; }
+    const CAAudioStreamDescription* outputDescription() const { return m_outputDescription ? &m_outputDescription.value() : nullptr; }
+
+    void recomputeSampleOffset() { m_shouldComputeOutputSampleOffset = true; }
 
 #if !RELEASE_LOG_DISABLED
     const Logger& logger() const final { return m_logger; }
@@ -82,9 +86,9 @@ private:
     AudioSampleDataSource(size_t, LoggerHelper&, size_t waitToStartForPushCount);
 
     OSStatus setupConverter();
-    bool pullSamplesInternal(AudioBufferList&, size_t, uint64_t, double, PullMode);
 
     void pushSamplesInternal(const AudioBufferList&, const MediaTime&, size_t frameCount);
+    bool pullSamplesInternal(AudioBufferList&, size_t sampleCount, uint64_t timeStamp, PullMode);
 
     std::optional<CAAudioStreamDescription> m_inputDescription;
     std::optional<CAAudioStreamDescription> m_outputDescription;

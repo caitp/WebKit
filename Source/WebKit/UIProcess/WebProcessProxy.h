@@ -31,7 +31,6 @@
 #include "DisplayLinkObserverID.h"
 #include "MessageReceiverMap.h"
 #include "NetworkProcessProxy.h"
-#include "PluginInfoStore.h"
 #include "ProcessLauncher.h"
 #include "ProcessTerminationReason.h"
 #include "ProcessThrottler.h"
@@ -357,7 +356,7 @@ public:
     void updateAudibleMediaAssertions();
 
 #if ENABLE(SERVICE_WORKER)
-    void establishServiceWorkerContext(const WebPreferencesStore&, CompletionHandler<void()>&&);
+    void establishServiceWorkerContext(const WebPreferencesStore&, const WebCore::RegistrableDomain&, std::optional<WebCore::ServiceWorkerClientIdentifier> serviceWorkerPageIdentifier, CompletionHandler<void()>&&);
     void setServiceWorkerUserAgent(const String&);
     void updateServiceWorkerPreferencesStore(const WebPreferencesStore&);
     bool hasServiceWorkerPageProxy(WebPageProxyIdentifier pageProxyID) { return m_serviceWorkerInformation && m_serviceWorkerInformation->serviceWorkerPageProxyID == pageProxyID; }
@@ -366,6 +365,8 @@ public:
     void unregisterServiceWorkerClientProcess(WebProcessProxy&);
     bool hasServiceWorkerForegroundActivityForTesting() const;
     bool hasServiceWorkerBackgroundActivityForTesting() const;
+    void startServiceWorkerBackgroundProcessing();
+    void endServiceWorkerBackgroundProcessing();
 #endif
     void setAssertionTypeForTesting(ProcessAssertionType type) { didSetAssertionType(type); }
 
@@ -406,7 +407,7 @@ public:
     static void muteCaptureInPagesExcept(WebCore::PageIdentifier);
     SpeechRecognitionRemoteRealtimeMediaSourceManager& ensureSpeechRecognitionRemoteRealtimeMediaSourceManager();
 #endif
-    void pageMutedStateChanged(WebCore::PageIdentifier, WebCore::MediaProducer::MutedStateFlags);
+    void pageMutedStateChanged(WebCore::PageIdentifier, WebCore::MediaProducerMutedStateFlags);
     void pageIsBecomingInvisible(WebCore::PageIdentifier);
 
 #if PLATFORM(COCOA) && ENABLE(REMOTE_INSPECTOR)
@@ -468,14 +469,6 @@ private:
 
     bool hasProvisionalPageWithID(WebPageProxyIdentifier) const;
     bool isAllowedToUpdateBackForwardItem(WebBackForwardListItem&) const;
-
-    // Plugins
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    void getPlugins(bool refresh, CompletionHandler<void(Vector<WebCore::PluginInfo>&& plugins, Vector<WebCore::PluginInfo>&& applicationPlugins, std::optional<Vector<WebCore::SupportedPluginIdentifier>>&&)>&&);
-#endif // ENABLE(NETSCAPE_PLUGIN_API)
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    void getPluginProcessConnection(uint64_t pluginProcessToken, Messages::WebProcessProxy::GetPluginProcessConnectionDelayedReply&&);
-#endif
     
     void getNetworkProcessConnection(Messages::WebProcessProxy::GetNetworkProcessConnectionDelayedReply&&);
 
@@ -549,7 +542,7 @@ private:
     public:
         WeakOrStrongPtr(T& object, IsWeak isWeak)
             : m_isWeak(isWeak)
-            , m_weakObject(makeWeakPtr(object))
+            , m_weakObject(object)
         {
             updateStrongReference();
         }
@@ -657,6 +650,7 @@ private:
         WeakHashSet<WebProcessProxy> clientProcesses;
     };
     std::optional<ServiceWorkerInformation> m_serviceWorkerInformation;
+    bool m_hasServiceWorkerBackgroundProcessing { false };
 
     HashMap<WebCore::SleepDisablerIdentifier, std::unique_ptr<WebCore::SleepDisabler>> m_sleepDisablers;
 

@@ -28,6 +28,8 @@
 
 #include "FileSystemStorageError.h"
 #include "FileSystemStorageManager.h"
+#include "SharedFileHandle.h"
+#include <wtf/Scope.h>
 
 namespace WebKit {
 
@@ -39,7 +41,7 @@ constexpr char pathSeparator = '/';
 
 FileSystemStorageHandle::FileSystemStorageHandle(FileSystemStorageManager& manager, Type type, String&& path, String&& name)
     : m_identifier(WebCore::FileSystemHandleIdentifier::generateThreadSafe())
-    , m_manager(makeWeakPtr(manager))
+    , m_manager(manager)
     , m_type(type)
     , m_path(WTFMove(path))
     , m_name(WTFMove(name))
@@ -51,11 +53,28 @@ FileSystemStorageHandle::FileSystemStorageHandle(FileSystemStorageManager& manag
         FileSystem::makeAllDirectories(m_path);
         return;
     case FileSystemStorageHandle::Type::File:
-        if (FileSystem::fileExists(m_path))
-            return;
-        auto handle = FileSystem::openFile(m_path, FileSystem::FileOpenMode::Write);
-        FileSystem::closeFile(handle);
+        if (!FileSystem::fileExists(m_path)) {
+            auto handle = FileSystem::openFile(m_path, FileSystem::FileOpenMode::Write);
+            FileSystem::closeFile(handle);
+        }
+        return;
+    case FileSystemStorageHandle::Type::Any:
+        ASSERT_NOT_REACHED();
     }
+}
+
+FileSystemStorageHandle::~FileSystemStorageHandle()
+{
+    if (m_handle != FileSystem::invalidPlatformFileHandle)
+        FileSystem::closeFile(m_handle);
+}
+
+void FileSystemStorageHandle::close()
+{
+    if (!m_manager)
+        return;
+
+    m_manager->closeHandle(*this);
 }
 
 bool FileSystemStorageHandle::isSameEntry(WebCore::FileSystemHandleIdentifier identifier)
@@ -67,6 +86,11 @@ bool FileSystemStorageHandle::isSameEntry(WebCore::FileSystemHandleIdentifier id
     return m_path == path;
 }
 
+static bool isValidFileName(const String& name)
+{
+    return name != "." && name != ".." && !name.contains(pathSeparator);
+}
+
 Expected<WebCore::FileSystemHandleIdentifier, FileSystemStorageError> FileSystemStorageHandle::requestCreateHandle(IPC::Connection::UniqueID connection, Type type, String&& name, bool createIfNecessary)
 {
     if (m_type != FileSystemStorageHandle::Type::Directory)
@@ -76,7 +100,7 @@ Expected<WebCore::FileSystemHandleIdentifier, FileSystemStorageError> FileSystem
         return makeUnexpected(FileSystemStorageError::Unknown);
 
     // https://wicg.github.io/file-system-access/#valid-file-name
-    if (name == "." || name == ".." || name.contains(pathSeparator))
+    if (!isValidFileName(name))
         return makeUnexpected(FileSystemStorageError::InvalidName);
 
     auto path = FileSystem::pathByAppendingComponent(m_path, name);
@@ -137,6 +161,146 @@ Expected<Vector<String>, FileSystemStorageError> FileSystemStorageHandle::resolv
 
     auto restPath = path.substring(m_path.length());
     return restPath.split(pathSeparator);
+}
+
+Expected<FileSystemStorageHandle::AccessHandleInfo, FileSystemStorageError> FileSystemStorageHandle::createSyncAccessHandle()
+{
+    if (!m_manager)
+        return makeUnexpected(FileSystemStorageError::Unknown);
+
+    bool acquired = m_manager->acquireLockForFile(m_path, m_identifier);
+    if (!acquired)
+        return makeUnexpected(FileSystemStorageError::InvalidState);
+
+    m_handle = FileSystem::openFile(m_path, FileSystem::FileOpenMode::ReadWrite);
+    if (m_handle == FileSystem::invalidPlatformFileHandle)
+        return makeUnexpected(FileSystemStorageError::Unknown);
+
+    auto ipcHandle = IPC::SharedFileHandle::create(m_handle);
+    if (!ipcHandle) {
+        FileSystem::closeFile(m_handle);
+        return makeUnexpected(FileSystemStorageError::BackendNotSupported);
+    }
+
+    ASSERT(!m_activeSyncAccessHandle);
+    m_activeSyncAccessHandle = WebCore::FileSystemSyncAccessHandleIdentifier::generateThreadSafe();
+    return std::pair { *m_activeSyncAccessHandle, WTFMove(*ipcHandle) };
+}
+
+Expected<uint64_t, FileSystemStorageError> FileSystemStorageHandle::getSize(WebCore::FileSystemSyncAccessHandleIdentifier accessHandleIdentifier)
+{
+    if (!m_manager)
+        return makeUnexpected(FileSystemStorageError::Unknown);
+
+    if (!m_activeSyncAccessHandle || *m_activeSyncAccessHandle != accessHandleIdentifier)
+        return makeUnexpected(FileSystemStorageError::Unknown);
+
+    auto size = FileSystem::fileSize(m_path);
+    if (!size)
+        return makeUnexpected(FileSystemStorageError::Unknown);
+
+    return size.value();
+}
+
+std::optional<FileSystemStorageError> FileSystemStorageHandle::truncate(WebCore::FileSystemSyncAccessHandleIdentifier accessHandleIdentifier, uint64_t size)
+{
+    if (!m_manager)
+        return FileSystemStorageError::Unknown;
+
+    if (!m_activeSyncAccessHandle || *m_activeSyncAccessHandle != accessHandleIdentifier)
+        return FileSystemStorageError::Unknown;
+
+    ASSERT(m_handle != FileSystem::invalidPlatformFileHandle);
+    auto result = FileSystem::truncateFile(m_handle, size);
+    if (!result)
+        return FileSystemStorageError::Unknown;
+
+    return std::nullopt;
+}
+
+std::optional<FileSystemStorageError> FileSystemStorageHandle::flush(WebCore::FileSystemSyncAccessHandleIdentifier accessHandleIdentifier)
+{
+    if (!m_manager)
+        return FileSystemStorageError::Unknown;
+
+    if (!m_activeSyncAccessHandle || *m_activeSyncAccessHandle != accessHandleIdentifier)
+        return FileSystemStorageError::Unknown;
+
+    ASSERT(m_handle != FileSystem::invalidPlatformFileHandle);
+    auto result = FileSystem::flushFile(m_handle);
+    if (!result)
+        return FileSystemStorageError::Unknown;
+
+    return std::nullopt;
+}
+
+std::optional<FileSystemStorageError> FileSystemStorageHandle::close(WebCore::FileSystemSyncAccessHandleIdentifier accessHandleIdentifier)
+{
+    if (!m_activeSyncAccessHandle || *m_activeSyncAccessHandle != accessHandleIdentifier)
+        return FileSystemStorageError::Unknown;
+
+    ASSERT(m_handle != FileSystem::invalidPlatformFileHandle);
+    FileSystem::closeFile(m_handle);
+
+    if (!m_manager)
+        return FileSystemStorageError::Unknown;
+
+    m_manager->releaseLockForFile(m_path, m_identifier);
+    m_activeSyncAccessHandle = std::nullopt;
+
+    return std::nullopt;
+}
+
+Expected<Vector<String>, FileSystemStorageError> FileSystemStorageHandle::getHandleNames()
+{
+    if (m_type != Type::Directory)
+        return makeUnexpected(FileSystemStorageError::TypeMismatch);
+
+    return FileSystem::listDirectory(m_path);
+}
+
+Expected<std::pair<WebCore::FileSystemHandleIdentifier, bool>, FileSystemStorageError> FileSystemStorageHandle::getHandle(IPC::Connection::UniqueID connection, String&& name)
+{
+    bool createIfNecessary = false;
+    auto result = requestCreateHandle(connection, FileSystemStorageHandle::Type::Any, WTFMove(name), createIfNecessary);
+    if (!result)
+        return makeUnexpected(result.error());
+
+    auto resultType = m_manager->getType(result.value());
+    ASSERT(resultType != FileSystemStorageHandle::Type::Any);
+    return std::pair { result.value(), resultType == FileSystemStorageHandle::Type::Directory };
+}
+
+std::optional<FileSystemStorageError> FileSystemStorageHandle::move(WebCore::FileSystemHandleIdentifier destinationIdentifier, const String& newName)
+{
+    if (!m_manager)
+        return FileSystemStorageError::Unknown;
+
+    // Do not move file if there is ongoing operation.
+    if (m_activeSyncAccessHandle)
+        return FileSystemStorageError::InvalidState;
+
+    if (m_manager->getType(destinationIdentifier) != Type::Directory)
+        return FileSystemStorageError::TypeMismatch;
+
+    auto path = m_manager->getPath(destinationIdentifier);
+    if (path.isEmpty())
+        return FileSystemStorageError::Unknown;
+
+    if (!isValidFileName(newName))
+        return FileSystemStorageError::InvalidName;
+
+    auto destinationPath = FileSystem::pathByAppendingComponent(path, newName);
+    if (FileSystem::fileExists(destinationPath))
+        return FileSystemStorageError::Unknown;
+
+    if (!FileSystem::moveFile(m_path, destinationPath))
+        return FileSystemStorageError::Unknown;
+
+    m_path = destinationPath;
+    m_name = newName;
+
+    return std::nullopt;
 }
 
 } // namespace WebKit

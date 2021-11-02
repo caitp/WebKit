@@ -108,7 +108,7 @@ void WebFrame::initWithCoreMainFrame(WebPage& page, Frame& coreFrame)
 {
     page.send(Messages::WebPageProxy::DidCreateMainFrame(frameID()));
 
-    m_coreFrame = makeWeakPtr(coreFrame);
+    m_coreFrame = coreFrame;
     m_coreFrame->tree().setName(String());
     m_coreFrame->init();
 }
@@ -119,7 +119,7 @@ Ref<WebFrame> WebFrame::createSubframe(WebPage* page, const String& frameName, H
     page->send(Messages::WebPageProxy::DidCreateSubframe(frame->frameID()));
 
     auto coreFrame = Frame::create(page->corePage(), ownerElement, makeUniqueRef<WebFrameLoaderClient>(frame.get()));
-    frame->m_coreFrame = makeWeakPtr(coreFrame.get());
+    frame->m_coreFrame = coreFrame;
 
     coreFrame->tree().setName(frameName);
     if (ownerElement) {
@@ -193,6 +193,7 @@ FrameInfoData WebFrame::info() const
         // FIXME: This should use the full request.
         ResourceRequest(url()),
         SecurityOriginData::fromFrame(m_coreFrame.get()),
+        m_coreFrame ? m_coreFrame->tree().name().string() : String(),
         m_frameID,
         parent ? std::optional<WebCore::FrameIdentifier> { parent->frameID() } : std::nullopt,
     };
@@ -234,6 +235,8 @@ void WebFrame::continueWillSubmitForm(FormSubmitListenerIdentifier listenerID)
 
 void WebFrame::invalidatePolicyListeners()
 {
+    Ref protectedThis { *this };
+
     m_policyDownloadID = { };
 
     auto pendingPolicyChecks = std::exchange(m_pendingPolicyChecks, { });
@@ -529,6 +532,19 @@ JSGlobalContextRef WebFrame::jsContextForWorld(InjectedBundleScriptWorld* world)
     return toGlobalRef(m_coreFrame->script().globalObject(world->coreWorld()));
 }
 
+JSGlobalContextRef WebFrame::jsContextForServiceWorkerWorld(InjectedBundleScriptWorld* world)
+{
+#if ENABLE(SERVICE_WORKER)
+    if (!m_coreFrame || !m_coreFrame->page())
+        return nullptr;
+
+    return toGlobalRef(m_coreFrame->page()->serviceWorkerGlobalObject(world->coreWorld()));
+#else
+    UNUSED_PARAM(world);
+    return nullptr;
+#endif
+}
+
 bool WebFrame::handlesPageScaleGesture() const
 {
     auto* pluginView = WebPage::pluginViewForFrame(m_coreFrame.get());
@@ -698,14 +714,8 @@ void WebFrame::stopLoading()
 
 WebFrame* WebFrame::frameForContext(JSContextRef context)
 {
-    JSC::JSGlobalObject* globalObjectObj = toJS(context);
-    JSDOMWindow* window = jsDynamicCast<JSDOMWindow*>(globalObjectObj->vm(), globalObjectObj);
-    if (!window)
-        return nullptr;
-    auto* coreFrame = window->wrapped().frame();
-    if (!coreFrame)
-        return nullptr;
-    return WebFrame::fromCoreFrame(*coreFrame);
+    auto* coreFrame = Frame::fromJSContext(context);
+    return coreFrame ? WebFrame::fromCoreFrame(*coreFrame) : nullptr;
 }
 
 JSValueRef WebFrame::jsWrapperForWorld(InjectedBundleNodeHandle* nodeHandle, InjectedBundleScriptWorld* world)

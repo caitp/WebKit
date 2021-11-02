@@ -52,19 +52,18 @@ set(WebCore_PRIVATE_INCLUDE_DIRECTORIES
     "${WEBCORE_DIR}/Modules/permissions"
     "${WEBCORE_DIR}/Modules/pictureinpicture"
     "${WEBCORE_DIR}/Modules/plugins"
+    "${WEBCORE_DIR}/Modules/push-api"
     "${WEBCORE_DIR}/Modules/remoteplayback"
     "${WEBCORE_DIR}/Modules/speech"
     "${WEBCORE_DIR}/Modules/storage"
     "${WEBCORE_DIR}/Modules/streams"
+    "${WEBCORE_DIR}/Modules/web-locks"
     "${WEBCORE_DIR}/Modules/webaudio"
     "${WEBCORE_DIR}/Modules/webauthn"
     "${WEBCORE_DIR}/Modules/webauthn/cbor"
     "${WEBCORE_DIR}/Modules/webauthn/fido"
     "${WEBCORE_DIR}/Modules/webdatabase"
     "${WEBCORE_DIR}/Modules/webdriver"
-    "${WEBCORE_DIR}/Modules/webgpu"
-    "${WEBCORE_DIR}/Modules/webgpu/WHLSL"
-    "${WEBCORE_DIR}/Modules/webgpu/WHLSL/AST"
     "${WEBCORE_DIR}/Modules/websockets"
     "${WEBCORE_DIR}/Modules/webxr"
     "${WEBCORE_DIR}/accessibility"
@@ -209,12 +208,13 @@ set(WebCore_IDL_INCLUDES
     Modules/notifications
     Modules/paymentrequest
     Modules/permissions
+    Modules/push-api
     Modules/speech
     Modules/storage
     Modules/streams
+    Modules/web-locks
     Modules/webaudio
     Modules/webdatabase
-    Modules/webgpu
     Modules/websockets
 
     bindings/js
@@ -258,7 +258,9 @@ set(WebCore_NON_SVG_IDL_FILES
     Modules/credentialmanagement/Navigator+Credentials.idl
 
     Modules/encryptedmedia/MediaKeyEncryptionScheme.idl
+    Modules/encryptedmedia/MediaKeyMessageEventInit.idl
     Modules/encryptedmedia/MediaKeyMessageEvent.idl
+    Modules/encryptedmedia/MediaKeyMessageType.idl
     Modules/encryptedmedia/MediaKeySession.idl
     Modules/encryptedmedia/MediaKeySessionType.idl
     Modules/encryptedmedia/MediaKeyStatusMap.idl
@@ -295,6 +297,7 @@ set(WebCore_NON_SVG_IDL_FILES
     Modules/filesystemaccess/FileSystemDirectoryHandle.idl
     Modules/filesystemaccess/FileSystemFileHandle.idl
     Modules/filesystemaccess/FileSystemHandle.idl
+    Modules/filesystemaccess/FileSystemSyncAccessHandle.idl
     Modules/filesystemaccess/StorageManager+FileSystemAccess.idl
 
     Modules/geolocation/Geolocation.idl
@@ -340,6 +343,7 @@ set(WebCore_NON_SVG_IDL_FILES
     Modules/mediacapabilities/Navigator+MediaCapabilities.idl
     Modules/mediacapabilities/TransferFunction.idl
     Modules/mediacapabilities/VideoConfiguration.idl
+    Modules/mediacapabilities/WorkerNavigator+MediaCapabilities.idl
 
     Modules/mediacontrols/MediaControlsHost.idl
 
@@ -496,6 +500,19 @@ set(WebCore_NON_SVG_IDL_FILES
     Modules/pictureinpicture/HTMLVideoElement+PictureInPicture.idl
     Modules/pictureinpicture/PictureInPictureWindow.idl
 
+    Modules/push-api/PushEncryptionKeyName.idl
+    Modules/push-api/PushEvent.idl
+    Modules/push-api/PushEventInit.idl
+    Modules/push-api/PushManager.idl
+    Modules/push-api/PushMessageData.idl
+    Modules/push-api/PushPermissionState.idl
+    Modules/push-api/PushSubscription.idl
+    Modules/push-api/PushSubscriptionJSON.idl
+    Modules/push-api/PushSubscriptionOptions.idl
+    Modules/push-api/PushSubscriptionOptionsInit.idl
+    Modules/push-api/ServiceWorkerGlobalScope+PushAPI.idl
+    Modules/push-api/ServiceWorkerRegistration+PushAPI.idl
+
     Modules/remoteplayback/RemotePlayback.idl
     Modules/remoteplayback/RemotePlaybackAvailabilityCallback.idl
 
@@ -531,6 +548,12 @@ set(WebCore_NON_SVG_IDL_FILES
     Modules/streams/WritableStreamDefaultController.idl
     Modules/streams/WritableStreamDefaultWriter.idl
     Modules/streams/WritableStreamSink.idl
+
+    Modules/web-locks/NavigatorLocks.idl
+    Modules/web-locks/WebLock.idl
+    Modules/web-locks/WebLockGrantedCallback.idl
+    Modules/web-locks/WebLockManager.idl
+    Modules/web-locks/WebLockMode.idl
 
     Modules/webaudio/AnalyserNode.idl
     Modules/webaudio/AnalyserOptions.idl
@@ -1018,6 +1041,7 @@ set(WebCore_NON_SVG_IDL_FILES
     html/HTMLTrackElement.idl
     html/HTMLUListElement.idl
     html/HTMLUnknownElement.idl
+    html/HTMLVideoElement+RequestVideoFrameCallback.idl
     html/HTMLVideoElement.idl
     html/ImageBitmap.idl
     html/ImageBitmapOptions.idl
@@ -1033,6 +1057,8 @@ set(WebCore_NON_SVG_IDL_FILES
     html/TimeRanges.idl
     html/URLSearchParams.idl
     html/ValidityState.idl
+    html/VideoFrameMetadata.idl
+    html/VideoFrameRequestCallback.idl
     html/VoidCallback.idl
 
     html/canvas/CanvasCompositing.idl
@@ -1398,14 +1424,21 @@ endif ()
 list(APPEND WebCore_NON_SVG_IDL_FILES
     Modules/webxr/Navigator+WebXR.idl
     Modules/webxr/WebXRBoundedReferenceSpace.idl
+    Modules/webxr/WebXRFrame+HandInput.idl
     Modules/webxr/WebXRFrame.idl
+    Modules/webxr/WebXRHand.idl
+    Modules/webxr/WebXRInputSource+Gamepad.idl
+    Modules/webxr/WebXRInputSource+HandInput.idl
     Modules/webxr/WebXRInputSource.idl
     Modules/webxr/WebXRInputSourceArray.idl
+    Modules/webxr/WebXRJointPose.idl
+    Modules/webxr/WebXRJointSpace.idl
     Modules/webxr/WebXRLayer.idl
     Modules/webxr/WebXRPose.idl
     Modules/webxr/WebXRReferenceSpace.idl
     Modules/webxr/WebXRRenderState.idl
     Modules/webxr/WebXRRigidTransform.idl
+    Modules/webxr/WebXRSession+AR.idl
     Modules/webxr/WebXRSession.idl
     Modules/webxr/WebXRSpace.idl
     Modules/webxr/WebXRSystem.idl
@@ -1416,6 +1449,7 @@ list(APPEND WebCore_NON_SVG_IDL_FILES
     Modules/webxr/XREnvironmentBlendMode.idl
     Modules/webxr/XREye.idl
     Modules/webxr/XRFrameRequestCallback.idl
+    Modules/webxr/XRHandJoint.idl
     Modules/webxr/XRHandedness.idl
     Modules/webxr/XRInputSourceEvent.idl
     Modules/webxr/XRInputSourcesChangeEvent.idl
@@ -1701,9 +1735,9 @@ if (ENABLE_WEBGL)
             ${WEBCORE_DIR}/platform/graphics/angle
         )
         list(APPEND WebCore_SOURCES
+            platform/graphics/angle/ANGLEUtilities.cpp
             platform/graphics/angle/ExtensionsGLANGLE.cpp
             platform/graphics/angle/GraphicsContextGLANGLE.cpp
-            platform/graphics/angle/GraphicsContextGLANGLEEGLUtilities.cpp
             platform/graphics/angle/TemporaryANGLESetting.cpp
         )
 
@@ -2241,7 +2275,7 @@ endif ()
 
 WEBKIT_COPY_FILES(Copy_WebCoreTestSupportPrivateHeaders
     DESTINATION ${WebCore_PRIVATE_FRAMEWORK_HEADERS_DIR}/WebCoreTestSupport
-    FILES testing/js/WebCoreTestSupport.h
+    FILES testing/js/WebCoreTestSupport.h testing/cocoa/WebArchiveDumpSupport.h
     FLATTENED
 )
 list(APPEND WebCoreTestSupport_INTERFACE_DEPENDENCIES Copy_WebCoreTestSupportPrivateHeaders)
@@ -2251,7 +2285,7 @@ list(APPEND WebCoreTestSupport_PRIVATE_INCLUDE_DIRECTORIES ${WebCore_PRIVATE_INC
 list(APPEND WebCoreTestSupport_SYSTEM_INCLUDE_DIRECTORIES ${WebCore_SYSTEM_INCLUDE_DIRECTORIES})
 
 if (WebCore_LIBRARY_TYPE STREQUAL SHARED)
-    list(APPEND WebCoreTestSupport_LIBRARIES WebCore)
+    list(APPEND WebCoreTestSupport_PRIVATE_LIBRARIES WebCore)
 else ()
     list(APPEND WebCoreTestSupport_LIBRARIES ${WebCore_LIBRARIES})
     list(APPEND WebCoreTestSupport_PRIVATE_LIBRARIES ${WebCore_PRIVATE_LIBRARIES})

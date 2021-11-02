@@ -157,14 +157,14 @@ static Ref<WorkQueue> registrationDatabaseWorkQueue()
     static LazyNeverDestroyed<Ref<WorkQueue>> workQueue;
     static std::once_flag onceKey;
     std::call_once(onceKey, [] {
-        workQueue.construct(WorkQueue::create("ServiceWorker I/O Thread", WorkQueue::Type::Serial));
+        workQueue.construct(WorkQueue::create("ServiceWorker I/O Thread"));
     });
     return workQueue;
 }
 
 RegistrationDatabase::RegistrationDatabase(RegistrationStore& store, String&& databaseDirectory)
     : m_workQueue(registrationDatabaseWorkQueue())
-    , m_store(makeWeakPtr(store))
+    , m_store(store)
     , m_databaseDirectory(WTFMove(databaseDirectory))
     , m_databaseFilePath(FileSystem::pathByAppendingComponent(m_databaseDirectory, databaseFilename()))
 {
@@ -575,7 +575,6 @@ String RegistrationDatabase::importRecords()
         }
 
         auto script = scriptStorage().retrieve(*key, scriptURL);
-        ASSERT(script);
         if (!script) {
             RELEASE_LOG_ERROR(ServiceWorker, "RegistrationDatabase::importRecords: Failed to retrieve main script for %s from disk", scriptURL.string().utf8().data());
             continue;
@@ -585,7 +584,7 @@ String RegistrationDatabase::importRecords()
         auto registrationIdentifier = ServiceWorkerRegistrationIdentifier::generate();
         auto serviceWorkerData = ServiceWorkerData { workerIdentifier, scriptURL, ServiceWorkerState::Activated, *workerType, registrationIdentifier };
         auto registration = ServiceWorkerRegistrationData { WTFMove(*key), registrationIdentifier, WTFMove(scopeURL), *updateViaCache, lastUpdateCheckTime, std::nullopt, std::nullopt, WTFMove(serviceWorkerData) };
-        auto contextData = ServiceWorkerContextData { std::nullopt, WTFMove(registration), workerIdentifier, WTFMove(script), WTFMove(*certificateInfo), WTFMove(*contentSecurityPolicy), WTFMove(*coep), WTFMove(referrerPolicy), WTFMove(scriptURL), *workerType, true, LastNavigationWasAppInitiated::Yes, WTFMove(scriptResourceMap) };
+        auto contextData = ServiceWorkerContextData { std::nullopt, WTFMove(registration), workerIdentifier, WTFMove(script), WTFMove(*certificateInfo), WTFMove(*contentSecurityPolicy), WTFMove(*coep), WTFMove(referrerPolicy), WTFMove(scriptURL), *workerType, true, LastNavigationWasAppInitiated::Yes, WTFMove(scriptResourceMap), std::nullopt };
 
         callOnMainThread([protectedThis = Ref { *this }, contextData = contextData.isolatedCopy()]() mutable {
             protectedThis->addRegistrationToStore(WTFMove(contextData));

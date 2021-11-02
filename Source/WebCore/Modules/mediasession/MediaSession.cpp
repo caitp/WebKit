@@ -66,7 +66,7 @@ static const char* logClassName()
 static PlatformMediaSession::RemoteControlCommandType platformCommandForMediaSessionAction(MediaSessionAction action)
 {
     static const auto commandMap = makeNeverDestroyed([] {
-        using ActionToCommandMap = HashMap<MediaSessionAction, PlatformMediaSession::RemoteControlCommandType, WTF::IntHash<MediaSessionAction>, WTF::StrongEnumHashTraits<MediaSessionAction>>;
+        using ActionToCommandMap = HashMap<MediaSessionAction, PlatformMediaSession::RemoteControlCommandType, IntHash<MediaSessionAction>, WTF::StrongEnumHashTraits<MediaSessionAction>>;
 
         return ActionToCommandMap {
             { MediaSessionAction::Play, PlatformMediaSession::PlayCommand },
@@ -144,7 +144,7 @@ Ref<MediaSession> MediaSession::create(Navigator& navigator)
 
 MediaSession::MediaSession(Navigator& navigator)
     : ActiveDOMObject(navigator.scriptExecutionContext())
-    , m_navigator(makeWeakPtr(navigator))
+    , m_navigator(navigator)
 #if ENABLE(MEDIA_SESSION_COORDINATOR)
     , m_coordinator(MediaSessionCoordinator::create(navigator.scriptExecutionContext()))
 #endif

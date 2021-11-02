@@ -1,3 +1,568 @@
+2021-11-01  Brady Eidson  <beidson@apple.com>
+
+        Make WebChromeClient's m_webView pointer weak.
+        https://bugs.webkit.org/show_bug.cgi?id=232588
+
+        Reviewed by David Kilzer.
+
+        * WebCoreSupport/WebChromeClient.h:
+
+2021-10-29  Alex Christensen  <achristensen@webkit.org>
+
+        Fix internal macOS build after r285047
+        https://bugs.webkit.org/show_bug.cgi?id=232462
+
+        * MigrateHeaders.make:
+
+2021-10-29  David Kilzer  <ddkilzer@apple.com>
+
+        [WebKitLegacy] Enable -Wformat=2 warnings
+        <https://webkit.org/b/232333>
+        <rdar://problem/84681560>
+
+        Reviewed by Darin Adler.
+
+        * Configurations/Base.xcconfig:
+        (WARNING_CFLAGS):
+        - Replace -Wformat-security with -Wformat=2, which enables more
+          warnings like -Wformat-nonliteral.
+        * Misc/WebLocalizableStringsInternal.h:
+        (WebLocalizedStringInternal):
+        - Add NS_FORMAT_ARGUMENT() macro to fix -Wformat-nonliteral
+          warnings.
+
+2021-10-29  Alex Christensen  <achristensen@webkit.org>
+
+        Remove code inside ENABLE(NETSCAPE_PLUGIN_API)
+        https://bugs.webkit.org/show_bug.cgi?id=232462
+
+        Reviewed by Anders Carlsson.
+
+        * Plugins/Hosted/HostedNetscapePluginStream.h: Removed.
+        * Plugins/Hosted/HostedNetscapePluginStream.mm: Removed.
+        * Plugins/Hosted/NetscapePluginHostManager.h: Removed.
+        * Plugins/Hosted/NetscapePluginHostManager.mm: Removed.
+        * Plugins/Hosted/NetscapePluginHostProxy.h: Removed.
+        * Plugins/Hosted/NetscapePluginHostProxy.mm: Removed.
+        * Plugins/Hosted/NetscapePluginInstanceProxy.h: Removed.
+        * Plugins/Hosted/NetscapePluginInstanceProxy.mm: Removed.
+        * Plugins/Hosted/ProxyInstance.h: Removed.
+        * Plugins/Hosted/ProxyInstance.mm: Removed.
+        * Plugins/Hosted/ProxyRuntimeObject.h: Removed.
+        * Plugins/Hosted/ProxyRuntimeObject.mm: Removed.
+        * Plugins/Hosted/WebHostedNetscapePluginView.h: Removed.
+        * Plugins/Hosted/WebHostedNetscapePluginView.mm: Removed.
+        * Plugins/Hosted/WebKitPluginAgent.defs: Removed.
+        * Plugins/Hosted/WebKitPluginAgentReply.defs: Removed.
+        * Plugins/Hosted/WebKitPluginClient.defs: Removed.
+        * Plugins/Hosted/WebKitPluginHost.defs: Removed.
+        * Plugins/Hosted/WebKitPluginHostTypes.defs: Removed.
+        * Plugins/Hosted/WebKitPluginHostTypes.h: Removed.
+        * Plugins/Hosted/WebTextInputWindowController.h: Removed.
+        * Plugins/Hosted/WebTextInputWindowController.m: Removed.
+        * Plugins/WebBaseNetscapePluginView.h: Removed.
+        * Plugins/WebBaseNetscapePluginView.mm: Removed.
+        * Plugins/WebBasePluginPackage.h:
+        * Plugins/WebBasePluginPackage.mm:
+        (+[WebBasePluginPackage pluginWithPath:]):
+        * Plugins/WebNetscapePluginEventHandler.h: Removed.
+        * Plugins/WebNetscapePluginEventHandler.mm: Removed.
+        * Plugins/WebNetscapePluginEventHandlerCocoa.h: Removed.
+        * Plugins/WebNetscapePluginEventHandlerCocoa.mm: Removed.
+        * Plugins/WebNetscapePluginPackage.h: Removed.
+        * Plugins/WebNetscapePluginPackage.mm: Removed.
+        * Plugins/WebNetscapePluginStream.h: Removed.
+        * Plugins/WebNetscapePluginStream.mm: Removed.
+        * Plugins/WebNetscapePluginView.h: Removed.
+        * Plugins/WebNetscapePluginView.mm: Removed.
+        * Plugins/WebPluginController.mm:
+        (-[WebPluginController destroyPlugin:]):
+        (-[WebPluginController destroyAllPlugins]):
+        * Plugins/WebPluginDatabase.mm:
+        (PluginPackageCandidates::update):
+        (-[WebPluginDatabase removePluginInstanceViewsFor:]):
+        (-[WebPluginDatabase destroyAllPluginInstanceViews]):
+        * Plugins/WebPluginRequest.h: Removed.
+        * Plugins/WebPluginRequest.m: Removed.
+        * Plugins/npapi.mm: Removed.
+        * WebCoreSupport/WebChromeClient.mm:
+        (WebChromeClient::createWindow):
+        * WebCoreSupport/WebFrameLoaderClient.mm:
+        (WebFrameLoaderClient::dispatchCreatePage):
+        (WebFrameLoaderClient::createPlugin):
+        (WebFrameLoaderClient::redirectDataToPlugin):
+        (NetscapePluginWidget::NetscapePluginWidget): Deleted.
+        (NetscapePluginWidget::platformLayer const): Deleted.
+        (NetscapePluginWidget::getFormValue): Deleted.
+        (NetscapePluginWidget::handleEvent): Deleted.
+        (NetscapePluginWidget::clipRectChanged): Deleted.
+        (NetscapePluginWidget::notifyWidget): Deleted.
+        * WebView/WebFrame.mm:
+        (-[WebFrame _recursive_resumeNullEventsForAllNetscapePlugins]): Deleted.
+        (-[WebFrame _recursive_pauseNullEventsForAllNetscapePlugins]): Deleted.
+        * WebView/WebFramePrivate.h:
+        * WebView/WebHTMLView.mm:
+        (needsCursorRectsSupportAtPoint):
+        (-[WebHTMLView viewWillMoveToHostWindow:]):
+        (-[WebHTMLView viewDidMoveToHostWindow]):
+        (-[WebHTMLView _web_makePluginSubviewsPerformSelector:withObject:]): Deleted.
+        (-[WebHTMLView _pauseNullEventsForAllNetscapePlugins]): Deleted.
+        (-[WebHTMLView _resumeNullEventsForAllNetscapePlugins]): Deleted.
+        * WebView/WebHTMLViewPrivate.h:
+        * WebView/WebView.mm:
+
+2021-10-28  Per Arne Vollan <pvollan@apple.com>
+
+        Layout test is crashing inside WebChromeClient::createWindow
+        https://bugs.webkit.org/show_bug.cgi?id=232460
+        <rdar://81344393>
+
+        Reviewed by Brent Fulgham.
+
+        Add null check for local NetscapePluginHostProxy pointer variable.
+
+        * Plugins/Hosted/NetscapePluginHostManager.mm:
+        (WebKit::NetscapePluginHostManager::didCreateWindow):
+
+2021-10-28  Alex Christensen  <achristensen@webkit.org>
+
+        Disable NETSCAPE_PLUGIN_API at build time on macOS and Windows
+        https://bugs.webkit.org/show_bug.cgi?id=232396
+
+        Reviewed by Geoff Garen.
+
+        * WebView/WebFramePrivate.h:
+        * WebView/WebHTMLViewPrivate.h:
+
+2021-10-28  Youenn Fablet  <youenn@apple.com>
+
+        [ Mac wk1 ] 2 media-capabilities/webrtc tests are flaky failures
+        https://bugs.webkit.org/show_bug.cgi?id=232283
+        <rdar://problem/84637007>
+
+        Reviewed by Eric Carlson.
+
+        * WebView/WebView.mm:
+
+2021-10-24  Ian Anderson  <iana@apple.com>
+
+        Enable the modules verifier for WebKitLegacy in Apple internal when using a new enough Xcode
+        https://bugs.webkit.org/show_bug.cgi?id=232190
+
+        Reviewed by David Kilzer.
+
+        Add WK_XCODE_VERSION_BEFORE_13_1 build settings to WebKitLegacy and then
+        use them to enable the modules verifier in Xcode 13.1 and later.
+
+        * Configurations/Base.xcconfig:
+        * Configurations/WebKitLegacy.xcconfig:
+
+2021-10-22  Ian Anderson  <iana@apple.com>
+
+        Add a module map file for PrivateFrameworks/WebKitLegacy
+        https://bugs.webkit.org/show_bug.cgi?id=230735
+
+        Reviewed by David Kilzer.
+
+        Define modules for the Cocoa Touch environment. macOS can't define
+        modules in WebKitLegacy because it's a nested framework on that
+        platform.
+        Set up the modules verifier tool for Apple Internal (it's not supported
+        in the public Xcode). Don't enable it yet because some of the Safari
+        builders use too old of an Xcode.
+        Add the Apple Internal guards for NSURLDownload from WebDownload.h
+        NSURLDownloadSPI.h so it can be included in the module.
+        WebCreateFragmentInternal.h is an Objective-C++ header, but the
+        WebKitLegacy module should be usable by plain Objective-C clients.
+        C++ guards so that it can be included in the module.
+        Switch a few quoted includes to framework style angle includes, which
+        are required for modules.
+        Add some missing includes.
+
+        * Configurations/WebKitLegacy.xcconfig:
+        * DOM/DOMEventListener.h:
+        * DOM/DOMEventTarget.h:
+        * DOM/DOMNodeFilter.h:
+        * DOM/DOMXPathNSResolver.h:
+        * DOM/WebDOMOperationsPrivate.h:
+        * History/WebHistoryItemPrivate.h:
+        * Misc/NSURLDownloadSPI.h:
+        * Misc/WebCache.h:
+        * Misc/WebDownload.h:
+        * Misc/WebKitErrorsPrivate.h:
+        * Misc/WebLocalizableStrings.h:
+        * Misc/WebUserContentURLPattern.h:
+        * Plugins/Hosted/WebKitPluginHostTypes.h:
+        * Plugins/WebPlugin.h:
+        * Plugins/WebPluginContainer.h:
+        * Storage/WebDatabaseManagerPrivate.h:
+        * Storage/WebDatabaseQuotaManager.h:
+        * Storage/WebStorageManagerPrivate.h:
+        * WebCoreSupport/WebCreateFragmentInternal.h:
+        * WebCoreSupport/WebSecurityOriginPrivate.h:
+        * WebView/WebDeviceOrientation.h:
+        * WebView/WebDeviceOrientationProvider.h:
+        * WebView/WebDeviceOrientationProviderMock.h:
+        * WebView/WebEditingDelegatePrivate.h:
+        * WebView/WebFormDelegatePrivate.h:
+        * WebView/WebGeolocationPosition.h:
+        * WebView/WebResourceLoadDelegatePrivate.h:
+
+2021-10-22  Commit Queue  <commit-queue@webkit.org>
+
+        Unreviewed, reverting r284713.
+        https://bugs.webkit.org/show_bug.cgi?id=232187
+
+        Broke some Apple internal builds
+
+        Reverted changeset:
+
+        "Add a module map file for PrivateFrameworks/WebKitLegacy"
+        https://bugs.webkit.org/show_bug.cgi?id=230735
+        https://commits.webkit.org/r284713
+
+2021-10-22  Ian Anderson  <iana@apple.com>
+
+        Add a module map file for PrivateFrameworks/WebKitLegacy
+        https://bugs.webkit.org/show_bug.cgi?id=230735
+
+        Reviewed by David Kilzer.
+
+        Define modules for the Cocoa Touch environment. macOS can't define
+        modules in WebKitLegacy because it's a nested framework on that
+        platform.
+        Enable the modules verifier tool for Apple Internal (it's not supported
+        in the public Xcode).
+        Add the Apple Internal guards for NSURLDownload from WebDownload.h to
+        NSURLDownloadSPI.h so it can be included in the module.
+        WebCreateFragmentInternal.h is an Objective-C++ header, but the
+        WebKitLegacy module should be usable by plain Objective-C clients. Add
+        C++ guards so that it can be included in the module.
+        Switch a few quoted includes to framework style angle includes, which
+        are required for modules.
+        Add some missing includes.
+
+        * Configurations/WebKitLegacy.xcconfig:
+        * DOM/DOMEventListener.h:
+        * DOM/DOMEventTarget.h:
+        * DOM/DOMNodeFilter.h:
+        * DOM/DOMXPathNSResolver.h:
+        * DOM/WebDOMOperationsPrivate.h:
+        * History/WebHistoryItemPrivate.h:
+        * Misc/NSURLDownloadSPI.h:
+        * Misc/WebCache.h:
+        * Misc/WebDownload.h:
+        * Misc/WebKitErrorsPrivate.h:
+        * Misc/WebLocalizableStrings.h:
+        * Misc/WebUserContentURLPattern.h:
+        * Plugins/Hosted/WebKitPluginHostTypes.h:
+        * Plugins/WebPlugin.h:
+        * Plugins/WebPluginContainer.h:
+        * Storage/WebDatabaseManagerPrivate.h:
+        * Storage/WebDatabaseQuotaManager.h:
+        * Storage/WebStorageManagerPrivate.h:
+        * WebCoreSupport/WebCreateFragmentInternal.h:
+        * WebCoreSupport/WebSecurityOriginPrivate.h:
+        * WebView/WebDeviceOrientation.h:
+        * WebView/WebDeviceOrientationProvider.h:
+        * WebView/WebDeviceOrientationProviderMock.h:
+        * WebView/WebEditingDelegatePrivate.h:
+        * WebView/WebFormDelegatePrivate.h:
+        * WebView/WebGeolocationPosition.h:
+        * WebView/WebResourceLoadDelegatePrivate.h:
+
+2021-10-19  Darin Adler  <darin@apple.com>
+
+        [Cocoa] Merge and simplify the nsColor family of functions
+        https://bugs.webkit.org/show_bug.cgi?id=231992
+
+        Reviewed by Anders Carlsson.
+
+        * DOM/DOMRGBColor.mm:
+        (-[DOMRGBColor color]): Use cocoaColor instead of nsColor.
+
+        * Misc/WebKitNSStringExtras.mm:
+        (-[NSString _web_drawAtPoint:font:textColor:]): Use colorFromCocoaColor
+        instead of colorFromNSColor.
+
+        * WebView/WebFrame.mm:
+        (-[WebFrame _updateBackgroundAndUpdatesWhileOffscreen]): Use
+        colorFromCocoaColor instead of colorFromNSColor.
+        (-[WebFrame _bodyBackgroundColor]): Use cocoaColor instead of
+        nsColor.
+
+        * WebView/WebHTMLView.mm:
+        (extractUnderlines): Use colorFromCocoaColor instead of
+        colorFromNSColor.
+
+        * WebView/WebView.mm:
+        (-[WebUITextIndicatorData initWithImage:textIndicatorData:scale:]):
+        Use cocoaColor instead of -[UIColor initWithCGColor:] and cachedCGColor.
+        (-[WebTextTouchBarItemController _webChangeColor:]): Use colorFromCocoaColor
+        instead of colorFromNSColor.
+        (-[WebView updateTextTouchBar]): Use cocoaColor instead of nsColor.
+
+2021-10-19  Chris Dumez  <cdumez@apple.com>
+
+        cachedCGColor() and nsColor() should return smart pointers
+        https://bugs.webkit.org/show_bug.cgi?id=231909
+
+        Reviewed by Tim Horton.
+
+        r276283 attempted to make cachedCGColor() and nsColor() thread-safe but the fix was incomplete
+        since those functions return unretained objects that can be released from the cache on any
+        other thread. This patch updates cachedCGColor() and nsColor() to return a RetainPtr to address
+        the issue.
+
+        * DOM/DOMRGBColor.mm:
+        (-[DOMRGBColor color]):
+        * WebView/WebFrame.mm:
+        (-[WebFrame _bodyBackgroundColor]):
+        * WebView/WebView.mm:
+        (-[WebView updateTextTouchBar]):
+
+2021-10-18  Commit Queue  <commit-queue@webkit.org>
+
+        Unreviewed, reverting r284240.
+        https://bugs.webkit.org/show_bug.cgi?id=231931
+
+        NeedDifferentArchitectureToWorkWithWebpushd
+
+        Reverted changeset:
+
+        "WebKit Managed Notifications: Skeleton NotificationProvider."
+        https://bugs.webkit.org/show_bug.cgi?id=231786
+        https://commits.webkit.org/r284240
+
+2021-10-15  Brady Eidson  <beidson@apple.com>
+
+        WebKit Managed Notifications: Skeleton NotificationProvider.
+        <rdar://84275562> and https://bugs.webkit.org/show_bug.cgi?id=231786
+
+        Reviewed by Alex Christensen.
+
+        * WebCoreSupport/WebNotificationClient.mm:
+        (-[WebNotificationPolicyListener NO_RETURN_DUE_TO_ASSERT]):
+        (-[WebNotificationPolicyListener denyOnlyThisRequest]): Deleted.
+
+2021-10-14  Alex Christensen  <achristensen@webkit.org>
+
+        Remove Variant.h
+        https://bugs.webkit.org/show_bug.cgi?id=231744
+
+        Reviewed by Darin Adler.
+
+        * DOM/DOMHTMLOptionsCollection.mm:
+
+2021-10-14  Myles C. Maxfield  <mmaxfield@apple.com>
+
+        All the SDKVariant.xcconfig files should match
+        https://bugs.webkit.org/show_bug.cgi?id=231663
+
+        Reviewed by Youenn Fablet.
+
+        * Configurations/SDKVariant.xcconfig:
+
+2021-10-14  David Kilzer  <ddkilzer@apple.com>
+
+        Modernize WebDatabaseManagerClient
+        <https://webkit.org/b/231549>
+        <rdar://problem/84129168>
+
+        Reviewed by Sihui Liu.
+
+        * Storage/WebDatabaseManager.mm:
+        (-[WebDatabaseManager init]):
+        - Add WebKit namespace to
+          WebDatabaseManagerClient::sharedWebDatabaseManagerClient()
+          and convert reference into pointer.
+
+        * Storage/WebDatabaseManagerClient.h:
+        (WebKit::WebDatabaseManagerClient):
+        - Put WebDatabaseManagerClient in WebKit namespace.
+
+        * Storage/WebDatabaseManagerClient.mm:
+        - Put WebDatabaseManagerClient in WebKit namespace.
+        (WebKit::WebDatabaseManagerClient::sharedWebDatabaseManagerClient):
+        - Update to use NeverDestroyed<> and to return a reference.
+
+2021-10-13  Chris Dumez  <cdumez@apple.com>
+
+        Drop makeWeakPtr() and use WeakPtr { } directly
+        https://bugs.webkit.org/show_bug.cgi?id=231679
+
+        Reviewed by Darin Adler.
+
+        * WebCoreSupport/WebEditorClient.mm:
+        (WebEditorClient::requestCandidatesForSelection):
+
+2021-10-13  Megan Gardner  <megan_gardner@apple.com>
+
+        Remove adjustForIOSCaretWhenScrolling() code
+        https://bugs.webkit.org/show_bug.cgi?id=230454
+
+        Reviewed by Simon Fraser.
+
+        The "adjustForIOSCaretWhenScrolling" code attempted to over-scroll horizontally at the start
+        or end of an overflow scroll in order to make space for the caret to show. However, it was
+        wrong in various ways. It always did this, even for scrollers with no visible caret. It was
+        web-detectable that the scrollX for a scroller could end up as -2. And removing the code
+        doesn't result in obviously incorrect behavior.
+
+        * DOM/DOMHTML.mm:
+        (-[DOMHTMLElement setScrollXOffset:scrollYOffset:adjustForIOSCaret:]):
+        * WebView/WebFrame.mm:
+        (-[WebFrame _scrollDOMRangeToVisible:]):
+        (-[WebFrame _scrollDOMRangeToVisible:withInset:]):
+
+2021-10-13  Alex Christensen  <achristensen@webkit.org>
+
+        Remove WTF::Variant and WTF::get
+        https://bugs.webkit.org/show_bug.cgi?id=231675
+
+        Reviewed by Chris Dumez.
+
+        * WebView/WebFrame.mm:
+        (-[WebFrame getDictationResultRanges:andMetadatas:]):
+        (-[WebFrame dictationResultMetadataForRange:]):
+
+2021-10-12  Jer Noble  <jer.noble@apple.com>
+
+        [Build-time perf] Forward-declare more things in Document.h
+        https://bugs.webkit.org/show_bug.cgi?id=231489
+
+        Reviewed by Myles C. Maxfield.
+
+        Move the folowing enumerations outside their classes so that they can be forward-declared:
+        - MediaProducer::MediaStateFlags -> MediaProducerMediaStateFlags
+        - MediaProducer::MediaCaptureKind -> MediaProducerMediaCaptureKind
+        - MediaProducer::MutedState -> MediaProducerMutedState
+
+        * DOM/DOMDocument.mm:
+        * WebCoreSupport/WebChromeClient.h:
+        * WebCoreSupport/WebChromeClient.mm:
+        (WebChromeClient::playbackTargetPickerClientStateDidChange):
+        * WebView/WebMediaPlaybackTargetPicker.h:
+        * WebView/WebMediaPlaybackTargetPicker.mm:
+        (WebMediaPlaybackTargetPicker::playbackTargetPickerClientStateDidChange):
+        * WebView/WebView.mm:
+        (-[WebView _playbackTargetPickerClientStateDidChange:state:]):
+        * WebView/WebViewInternal.h:
+
+2021-10-12  Alex Christensen  <achristensen@webkit.org>
+
+        Use std::variant instead of WTF::Variant
+        https://bugs.webkit.org/show_bug.cgi?id=231629
+
+        Reviewed by Chris Dumez.
+
+        * DOM/DOMHTMLSelectElement.mm:
+        (-[DOMHTMLSelectElement add:before:]):
+
+2021-10-12  Chris Dumez  <cdumez@apple.com>
+
+        Allow direct construction of WeakPtr without makeWeakPtr()
+        https://bugs.webkit.org/show_bug.cgi?id=231580
+
+        Reviewed by Darin Adler.
+
+        Allow direct construction of WeakPtr without makeWeakPtr(), and deprecate makeWeakPtr().
+
+        * WebCoreSupport/WebEditorClient.mm:
+        (WebEditorClient::requestCheckingOfString):
+        * WebCoreSupport/WebFrameLoaderClient.mm:
+        (WebFrameLoaderClient::getLoadDecisionForIcons):
+
+2021-10-11  Chris Dumez  <cdumez@apple.com>
+
+        DOMTimeStamp is now EpochTimeStamp
+        https://bugs.webkit.org/show_bug.cgi?id=231496
+
+        Reviewed by Sam Weinig.
+
+        * DOM/DOMEvent.h:
+        * DOM/DOMEvent.mm:
+        (-[DOMEvent timeStamp]):
+        * DOM/DOMObject.h:
+
+2021-10-08  Jer Noble  <jer.noble@apple.com>
+
+        [Build-time perf] Forward-declare more things in Element.h
+        https://bugs.webkit.org/show_bug.cgi?id=231283
+
+        Reviewed by Myles C. Maxfield.
+
+        Include ElementInlines.h in various necessary places.        
+
+        * WebView/WebHTMLRepresentation.mm:
+
+2021-10-07  Darin Adler  <darin@apple.com>
+
+        Get rid of the deviceClass function, up-leveling to deviceClassIsSmallScreen
+        https://bugs.webkit.org/show_bug.cgi?id=231344
+
+        Reviewed by Tim Horton.
+
+        * WebView/WebPreferences.mm: Removed uneeded Device.h include.
+
+        * WebView/WebPreferencesDefaultValues.mm:
+        (WebKit::defaultAllowsInlineMediaPlayback): Use !deviceClassIsSmallScreen
+        instead of deviceClass == iPad.
+        (WebKit::defaultAllowsInlineMediaPlaybackAfterFullscreen): Use
+        deviceClassIsSmallScreen instead of deviceClass != iPad.
+        (WebKit::defaultInlineMediaPlaybackRequiresPlaysInlineAttribute): Ditto.
+        (WebKit::defaultMediaSourceEnabled): Use !deviceClassIsSmallScreen instead of
+        deviceClass != iPhone and != iPod, and also remove unneeded compile time conditionals.
+
+2021-10-05  Tim Horton  <timothy_horton@apple.com>
+
+        <model> should be draggable, similar to <img>
+        https://bugs.webkit.org/show_bug.cgi?id=229246
+
+        Reviewed by Wenson Hsieh.
+
+        * WebView/WebView.mm:
+        (kit):
+        Do nothing for <model> drags in legacy WebKit.
+
+2021-10-03  David Kilzer  <ddkilzer@apple.com>
+
+        WTF::RetainPtr<> allows assignment of two pointer types that are not assignable
+        <https://webkit.org/b/230406>
+        <rdar://problem/83241893>
+
+        Reviewed by Darin Adler.
+
+        * Plugins/WebBasePluginPackage.mm:
+        (+[WebBasePluginPackage pluginWithPath:]):
+        - Use explicit type with RetainPtr<> to match return type.
+
+2021-10-01  Chris Dumez  <cdumez@apple.com>
+
+        Drop support for macOS < 10.15
+        https://bugs.webkit.org/show_bug.cgi?id=231085
+
+        Reviewed by Darin Adler.
+
+        * WebView/WebHTMLView.mm:
+        (-[WebHTMLView _recursive:displayRectIgnoringOpacity:inContext:stopAtLayerBackedViews:]):
+        (-[WebHTMLView _recursive:displayRectIgnoringOpacity:inContext:stopAtLayerBackedViews:_recursive:displayRectIgnoringOpacity:inContext:shouldChangeFontReferenceColor:stopAtLayerBackedViews:]): Deleted.
+
+2021-10-01  Ian Anderson  <iana@apple.com>
+
+        WebKitLegacy's module map files don't get installed
+        https://bugs.webkit.org/show_bug.cgi?id=230736
+
+        Reviewed by David Kilzer.
+
+        Revert r271607 because it doesn't work and isn't the right approach.
+
+        * Configurations/WebKitLegacy.xcconfig:
+        * History/WebBackForwardListPrivate.h:
+        * Misc/WebKitLegacy_Private.h: Removed.
+        * Misc/WebKitLegacy_iOS_Private.h: Removed.
+        * Misc/WebKitLegacy_macOS_Private.h: Removed.
+
 2021-09-29  Chris Dumez  <cdumez@apple.com>
 
         Make WebLocalizedString() thread-safe

@@ -22,6 +22,7 @@
 #pragma once
 
 #include "MediaQueryEvaluator.h"
+#include "PropertyAllowlist.h"
 #include "RuleSet.h"
 #include "SelectorChecker.h"
 #include "StyleScopeOrdinal.h"
@@ -62,13 +63,13 @@ struct MatchedRule {
     const RuleData* ruleData;
     unsigned specificity;
     ScopeOrdinal styleScopeOrdinal;
-    unsigned cascadeLayerOrder;
+    unsigned cascadeLayerPriority;
 };
 
 struct MatchedProperties {
     RefPtr<const StyleProperties> properties;
     uint16_t linkMatchType { SelectorChecker::MatchAll };
-    uint16_t allowlistType { PropertyAllowlistNone };
+    PropertyAllowlist allowlistType { PropertyAllowlist::None };
     ScopeOrdinal styleScopeOrdinal { ScopeOrdinal::Element };
 };
 
@@ -134,11 +135,10 @@ private:
     void matchPartPseudoElementRulesForScope(const ShadowRoot& scopeShadowRoot);
 
     void collectMatchingShadowPseudoElementRules(const MatchRequest&);
-    std::unique_ptr<RuleSet::RuleDataVector> collectSlottedPseudoElementRulesForSlot();
 
     void collectMatchingRules(const MatchRequest&);
     void collectMatchingRulesForList(const RuleSet::RuleDataVector*, const MatchRequest&);
-    bool ruleMatches(const RuleData&, unsigned& specificity);
+    bool ruleMatches(const RuleData&, unsigned& specificity, ScopeOrdinal);
 
     void sortMatchedRules();
 
@@ -162,10 +162,8 @@ private:
     bool m_isPrintStyle { false };
     PseudoElementRequest m_pseudoElementRequest { PseudoId::None };
     SelectorChecker::Mode m_mode { SelectorChecker::Mode::ResolvingStyle };
-    bool m_isMatchingSlottedPseudoElements { false };
     bool m_isMatchingHostPseudoClass { false };
     RefPtr<const Element> m_shadowHostInPartRuleScope;
-    Vector<std::unique_ptr<RuleSet::RuleDataVector>> m_keepAliveSlottedPseudoElementRules;
 
     Vector<MatchedRule, 64> m_matchedRules;
     size_t m_matchedRuleTransferIndex { 0 };

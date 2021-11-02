@@ -31,8 +31,8 @@ namespace WebCore {
 
 class RenderCombineText;
 
-namespace LayoutIntegration {
-class RunIteratorLegacyPath;
+namespace InlineIterator {
+class BoxLegacyPath;
 }
 
 class LegacyInlineTextBox : public LegacyInlineBox {
@@ -87,8 +87,6 @@ public:
     using LegacyInlineBox::setForceRightExpansion;
     using LegacyInlineBox::forceLeftExpansion;
     using LegacyInlineBox::setForceLeftExpansion;
-
-    static inline bool compareByStart(const LegacyInlineTextBox* first, const LegacyInlineTextBox* second) { return first->start() < second->start(); }
 
     LayoutUnit baselinePosition(FontBaseline) const final;
     LayoutUnit lineHeight() const final;
@@ -154,7 +152,7 @@ public:
     bool hasMarkers() const;
 
 private:
-    friend class LayoutIntegration::RunIteratorLegacyPath;
+    friend class InlineIterator::BoxLegacyPath;
     friend class TextBoxPainter;
 
     const RenderCombineText* combinedText() const;

@@ -200,6 +200,8 @@ public:
     IntSize reachableTotalContentsSize() const final;
 
     bool requestScrollPositionUpdate(const ScrollPosition&, ScrollType = ScrollType::User, ScrollClamping = ScrollClamping::Clamped) final;
+    bool requestAnimatedScrollToPosition(const ScrollPosition&, ScrollClamping = ScrollClamping::Clamped) final;
+    void stopAsyncAnimatedScroll() final;
 
     bool containsDirtyOverlayScrollbars() const { return m_containsDirtyOverlayScrollbars; }
     void setContainsDirtyOverlayScrollbars(bool dirtyScrollbars) { m_containsDirtyOverlayScrollbars = dirtyScrollbars; }
@@ -235,11 +237,6 @@ public:
 
     std::optional<LayoutRect> updateScrollPosition(const ScrollPositionChangeOptions&, const LayoutRect& revealRect, const LayoutRect& localExposeRect);
 
-#if PLATFORM(IOS_FAMILY)
-    bool adjustForIOSCaretWhenScrolling() const { return m_adjustForIOSCaretWhenScrolling; }
-    void setAdjustForIOSCaretWhenScrolling(bool adjustForIOSCaretWhenScrolling) { m_adjustForIOSCaretWhenScrolling = adjustForIOSCaretWhenScrolling; }
-#endif
-
 private:
     bool hasHorizontalOverflow() const;
     bool hasVerticalOverflow() const;
@@ -272,11 +269,8 @@ private:
     bool m_registeredScrollableArea { false };
     bool m_hasCompositedScrollableOverflow { false };
 
-#if PLATFORM(IOS_FAMILY)
-#if ENABLE(IOS_TOUCH_EVENTS)
+#if PLATFORM(IOS_FAMILY) && ENABLE(IOS_TOUCH_EVENTS)
     bool m_registeredAsTouchEventListenerForScrolling { false };
-#endif
-    bool m_adjustForIOSCaretWhenScrolling { false };
 #endif
     bool m_requiresScrollPositionReconciliation { false };
     bool m_containsDirtyOverlayScrollbars { false };

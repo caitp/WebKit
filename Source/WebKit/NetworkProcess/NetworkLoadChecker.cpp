@@ -67,7 +67,7 @@ NetworkLoadChecker::NetworkLoadChecker(NetworkProcess& networkProcess, NetworkRe
     , m_shouldCaptureExtraNetworkLoadMetrics(shouldCaptureExtraNetworkLoadMetrics)
     , m_requestLoadType(requestLoadType)
     , m_schemeRegistry(schemeRegistry)
-    , m_networkResourceLoader(makeWeakPtr(networkResourceLoader))
+    , m_networkResourceLoader(networkResourceLoader)
 {
     m_isSameOriginRequest = isSameOrigin(m_url, m_origin.get());
     switch (options.credentials) {
@@ -245,7 +245,7 @@ void NetworkLoadChecker::checkRequest(ResourceRequest&& request, ContentSecurity
     }
 
 #if ENABLE(CONTENT_EXTENSIONS)
-    this->processContentRuleListsForLoad(WTFMove(request), [weakThis = makeWeakPtr(*this), handler = WTFMove(handler), originalRequest = WTFMove(originalRequest)](auto&& result) mutable {
+    this->processContentRuleListsForLoad(WTFMove(request), [weakThis = WeakPtr { *this }, handler = WTFMove(handler), originalRequest = WTFMove(originalRequest)](auto&& result) mutable {
         if (!result.has_value()) {
             ASSERT(result.error().isCancellation());
             handler(WTFMove(result.error()));
@@ -468,7 +468,7 @@ void NetworkLoadChecker::processContentRuleListsForLoad(ResourceRequest&& reques
         return;
     }
 
-    m_networkProcess->networkContentRuleListManager().contentExtensionsBackend(*m_userContentControllerIdentifier, [this, weakThis = makeWeakPtr(this), request = WTFMove(request), callback = WTFMove(callback)](auto& backend) mutable {
+    m_networkProcess->networkContentRuleListManager().contentExtensionsBackend(*m_userContentControllerIdentifier, [this, weakThis = WeakPtr { *this }, request = WTFMove(request), callback = WTFMove(callback)](auto& backend) mutable {
         if (!weakThis) {
             callback(makeUnexpected(ResourceError { ResourceError::Type::Cancellation }));
             return;

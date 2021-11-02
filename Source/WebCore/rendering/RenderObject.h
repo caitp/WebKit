@@ -29,6 +29,7 @@
 #include "Element.h"
 #include "FloatQuad.h"
 #include "Frame.h"
+#include "HTMLNames.h"
 #include "LayoutRect.h"
 #include "Page.h"
 #include "RenderObjectEnums.h"
@@ -163,7 +164,7 @@ public:
     RenderFragmentedFlow* enclosingFragmentedFlow() const;
 
     WEBCORE_EXPORT bool useDarkAppearance() const;
-    OptionSet<StyleColor::Options> styleColorOptions() const;
+    OptionSet<StyleColorOptions> styleColorOptions() const;
 
 #if ASSERT_ENABLED
     void setHasAXObject(bool flag) { m_hasAXObject = flag; }
@@ -1207,6 +1208,7 @@ void printGraphicsLayerTreeForLiveDocuments();
 
 bool shouldApplyLayoutContainment(const RenderObject&);
 bool shouldApplySizeContainment(const RenderObject&);
+bool shouldApplyStyleContainment(const RenderObject&);
 
 } // namespace WebCore
 

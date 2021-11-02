@@ -77,10 +77,10 @@ void WebServiceWorkerFetchTaskClient::didReceiveData(Ref<SharedBuffer>&& buffer)
         return;
 
     if (m_waitingForContinueDidReceiveResponseMessage) {
-        if (!WTF::holds_alternative<Ref<SharedBuffer>>(m_responseData))
+        if (!std::holds_alternative<Ref<SharedBuffer>>(m_responseData))
             m_responseData = buffer->copy();
         else
-            WTF::get<Ref<SharedBuffer>>(m_responseData)->append(WTFMove(buffer));
+            std::get<Ref<SharedBuffer>>(m_responseData)->append(WTFMove(buffer));
         return;
     }
 

@@ -43,7 +43,7 @@
 
 #if PLATFORM(COCOA)
 #include "CoreAudioCaptureSource.h"
-#include "DisplayCaptureSourceMac.h"
+#include "DisplayCaptureSourceCocoa.h"
 #include "MockRealtimeVideoSourceMac.h"
 #endif
 
@@ -115,23 +115,23 @@ private:
 };
 
 #if PLATFORM(MAC)
-class MockDisplayCapturer final : public DisplayCaptureSourceMac::Capturer {
+class MockDisplayCapturer final : public DisplayCaptureSourceCocoa::Capturer {
 public:
     explicit MockDisplayCapturer(const CaptureDevice&);
 
 private:
     bool start() final;
     void stop() final  { m_source->stop(); }
-    DisplayCaptureSourceMac::DisplayFrameType generateFrame() final;
+    DisplayCaptureSourceCocoa::DisplayFrameType generateFrame() final;
     RealtimeMediaSourceSettings::DisplaySurfaceType surfaceType() const final { return RealtimeMediaSourceSettings::DisplaySurfaceType::Monitor; }
-    void commitConfiguration(const RealtimeMediaSourceSettings&) final { }
+    void commitConfiguration(const RealtimeMediaSourceSettings&) final;
     CaptureDevice::DeviceType deviceType() const final { return CaptureDevice::DeviceType::Screen; }
     IntSize intrinsicSize() const final;
 #if !RELEASE_LOG_DISABLED
     const char* logClassName() const final { return "MockDisplayCapturer"; }
 #endif
-    
     Ref<MockRealtimeVideoSource> m_source;
+    RealtimeMediaSourceSettings m_settings;
 };
 
 MockDisplayCapturer::MockDisplayCapturer(const CaptureDevice& device)
@@ -141,11 +141,18 @@ MockDisplayCapturer::MockDisplayCapturer(const CaptureDevice& device)
 
 bool MockDisplayCapturer::start()
 {
+    ASSERT(m_settings.frameRate());
     m_source->start();
     return true;
 }
 
-DisplayCaptureSourceMac::DisplayFrameType MockDisplayCapturer::generateFrame()
+void MockDisplayCapturer::commitConfiguration(const RealtimeMediaSourceSettings& settings)
+{
+    // FIXME: Update m_source width, height and frameRate according settings
+    m_settings = settings;
+}
+
+DisplayCaptureSourceCocoa::DisplayFrameType MockDisplayCapturer::generateFrame()
 {
     if (auto* imageBuffer = m_source->imageBuffer())
         return imageBuffer->copyNativeImage();
@@ -163,7 +170,7 @@ IntSize MockDisplayCapturer::intrinsicSize() const
     if (!device->isDisplay())
         return { };
 
-    auto& properties = WTF::get<MockDisplayProperties>(device->properties);
+    auto& properties = std::get<MockDisplayProperties>(device->properties);
     return properties.defaultSize;
 }
 #endif // PLATFORM(MAC)
@@ -179,7 +186,7 @@ public:
         case CaptureDevice::DeviceType::Screen:
         case CaptureDevice::DeviceType::Window:
 #if PLATFORM(MAC)
-            return DisplayCaptureSourceMac::create(UniqueRef<DisplayCaptureSourceMac::Capturer>(makeUniqueRef<MockDisplayCapturer>(device)), device, constraints);
+            return DisplayCaptureSourceCocoa::create(UniqueRef<DisplayCaptureSourceCocoa::Capturer>(makeUniqueRef<MockDisplayCapturer>(device)), device, constraints);
 #elif USE(GSTREAMER)
             return MockDisplayCaptureSourceGStreamer::create(device, constraints);
 #else

@@ -117,7 +117,7 @@ PageClientImpl::~PageClientImpl() = default;
 
 void PageClientImpl::setImpl(WebViewImpl& impl)
 {
-    m_impl = makeWeakPtr(impl);
+    m_impl = impl;
 }
 
 std::unique_ptr<DrawingAreaProxy> PageClientImpl::createDrawingAreaProxy(WebProcessProxy& process)
@@ -130,7 +130,7 @@ void PageClientImpl::setViewNeedsDisplay(const WebCore::Region&)
     ASSERT_NOT_REACHED();
 }
 
-void PageClientImpl::requestScroll(const FloatPoint& scrollPosition, const IntPoint& scrollOrigin)
+void PageClientImpl::requestScroll(const FloatPoint& scrollPosition, const IntPoint& scrollOrigin, ScrollIsAnimated)
 {
 }
 
@@ -542,7 +542,7 @@ Ref<ValidationBubble> PageClientImpl::createValidationBubble(const String& messa
     return ValidationBubble::create(m_view, message, settings);
 }
 
-void PageClientImpl::showSafeBrowsingWarning(const SafeBrowsingWarning& warning, CompletionHandler<void(Variant<WebKit::ContinueUnsafeLoad, URL>&&)>&& completionHandler)
+void PageClientImpl::showSafeBrowsingWarning(const SafeBrowsingWarning& warning, CompletionHandler<void(std::variant<WebKit::ContinueUnsafeLoad, URL>&&)>&& completionHandler)
 {
     if (!m_impl)
         return completionHandler(ContinueUnsafeLoad::Yes);
@@ -657,11 +657,6 @@ void PageClientImpl::gestureEventWasNotHandledByWebCore(const NativeWebGestureEv
 void PageClientImpl::pluginFocusOrWindowFocusChanged(uint64_t pluginComplexTextInputIdentifier, bool pluginHasFocusAndWindowHasFocus)
 {
     m_impl->pluginFocusOrWindowFocusChanged(pluginHasFocusAndWindowHasFocus, pluginComplexTextInputIdentifier);
-}
-
-void PageClientImpl::setPluginComplexTextInputState(uint64_t pluginComplexTextInputIdentifier, PluginComplexTextInputState pluginComplexTextInputState)
-{
-    m_impl->setPluginComplexTextInputStateAndIdentifier(pluginComplexTextInputState, pluginComplexTextInputIdentifier);
 }
 
 void PageClientImpl::didPerformDictionaryLookup(const DictionaryPopupInfo& dictionaryPopupInfo)
@@ -1019,7 +1014,7 @@ void PageClientImpl::makeViewBlank(bool makeBlank)
 #if HAVE(APP_ACCENT_COLORS)
 WebCore::Color PageClientImpl::accentColor()
 {
-    return WebCore::colorFromNSColor([NSApp _effectiveAccentColor]);
+    return WebCore::colorFromCocoaColor([NSApp _effectiveAccentColor]);
 }
 #endif
 

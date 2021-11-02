@@ -187,13 +187,14 @@ void RenderInline::styleDidChange(StyleDifference diff, const RenderStyle* oldSt
     }
 
 #if ENABLE(LAYOUT_FORMATTING_CONTEXT)
-    if (auto* lineLayout = LayoutIntegration::LineLayout::containing(*this)) {
-        if (diff >= StyleDifference::Repaint && selfNeedsLayout()) {
-            // FIXME: Add support for partial invalidation.
-            if (auto* container = LayoutIntegration::LineLayout::blockContainer(*this))
-                container->invalidateLineLayoutPath();
-        } else
-            lineLayout->updateStyle(*this, *oldStyle);
+    if (diff >= StyleDifference::Repaint) {
+        if (auto* lineLayout = LayoutIntegration::LineLayout::containing(*this)) {
+            auto shouldInvalidateLineLayoutPath = selfNeedsLayout() || !LayoutIntegration::LineLayout::canUseForAfterInlineBoxStyleChange(*this, diff);
+            if (shouldInvalidateLineLayoutPath)
+                lineLayout->flow().invalidateLineLayoutPath();
+            else
+                lineLayout->updateStyle(*this, *oldStyle);
+        }
     }
 #endif
 }
@@ -1115,6 +1116,22 @@ void RenderInline::paintOutlineForLine(GraphicsContext& graphicsContext, const L
         adjacentWidth2 = outlineWidth;
         drawLineForBoxSide(graphicsContext, FloatRect(topLeft, bottomRight), BoxSide::Bottom, outlineColor, outlineStyle, adjacentWidth1, adjacentWidth2, antialias);
     }
+}
+
+bool isEmptyInline(const RenderInline& renderer)
+{
+    for (auto& current : childrenOfType<RenderObject>(renderer)) {
+        if (current.isFloatingOrOutOfFlowPositioned())
+            continue;
+        if (is<RenderText>(current)) {
+            if (!downcast<RenderText>(current).isAllCollapsibleWhitespace())
+                return false;
+            continue;
+        }
+        if (!is<RenderInline>(current) || !isEmptyInline(downcast<RenderInline>(current)))
+            return false;
+    }
+    return true;
 }
 
 } // namespace WebCore

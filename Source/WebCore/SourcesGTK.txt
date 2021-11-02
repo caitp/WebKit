@@ -39,7 +39,11 @@ accessibility/atk/WebKitAccessibleInterfaceText.cpp
 accessibility/atk/WebKitAccessibleInterfaceValue.cpp
 accessibility/atk/WebKitAccessibleUtil.cpp
 
+accessibility/atspi/AccessibilityAtspi.cpp
 accessibility/atspi/AccessibilityObjectAtspi.cpp
+accessibility/atspi/AccessibilityObjectComponentAtspi.cpp
+accessibility/atspi/AccessibilityObjectTextAtspi.cpp
+accessibility/atspi/AccessibilityRootAtspi.cpp
 accessibility/atspi/AXObjectCacheAtspi.cpp
 
 accessibility/isolatedtree/atspi/AXIsolatedObjectAtspi.cpp
@@ -67,7 +71,7 @@ page/scrolling/nicosia/ScrollingTreeOverflowScrollProxyNode.cpp
 page/scrolling/nicosia/ScrollingTreeOverflowScrollingNodeNicosia.cpp
 page/scrolling/nicosia/ScrollingTreePositionedNode.cpp
 page/scrolling/nicosia/ScrollingTreeScrollingNodeDelegateNicosia.cpp
-page/scrolling/nicosia/ScrollingTreeStickyNode.cpp
+page/scrolling/nicosia/ScrollingTreeStickyNodeNicosia.cpp
 
 platform/UserAgentQuirks.cpp
 
@@ -77,7 +81,6 @@ platform/adwaita/ThemeAdwaita.cpp
 platform/gamepad/manette/ManetteGamepad.cpp
 platform/gamepad/manette/ManetteGamepadProvider.cpp
 
-platform/generic/ScrollAnimatorGeneric.cpp
 platform/generic/ScrollbarsControllerGeneric.cpp
 
 platform/graphics/ANGLEWebKitBridge.cpp

@@ -45,37 +45,36 @@ BaseAudioSharedUnit::BaseAudioSharedUnit()
 void BaseAudioSharedUnit::addClient(CoreAudioCaptureSource& client)
 {
     ASSERT(isMainThread());
-    Locker locker { m_clientsLock };
     m_clients.add(&client);
+    Locker locker { m_audioThreadClientsLock };
+    m_audioThreadClients = copyToVector(m_clients);
 }
 
 void BaseAudioSharedUnit::removeClient(CoreAudioCaptureSource& client)
 {
     ASSERT(isMainThread());
-    Locker locker { m_clientsLock };
     m_clients.remove(&client);
+    Locker locker { m_audioThreadClientsLock };
+    m_audioThreadClients = copyToVector(m_clients);
+}
+
+void BaseAudioSharedUnit::clearClients()
+{
+    ASSERT(isMainThread());
+    m_clients.clear();
+    Locker locker { m_audioThreadClientsLock };
+    m_audioThreadClients.clear();
 }
 
 void BaseAudioSharedUnit::forEachClient(const Function<void(CoreAudioCaptureSource&)>& apply) const
 {
-    Vector<CoreAudioCaptureSource*> clientsCopy;
-    {
-        Locker locker { m_clientsLock };
-        clientsCopy = copyToVector(m_clients);
-    }
-    for (auto* client : clientsCopy) {
-        Locker locker { m_clientsLock };
+    ASSERT(isMainThread());
+    for (auto* client : copyToVector(m_clients)) {
         // Make sure the client has not been destroyed.
         if (!m_clients.contains(client))
             continue;
         apply(*client);
     }
-}
-
-void BaseAudioSharedUnit::clearClients()
-{
-    Locker locker { m_clientsLock };
-    m_clients.clear();
 }
 
 void BaseAudioSharedUnit::startProducingData()
@@ -129,13 +128,35 @@ void BaseAudioSharedUnit::prepareForNewCapture()
     if (!m_producingCount)
         return;
 
-    RELEASE_LOG_ERROR(WebRTC, "CoreAudioSharedUnit::prepareForNewCapture, notifying suspended sources of capture failure");
+    RELEASE_LOG_ERROR(WebRTC, "BaseAudioSharedUnit::prepareForNewCapture, notifying suspended sources of capture failure");
+    captureFailed();
+}
+
+void BaseAudioSharedUnit::setCaptureDevice(String&& persistentID, uint32_t captureDeviceID)
+{
+    bool hasChanged = this->persistentID() != persistentID || this->captureDeviceID() != captureDeviceID;
+    m_capturingDevice = { WTFMove(persistentID), captureDeviceID };
+
+    if (hasChanged)
+        captureDeviceChanged();
+}
+
+void BaseAudioSharedUnit::devicesChanged(const Vector<CaptureDevice>& devices)
+{
+    if (!m_producingCount)
+        return;
+
+    auto persistentID = this->persistentID();
+    if (WTF::anyOf(devices, [&persistentID] (auto& device) { return persistentID == device.persistentId(); }))
+        return;
+
+    RELEASE_LOG_ERROR(WebRTC, "BaseAudioSharedUnit::devicesChanged - failing capture, capturing device is missing");
     captureFailed();
 }
 
 void BaseAudioSharedUnit::captureFailed()
 {
-    RELEASE_LOG_ERROR(WebRTC, "CoreAudioSharedUnit::captureFailed - capture failed");
+    RELEASE_LOG_ERROR(WebRTC, "BaseAudioSharedUnit::captureFailed");
     forEachClient([](auto& client) {
         client.captureFailed();
     });
@@ -217,12 +238,12 @@ OSStatus BaseAudioSharedUnit::suspend()
 void BaseAudioSharedUnit::audioSamplesAvailable(const MediaTime& time, const PlatformAudioData& data, const AudioStreamDescription& description, size_t numberOfFrames)
 {
     // We hold the lock here since adding/removing clients can only happen in main thread.
-    Locker locker { m_clientsLock };
+    Locker locker { m_audioThreadClientsLock };
 
     // For performance reasons, we forbid heap allocations while doing rendering on the capture audio thread.
     ForbidMallocUseForCurrentThreadScope forbidMallocUse;
 
-    for (auto* client : m_clients) {
+    for (auto* client : m_audioThreadClients) {
         if (client->isProducingData())
             client->audioSamplesAvailable(time, data, description, numberOfFrames);
     }

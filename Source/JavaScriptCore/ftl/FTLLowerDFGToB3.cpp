@@ -605,6 +605,8 @@ private:
                 continue;
             if (node->op() == CheckInBounds)
                 continue;
+            if (node->op() == CheckInBoundsInt52)
+                continue;
 
             AbstractValue value = m_interpreter.forNode(node);
             {
@@ -1025,6 +1027,9 @@ private:
         case GetArrayLength:
             compileGetArrayLength();
             break;
+        case GetTypedArrayLengthAsInt52:
+            compileGetTypedArrayLengthAsInt52();
+            break;
         case GetVectorLength:
             compileGetVectorLength();
             break;
@@ -1033,6 +1038,9 @@ private:
             break;
         case CheckInBounds:
             compileCheckInBounds();
+            break;
+        case CheckInBoundsInt52:
+            compileCheckInBoundsInt52();
             break;
         case GetByVal:
             compileGetByVal();
@@ -1174,6 +1182,9 @@ private:
             break;
         case GetTypedArrayByteOffset:
             compileGetTypedArrayByteOffset();
+            break;
+        case GetTypedArrayByteOffsetAsInt52:
+            compileGetTypedArrayByteOffsetAsInt52();
             break;
         case GetPrototypeOf:
             compileGetPrototypeOf();
@@ -4023,7 +4034,7 @@ private:
                 GPRReg stubInfoGPR = JITCode::useDataIC(JITType::FTLJIT) ? params.gpScratch(0) : InvalidGPRReg;
 
                 auto generator = Box<JITGetByValGenerator>::create(
-                    jit.codeBlock(), JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex, AccessType::GetPrivateName,
+                    jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex, AccessType::GetPrivateName,
                     params.unavailableRegisters(), JSValueRegs(baseGPR), JSValueRegs(propertyGPR), JSValueRegs(resultGPR), stubInfoGPR);
 
                 CCallHelpers::Jump notCell;
@@ -4169,7 +4180,7 @@ private:
             GPRReg stubInfoGPR = JITCode::useDataIC(JITType::FTLJIT) ? params.gpScratch(0) : InvalidGPRReg;
 
             auto generator = Box<JITPrivateBrandAccessGenerator>::create(
-                jit.codeBlock(), JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex, accessType,
+                jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex, accessType,
                 params.unavailableRegisters(), JSValueRegs(baseGPR), JSValueRegs(brandGPR), stubInfoGPR);
 
             CCallHelpers::Jump notCell;
@@ -4330,7 +4341,7 @@ private:
             GPRReg stubInfoGPR = JITCode::useDataIC(JITType::FTLJIT) ? params.gpScratch(0) : InvalidGPRReg;
 
             auto generator = Box<JITPutByValGenerator>::create(
-                jit.codeBlock(), JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex, AccessType::PutPrivateName,
+                jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex, AccessType::PutPrivateName,
                 params.unavailableRegisters(), JSValueRegs(baseGPR), JSValueRegs(propertyGPR), JSValueRegs(valueGPR), InvalidGPRReg, stubInfoGPR);
 
             generator->stubInfo()->propertyIsSymbol = true;
@@ -4677,7 +4688,7 @@ private:
                 GPRReg stubInfoGPR = JITCode::useDataIC(JITType::FTLJIT) ? params.gpScratch(0) : InvalidGPRReg;
 
                 auto generator = Box<JITPutByIdGenerator>::create(
-                    jit.codeBlock(), JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex,
+                    jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex,
                     params.unavailableRegisters(), identifier, JSValueRegs(params[0].gpr()),
                     JSValueRegs(params[1].gpr()), stubInfoGPR, GPRInfo::patchpointScratchRegister, ecmaMode,
                     putKind);
@@ -4828,9 +4839,9 @@ private:
             m_out.isNull(m_out.loadPtr(cell, m_heaps.JSArrayBufferView_vector)));
     }
 
-    void compileGetTypedArrayByteOffset()
+    LValue emitGetTypedArrayByteOffsetExceptSettingResult()
     {
-        LValue basePtr = lowCell(m_node->child1());    
+        LValue basePtr = lowCell(m_node->child1());
 
         LBasicBlock wastefulCase = m_out.newBlock();
         LBasicBlock notNull = m_out.newBlock();
@@ -4846,7 +4857,7 @@ private:
         LBasicBlock lastNext = m_out.appendTo(wastefulCase, notNull);
 
         LValue vector = m_out.loadPtr(basePtr, m_heaps.JSArrayBufferView_vector);
-        m_out.branch(m_out.equal(vector, m_out.constIntPtr(JSArrayBufferView::nullVectorPtr())), 
+        m_out.branch(m_out.equal(vector, m_out.constIntPtr(JSArrayBufferView::nullVectorPtr())),
             unsure(continuation), unsure(notNull));
 
         m_out.appendTo(notNull, continuation);
@@ -4866,8 +4877,28 @@ private:
         m_out.jump(continuation);
         m_out.appendTo(continuation, lastNext);
 
-        setInt32(m_out.castToInt32(m_out.phi(pointerType(), nullVectorOut, wastefulOut)));
+        return m_out.phi(pointerType(), nullVectorOut, wastefulOut);
     }
+
+    void compileGetTypedArrayByteOffset()
+    {
+        LValue result = emitGetTypedArrayByteOffsetExceptSettingResult();
+#if USE(LARGE_TYPED_ARRAYS)
+        // AI promises that the result of GetTypedArrayByteOffset will be Int32, so we must uphold that promise here.
+        speculate(Overflow, noValue(), nullptr, m_out.above(result, m_out.constInt64(std::numeric_limits<int32_t>::max())));
+#endif
+        setInt32(m_out.castToInt32(result));
+    }
+
+IGNORE_CLANG_WARNINGS_BEGIN("missing-noreturn")
+    void compileGetTypedArrayByteOffsetAsInt52()
+    {
+        // The preprocessor chokes on RELEASE_ASSERT(USE(LARGE_TYPED_ARRAYS)), this is equivalent.
+        RELEASE_ASSERT(sizeof(size_t) == sizeof(uint64_t));
+        LValue result = emitGetTypedArrayByteOffsetExceptSettingResult();
+        setStrictInt52(result);
+    }
+IGNORE_CLANG_WARNINGS_END
 
     void compileGetPrototypeOf()
     {
@@ -5054,8 +5085,13 @@ private:
             
         default:
             if (m_node->arrayMode().isSomeTypedArrayView()) {
-                setInt32(
-                    m_out.load32NonNegative(lowCell(m_node->child1()), m_heaps.JSArrayBufferView_length));
+#if USE(LARGE_TYPED_ARRAYS)
+                LValue length = m_out.load64NonNegative(lowCell(m_node->child1()), m_heaps.JSArrayBufferView_length);
+                speculate(Overflow, noValue(), nullptr, m_out.above(length, m_out.constInt64(std::numeric_limits<int32_t>::max())));
+                setInt32(m_out.castToInt32(length));
+#else
+                setInt32(m_out.load32NonNegative(lowCell(m_node->child1()), m_heaps.JSArrayBufferView_length));
+#endif
                 return;
             }
             
@@ -5063,6 +5099,16 @@ private:
             return;
         }
     }
+
+IGNORE_CLANG_WARNINGS_BEGIN("missing-noreturn")
+    void compileGetTypedArrayLengthAsInt52()
+    {
+        RELEASE_ASSERT(m_node->arrayMode().isSomeTypedArrayView());
+        // The preprocessor chokes on RELEASE_ASSERT(USE(LARGE_TYPED_ARRAYS)), this is equivalent.
+        RELEASE_ASSERT(sizeof(size_t) == sizeof(uint64_t));
+        setStrictInt52(m_out.load64NonNegative(lowCell(m_node->child1()), m_heaps.JSArrayBufferView_length));
+    }
+IGNORE_CLANG_WARNINGS_END
 
     void compileGetVectorLength()
     {
@@ -5108,7 +5154,22 @@ private:
         // depend on our value. Users of this node just need to maintain that
         // we dominate them.
     }
-    
+
+IGNORE_CLANG_WARNINGS_BEGIN("missing-noreturn")
+    void compileCheckInBoundsInt52()
+    {
+        // The preprocessor chokes on RELEASE_ASSERT(USE(LARGE_TYPED_ARRAYS)), this is equivalent.
+        RELEASE_ASSERT(sizeof(size_t) == sizeof(uint64_t));
+        // Sign-extended to also catch negative indices
+        LValue index = m_out.signExt32To64(lowInt32(m_node->child1()));
+        LValue length = lowStrictInt52(m_node->child2());
+        speculate(OutOfBounds, noValue(), nullptr, m_out.aboveOrEqual(index, length));
+        // Even though we claim to have JSValue result, no user of us should
+        // depend on our value. Users of this node just need to maintain that
+        // we dominate them.
+    }
+IGNORE_CLANG_WARNINGS_END
+
     LValue compileGetByValImpl()
     {
         JSGlobalObject* globalObject = m_graph.globalObjectFor(m_origin.semantic);
@@ -5404,7 +5465,7 @@ private:
                 GPRReg stubInfoGPR = JITCode::useDataIC(JITType::FTLJIT) ? params.gpScratch(0) : InvalidGPRReg;
 
                 auto generator = Box<JITGetByValGenerator>::create(
-                    jit.codeBlock(), JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex, AccessType::GetByVal,
+                    jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex, AccessType::GetByVal,
                     params.unavailableRegisters(), JSValueRegs(baseGPR), JSValueRegs(propertyGPR), JSValueRegs(resultGPR), stubInfoGPR);
 
                 generator->stubInfo()->propertyIsString = propertyIsString;
@@ -5761,7 +5822,7 @@ private:
                 GPRReg stubInfoGPR = JITCode::useDataIC(JITType::FTLJIT) ? params.gpScratch(0) : InvalidGPRReg;
 
                 auto generator = Box<JITPutByValGenerator>::create(
-                    jit.codeBlock(), JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex, AccessType::PutByVal,
+                    jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex, AccessType::PutByVal,
                     params.unavailableRegisters(), JSValueRegs(baseGPR), JSValueRegs(propertyGPR), JSValueRegs(valueGPR), InvalidGPRReg, stubInfoGPR);
 
                 generator->stubInfo()->propertyIsString = propertyIsString;
@@ -6008,11 +6069,18 @@ private:
                     LBasicBlock isInBounds = m_out.newBlock();
                     LBasicBlock isOutOfBounds = m_out.newBlock();
                     LBasicBlock continuation = m_out.newBlock();
-                    
-                    m_out.branch(
-                        m_out.aboveOrEqual(index, lowInt32(child5)),
-                        unsure(isOutOfBounds), unsure(isInBounds));
-                    
+
+                    LValue isOutOfBoundsCondition;
+                    if (child5.useKind() == Int52RepUse) {
+                        // The preprocessor chokes on RELEASE_ASSERT(USE(LARGE_TYPED_ARRAYS)), this is equivalent.
+                        RELEASE_ASSERT(sizeof(size_t) == sizeof(uint64_t));
+                        isOutOfBoundsCondition = m_out.aboveOrEqual(m_out.signExt32To64(index), lowStrictInt52(child5));
+                    } else {
+                        DFG_ASSERT(m_graph, m_node, child5.useKind() == KnownInt32Use, child5.useKind());
+                        isOutOfBoundsCondition = m_out.aboveOrEqual(index, lowInt32(child5));
+                    }
+                    m_out.branch(isOutOfBoundsCondition, unsure(isOutOfBounds), unsure(isInBounds));
+
                     LBasicBlock lastNext = m_out.appendTo(isInBounds, isOutOfBounds);
                     m_out.store(valueToStore, pointer, storeType(type));
                     m_out.jump(continuation);
@@ -6155,12 +6223,12 @@ private:
                 const auto generator = [&] {
                     if constexpr (kind == DelByKind::ById) {
                         return Box<JITDelByIdGenerator>::create(
-                            jit.codeBlock(), JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex,
+                            jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex,
                             params.unavailableRegisters(), subscriptValue, base,
                             JSValueRegs(returnGPR), stubInfoGPR, scratchGPR);
                     } else {
                         return Box<JITDelByValGenerator>::create(
-                            jit.codeBlock(), JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex,
+                            jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, nodeSemanticOrigin, callSiteIndex,
                             params.unavailableRegisters(), base,
                             subscript, JSValueRegs(returnGPR), stubInfoGPR, scratchGPR);
                     }
@@ -8169,95 +8237,18 @@ private:
         case Int32Use: {
             RegisteredStructure structure = m_graph.registerStructure(globalObject->typedArrayStructureConcurrently(typedArrayType));
 
-            LValue size = lowInt32(m_node->child1());
+            LValue size = m_out.signExt32To64(lowInt32(m_node->child1()));
 
-            LBasicBlock smallEnoughCase = m_out.newBlock();
-            LBasicBlock slowCase = m_out.newBlock();
-            LBasicBlock continuation = m_out.newBlock();
-            
-            ValueFromBlock noStorage = m_out.anchor(m_out.intPtrZero);
+            emitNewTypedArrayWithSize(typedArrayType, globalObject, structure, size);
+            return;
+        }
 
-            m_out.branch(
-                m_out.above(size, m_out.constInt32(JSArrayBufferView::fastSizeLimit)),
-                rarely(slowCase), usually(smallEnoughCase));
+        case Int52RepUse: {
+            RegisteredStructure structure = m_graph.registerStructure(globalObject->typedArrayStructureConcurrently(typedArrayType));
 
-            LBasicBlock lastNext = m_out.appendTo(smallEnoughCase, slowCase);
+            LValue size = lowStrictInt52(m_node->child1());
 
-            LValue byteSize =
-                m_out.shl(m_out.zeroExtPtr(size), m_out.constInt32(logElementSize(typedArrayType)));
-            if (elementSize(typedArrayType) < 8) {
-                byteSize = m_out.bitAnd(
-                    m_out.add(byteSize, m_out.constIntPtr(7)),
-                    m_out.constIntPtr(~static_cast<intptr_t>(7)));
-            }
-        
-            LValue allocator = allocatorForSize(vm().primitiveGigacageAuxiliarySpace, byteSize, slowCase);
-            LValue storage = allocateHeapCell(allocator, slowCase);
-            
-            splatWords(
-                storage,
-                m_out.int32Zero,
-                m_out.castToInt32(m_out.lShr(byteSize, m_out.constIntPtr(3))),
-                m_out.int64Zero,
-                m_heaps.typedArrayProperties);
-
-#if CPU(ARM64E)
-            {
-                LValue sizePtr = m_out.zeroExtPtr(size);
-                PatchpointValue* authenticate = m_out.patchpoint(pointerType());
-                authenticate->appendSomeRegister(storage);
-                authenticate->append(sizePtr, B3::ValueRep(B3::ValueRep::SomeLateRegister));
-                authenticate->setGenerator([=] (CCallHelpers& jit, const StackmapGenerationParams& params) {
-                    jit.move(params[1].gpr(), params[0].gpr());
-                    jit.tagArrayPtr(params[2].gpr(), params[0].gpr());
-                });
-                storage = authenticate;
-            }
-#endif
-
-            ValueFromBlock haveStorage = m_out.anchor(storage);
-
-            LValue fastResultValue = nullptr;
-            switch (typedArrayType) {
-#define TYPED_ARRAY_TYPE_CASE(name) \
-            case Type ## name: \
-                fastResultValue = allocateObject<JS##name##Array>(structure, m_out.intPtrZero, slowCase); \
-                break;
-            FOR_EACH_TYPED_ARRAY_TYPE_EXCLUDING_DATA_VIEW(TYPED_ARRAY_TYPE_CASE)
-#undef TYPED_ARRAY_TYPE_CASE
-            case TypeDataView:
-                fastResultValue = allocateObject<JSDataView>(structure, m_out.intPtrZero, slowCase);
-                break;
-            default:
-                RELEASE_ASSERT_NOT_REACHED();
-                break;
-            }
-
-            m_out.storePtr(storage, fastResultValue, m_heaps.JSArrayBufferView_vector);
-            m_out.store32(size, fastResultValue, m_heaps.JSArrayBufferView_length);
-            m_out.store32(m_out.constInt32(FastTypedArray), fastResultValue, m_heaps.JSArrayBufferView_mode);
-            
-            mutatorFence();
-            ValueFromBlock fastResult = m_out.anchor(fastResultValue);
-            m_out.jump(continuation);
-
-            m_out.appendTo(slowCase, continuation);
-            LValue storageValue = m_out.phi(pointerType(), noStorage, haveStorage);
-
-            VM& vm = this->vm();
-            LValue slowResultValue = lazySlowPath(
-                [=, &vm] (const Vector<Location>& locations) -> RefPtr<LazySlowPath::Generator> {
-                    return createLazyCallGenerator(vm,
-                        operationNewTypedArrayWithSizeForType(typedArrayType), locations[0].directGPR(), globalObject,
-                        CCallHelpers::TrustedImmPtr(structure.get()), locations[1].directGPR(),
-                        locations[2].directGPR());
-                },
-                size, storageValue);
-            ValueFromBlock slowResult = m_out.anchor(slowResultValue);
-            m_out.jump(continuation);
-
-            m_out.appendTo(continuation, lastNext);
-            setJSValue(m_out.phi(pointerType(), fastResult, slowResult));
+            emitNewTypedArrayWithSize(typedArrayType, globalObject, structure, size);
             return;
         }
 
@@ -8277,7 +8268,104 @@ private:
             return;
         }
     }
-    
+
+    void emitNewTypedArrayWithSize(TypedArrayType typedArrayType, JSGlobalObject* globalObject, RegisteredStructure structure, LValue size64Bits)
+    {
+        LBasicBlock smallEnoughCase = m_out.newBlock();
+        LBasicBlock slowCase = m_out.newBlock();
+        LBasicBlock continuation = m_out.newBlock();
+
+        ValueFromBlock noStorage = m_out.anchor(m_out.intPtrZero);
+
+        m_out.branch(
+            m_out.above(size64Bits, m_out.constInt64(JSArrayBufferView::fastSizeLimit)),
+            rarely(slowCase), usually(smallEnoughCase));
+
+        LBasicBlock lastNext = m_out.appendTo(smallEnoughCase, slowCase);
+        // We assume through the rest of the fast path that the size is a 32-bit number.
+        static_assert(isInBounds<int32_t>(JSArrayBufferView::fastSizeLimit));
+
+        LValue byteSize =
+            m_out.shl(size64Bits, m_out.constInt32(logElementSize(typedArrayType)));
+        if (elementSize(typedArrayType) < 8) {
+            byteSize = m_out.bitAnd(
+                m_out.add(byteSize, m_out.constIntPtr(7)),
+                m_out.constIntPtr(~static_cast<intptr_t>(7)));
+        }
+
+        LValue allocator = allocatorForSize(vm().primitiveGigacageAuxiliarySpace, byteSize, slowCase);
+        LValue storage = allocateHeapCell(allocator, slowCase);
+
+        splatWords(
+            storage,
+            m_out.int32Zero,
+            m_out.castToInt32(m_out.lShr(byteSize, m_out.constIntPtr(3))),
+            m_out.int64Zero,
+            m_heaps.typedArrayProperties);
+
+#if CPU(ARM64E)
+        {
+            PatchpointValue* authenticate = m_out.patchpoint(pointerType());
+            authenticate->appendSomeRegister(storage);
+            authenticate->append(size64Bits, B3::ValueRep(B3::ValueRep::SomeLateRegister));
+            authenticate->setGenerator([=] (CCallHelpers& jit, const StackmapGenerationParams& params) {
+                jit.move(params[1].gpr(), params[0].gpr());
+                jit.tagArrayPtr(params[2].gpr(), params[0].gpr());
+            });
+            storage = authenticate;
+        }
+#endif
+
+        ValueFromBlock haveStorage = m_out.anchor(storage);
+
+        LValue fastResultValue = nullptr;
+        switch (typedArrayType) {
+#define TYPED_ARRAY_TYPE_CASE(name) \
+        case Type ## name: \
+            fastResultValue = allocateObject<JS##name##Array>(structure, m_out.intPtrZero, slowCase); \
+            break;
+        FOR_EACH_TYPED_ARRAY_TYPE_EXCLUDING_DATA_VIEW(TYPED_ARRAY_TYPE_CASE)
+#undef TYPED_ARRAY_TYPE_CASE
+        case TypeDataView:
+            fastResultValue = allocateObject<JSDataView>(structure, m_out.intPtrZero, slowCase);
+            break;
+        default:
+            RELEASE_ASSERT_NOT_REACHED();
+            break;
+        }
+
+        m_out.storePtr(storage, fastResultValue, m_heaps.JSArrayBufferView_vector);
+#if USE(LARGE_TYPED_ARRAYS)
+        m_out.store64(size64Bits, fastResultValue, m_heaps.JSArrayBufferView_length);
+#else
+        m_out.store32(m_out.castToInt32(size64Bits), fastResultValue, m_heaps.JSArrayBufferView_length);
+#endif
+        m_out.store32(m_out.constInt32(FastTypedArray), fastResultValue, m_heaps.JSArrayBufferView_mode);
+
+        mutatorFence();
+        ValueFromBlock fastResult = m_out.anchor(fastResultValue);
+        m_out.jump(continuation);
+
+        m_out.appendTo(slowCase, continuation);
+        LValue storageValue = m_out.phi(pointerType(), noStorage, haveStorage);
+
+        VM& vm = this->vm();
+        LValue slowResultValue = lazySlowPath(
+            [=, &vm] (const Vector<Location>& locations) -> RefPtr<LazySlowPath::Generator> {
+                return createLazyCallGenerator(vm,
+                    operationNewTypedArrayWithSizeForType(typedArrayType), locations[0].directGPR(), globalObject,
+                    CCallHelpers::TrustedImmPtr(structure.get()), locations[1].directGPR(),
+                    locations[2].directGPR());
+            },
+            size64Bits, storageValue);
+        ValueFromBlock slowResult = m_out.anchor(slowResultValue);
+        m_out.jump(continuation);
+
+        m_out.appendTo(continuation, lastNext);
+        setJSValue(m_out.phi(pointerType(), fastResult, slowResult));
+        return;
+    }
+
     void compileAllocatePropertyStorage()
     {
         LValue object = lowCell(m_node->child1());
@@ -8839,7 +8927,7 @@ private:
             Structure* objectPrototypeStructure = globalObject->objectPrototype()->structure(vm());
             WTF::dependentLoadLoadFence();
 
-            if (globalObject->stringPrototypeChainIsSane()) {
+            if (globalObject->stringPrototypeChainIsSaneConcurrently(stringPrototypeStructure, objectPrototypeStructure)) {
                 // FIXME: This could be captured using a Speculation mode that means
                 // "out-of-bounds loads return a trivial value", something like
                 // OutOfBoundsSaneChain.
@@ -10167,7 +10255,7 @@ private:
                     CCallHelpers::TrustedImm32(callSiteIndex.bits()),
                     CCallHelpers::tagFor(VirtualRegister(CallFrameSlot::argumentCountIncludingThis)));
 
-                CallLinkInfo* callLinkInfo = jit.codeBlock()->addCallLinkInfo(nodeSemanticOrigin);
+                CallLinkInfo* callLinkInfo = state->jitCode->common.addCallLinkInfo(nodeSemanticOrigin);
                 callLinkInfo->setUpCall(
                     nodeOp == Construct ? CallLinkInfo::Construct : CallLinkInfo::Call, GPRInfo::regT0);
 
@@ -10301,7 +10389,7 @@ private:
                     shuffleData.numParameters = jit.codeBlock()->numParameters();
                     shuffleData.setupCalleeSaveRegisters(jit.codeBlock());
                     
-                    CallLinkInfo* callLinkInfo = jit.codeBlock()->addCallLinkInfo(semanticNodeOrigin);
+                    CallLinkInfo* callLinkInfo = state->jitCode->common.addCallLinkInfo(semanticNodeOrigin);
                     callLinkInfo->setUpCall(CallLinkInfo::DirectTailCall, InvalidGPRReg);
                     
                     CCallHelpers::Label mainPath = jit.label();
@@ -10333,7 +10421,7 @@ private:
                     return;
                 }
                 
-                CallLinkInfo* callLinkInfo = jit.codeBlock()->addCallLinkInfo(semanticNodeOrigin);
+                CallLinkInfo* callLinkInfo = state->jitCode->common.addCallLinkInfo(semanticNodeOrigin);
                 callLinkInfo->setUpCall(
                     isConstruct ? CallLinkInfo::DirectConstruct : CallLinkInfo::DirectCall, InvalidGPRReg);
 
@@ -10461,7 +10549,7 @@ private:
                 
                 shuffleData.setupCalleeSaveRegisters(jit.codeBlock());
 
-                CallLinkInfo* callLinkInfo = jit.codeBlock()->addCallLinkInfo(codeOrigin);
+                CallLinkInfo* callLinkInfo = state->jitCode->common.addCallLinkInfo(codeOrigin);
                 callLinkInfo->setUpCall(CallLinkInfo::TailCall, GPRInfo::regT0);
 
                 auto slowPath = callLinkInfo->emitTailCallFastPath(jit, GPRInfo::regT0, [&] {
@@ -10666,7 +10754,7 @@ private:
                     CCallHelpers::TrustedImm32(callSiteIndex.bits()),
                     CCallHelpers::tagFor(VirtualRegister(CallFrameSlot::argumentCountIncludingThis)));
 
-                CallLinkInfo* callLinkInfo = jit.codeBlock()->addCallLinkInfo(semanticNodeOrigin);
+                CallLinkInfo* callLinkInfo = state->jitCode->common.addCallLinkInfo(semanticNodeOrigin);
 
                 RegisterSet usedRegisters = RegisterSet::allRegisters();
                 usedRegisters.exclude(RegisterSet::volatileRegistersForJSCall());
@@ -10950,7 +11038,7 @@ private:
                     CCallHelpers::TrustedImm32(callSiteIndex.bits()),
                     CCallHelpers::tagFor(VirtualRegister(CallFrameSlot::argumentCountIncludingThis)));
 
-                CallLinkInfo* callLinkInfo = jit.codeBlock()->addCallLinkInfo(semanticNodeOrigin);
+                CallLinkInfo* callLinkInfo = state->jitCode->common.addCallLinkInfo(semanticNodeOrigin);
 
                 unsigned argIndex = 1;
                 GPRReg calleeGPR = params[argIndex++].gpr();
@@ -11192,7 +11280,7 @@ private:
                     CCallHelpers::TrustedImm32(callSiteIndex.bits()),
                     CCallHelpers::tagFor(VirtualRegister(CallFrameSlot::argumentCountIncludingThis)));
                 
-                CallLinkInfo* callLinkInfo = jit.codeBlock()->addCallLinkInfo(semanticNodeOrigin);
+                CallLinkInfo* callLinkInfo = state->jitCode->common.addCallLinkInfo(semanticNodeOrigin);
                 callLinkInfo->setUpCall(CallLinkInfo::Call, GPRInfo::regT0);
                 
                 jit.addPtr(CCallHelpers::TrustedImm32(-static_cast<ptrdiff_t>(sizeof(CallerFrameAndPC))), CCallHelpers::stackPointerRegister, GPRInfo::regT1);
@@ -12781,12 +12869,12 @@ private:
                 const auto generator = [&] {
                     if constexpr (type == AccessType::InById) {
                         return Box<JITInByIdGenerator>::create(
-                            jit.codeBlock(), JITType::FTLJIT, semanticNodeOrigin, callSiteIndex,
+                            jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, semanticNodeOrigin, callSiteIndex,
                             params.unavailableRegisters(), subscriptValue, base,
                             JSValueRegs(returnGPR), stubInfoGPR);
                     } else {
                         return Box<JITInByValGenerator>::create(
-                            jit.codeBlock(), JITType::FTLJIT, semanticNodeOrigin, callSiteIndex,
+                            jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, semanticNodeOrigin, callSiteIndex,
                             type, params.unavailableRegisters(), base, subscript,
                             JSValueRegs(returnGPR), stubInfoGPR);
                     }
@@ -13109,7 +13197,7 @@ private:
                     exceptionHandle->scheduleExitCreation(params)->jumps(jit);
                 
                 auto generator = Box<JITInstanceOfGenerator>::create(
-                    jit.codeBlock(), JITType::FTLJIT, semanticNodeOrigin, callSiteIndex,
+                    jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, semanticNodeOrigin, callSiteIndex,
                     params.unavailableRegisters(), resultGPR, valueGPR, prototypeGPR, stubInfoGPR, scratchGPR,
                     scratch2GPR, prototypeIsObject);
                 generator->generateFastPath(jit);
@@ -13413,12 +13501,12 @@ private:
             m_out.branch(isRareData, unsure(rareDataCase), unsure(genericCase));
 
             m_out.appendTo(rareDataCase, validationCase);
-            LValue cached = m_out.loadPtr(previousOrRareData, m_heaps.StructureRareData_cachedPropertyNameEnumerator);
-            m_out.branch(m_out.notNull(cached), unsure(validationCase), unsure(genericCase));
+            LValue cachedAndFlag = m_out.loadPtr(previousOrRareData, m_heaps.StructureRareData_cachedPropertyNameEnumeratorAndFlag);
+            m_out.branch(m_out.notNull(cachedAndFlag), unsure(validationCase), unsure(genericCase));
 
             m_out.appendTo(validationCase, genericCase);
-            results.append(m_out.anchor(cached));
-            m_out.branch(m_out.testNonZero32(m_out.load32(cached, m_heaps.JSPropertyNameEnumerator_flags), m_out.constInt32(JSPropertyNameEnumerator::ValidatedViaWatchpoint)), unsure(continuation), unsure(genericCase));
+            results.append(m_out.anchor(cachedAndFlag));
+            m_out.branch(m_out.testIsZeroPtr(cachedAndFlag, m_out.constIntPtr(StructureRareData::cachedPropertyNameEnumeratorIsValidatedViaTraversingFlag)), unsure(continuation), unsure(genericCase));
 
             m_out.appendTo(genericCase, continuation);
             results.append(m_out.anchor(vmCall(pointerType(), operationGetPropertyEnumeratorCell, weakPointer(globalObject), base)));
@@ -13658,7 +13746,7 @@ private:
             if (elementSize(type) < 4 || isSigned(type))
                 genericResult = boxInt32(genericResult);
             else
-                genericResult = strictInt52ToJSValue(genericResult);
+                genericResult = strictInt52ToJSValue(m_out.zeroExt(genericResult, Int64));
         } else if (genericResult->type() == Double)
             genericResult = boxDouble(genericResult);
 
@@ -13778,7 +13866,7 @@ private:
             
             if (structure->outOfLineCapacity() || hasIndexedProperties(structure->indexingType())) {
                 Allocator cellAllocator;
-                if (structure->type() == JSType::ArrayType)
+                if (structure->typeInfo().type() == JSType::ArrayType)
                     cellAllocator = allocatorForNonVirtualConcurrently<JSArray>(vm(), JSArray::allocationSize(structure->inlineCapacity()), AllocatorForMode::AllocatorIfExists);
                 else
                     cellAllocator = allocatorForNonVirtualConcurrently<JSFinalObject>(vm(), JSFinalObject::allocationSize(structure->inlineCapacity()), AllocatorForMode::AllocatorIfExists);
@@ -14290,7 +14378,7 @@ private:
 
         auto structure = m_graph.registerStructure(globalObject->regExpStructure());
         LValue fastResultValue = allocateObject<RegExpObject>(structure, m_out.intPtrZero, slowCase);
-        m_out.storePtr(frozenPointer(regexp), fastResultValue, m_heaps.RegExpObject_regExpAndLastIndexIsNotWritableFlag);
+        m_out.storePtr(frozenPointer(regexp), fastResultValue, m_heaps.RegExpObject_regExpAndFlags);
         m_out.store64(lastIndex, fastResultValue, m_heaps.RegExpObject_lastIndex);
         mutatorFence();
         ValueFromBlock fastResult = m_out.anchor(fastResultValue);
@@ -14377,7 +14465,7 @@ private:
             speculate(
                 ExoticObjectMode, noValue(), nullptr,
                 m_out.testNonZeroPtr(
-                    m_out.loadPtr(regExp, m_heaps.RegExpObject_regExpAndLastIndexIsNotWritableFlag),
+                    m_out.loadPtr(regExp, m_heaps.RegExpObject_regExpAndFlags),
                     m_out.constIntPtr(RegExpObject::lastIndexIsNotWritableFlag)));
 
             m_out.store64(value, regExp, m_heaps.RegExpObject_lastIndex);
@@ -14656,6 +14744,8 @@ private:
         }
     }
 
+    // base and value are 64-bits, begin and end are 32-bits
+    // stores value at every 64-bits word between base+begin*8 and base+end*8
     void splatWords(LValue base, LValue begin, LValue end, LValue value, const AbstractHeap& heap)
     {
         const uint64_t unrollingLimit = 10;
@@ -14833,7 +14923,7 @@ private:
                 GPRReg stubInfoGPR = JITCode::useDataIC(JITType::FTLJIT) ? params.gpScratch(0) : InvalidGPRReg;
 
                 auto generator = Box<JITGetByIdGenerator>::create(
-                    jit.codeBlock(), JITType::FTLJIT, semanticNodeOrigin, callSiteIndex,
+                    jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, semanticNodeOrigin, callSiteIndex,
                     params.unavailableRegisters(), identifier, JSValueRegs(params[1].gpr()),
                     JSValueRegs(params[0].gpr()), stubInfoGPR, type);
 
@@ -14917,7 +15007,7 @@ private:
                 GPRReg stubInfoGPR = JITCode::useDataIC(JITType::FTLJIT) ? params.gpScratch(0) : InvalidGPRReg;
 
                 auto generator = Box<JITGetByIdWithThisGenerator>::create(
-                    jit.codeBlock(), JITType::FTLJIT, semanticNodeOrigin, callSiteIndex,
+                    jit.codeBlock(), &state->jitCode->common.m_stubInfos, JITType::FTLJIT, semanticNodeOrigin, callSiteIndex,
                     params.unavailableRegisters(), identifier, JSValueRegs(params[0].gpr()),
                     JSValueRegs(params[1].gpr()), JSValueRegs(params[2].gpr()), stubInfoGPR);
 
@@ -15591,7 +15681,13 @@ private:
 
         DataViewData data = m_node->dataViewData();
 
+#if USE(LARGE_TYPED_ARRAYS)
+        speculate(OutOfBounds, noValue(), nullptr, m_out.lessThan(index, m_out.constInt32(0)));
+        LValue length = m_out.load64NonNegative(dataView, m_heaps.JSArrayBufferView_length);
+#else
+        // No need for an explicit comparison of index to 0, the check against length catches that case
         LValue length = m_out.zeroExtPtr(m_out.load32NonNegative(dataView, m_heaps.JSArrayBufferView_length));
+#endif
         LValue indexToCheck = m_out.zeroExtPtr(index);
         if (data.byteSize > 1)
             indexToCheck = m_out.add(indexToCheck, m_out.constInt64(data.byteSize - 1));
@@ -15734,7 +15830,13 @@ private:
 
         DataViewData data = m_node->dataViewData();
 
+#if USE(LARGE_TYPED_ARRAYS)
+        speculate(OutOfBounds, noValue(), nullptr, m_out.lessThan(index, m_out.constInt32(0)));
+        LValue length = m_out.load64NonNegative(dataView, m_heaps.JSArrayBufferView_length);
+#else
+        // No need for an explicit comparison of index to 0, the check against length catches that case
         LValue length = m_out.zeroExtPtr(m_out.load32NonNegative(dataView, m_heaps.JSArrayBufferView_length));
+#endif
         LValue indexToCheck = m_out.zeroExtPtr(index);
         if (data.byteSize > 1)
             indexToCheck = m_out.add(indexToCheck, m_out.constInt64(data.byteSize - 1));
@@ -17236,7 +17338,11 @@ private:
         auto doUntagArrayPtr = [&](LValue taggedPtr) {
 #if CPU(ARM64E)
             if (kind == Gigacage::Primitive) {
+#if USE(LARGE_TYPED_ARRAYS)
+                LValue size = m_out.load64(base, m_heaps.JSArrayBufferView_length);
+#else
                 LValue size = m_out.load32(base, m_heaps.JSArrayBufferView_length);
+#endif
                 return untagArrayPtr(taggedPtr, size);
             }
             return ptr;
@@ -19541,7 +19647,7 @@ private:
             
     LValue isExoticForTypeof(LValue cell, SpeculatedType type = SpecFullTop)
     {
-        if (!(type & SpecObjectOther))
+        if (!(type & (SpecObjectOther | SpecProxyObject)))
             return m_out.booleanFalse;
         return m_out.testNonZero32(
             m_out.load8ZeroExt32(cell, m_heaps.JSCell_typeInfoFlags),

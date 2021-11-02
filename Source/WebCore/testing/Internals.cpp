@@ -38,6 +38,7 @@
 #include "BackForwardCache.h"
 #include "BackForwardController.h"
 #include "BitmapImage.h"
+#include "Blob.h"
 #include "CSSKeyframesRule.h"
 #include "CSSMediaRule.h"
 #include "CSSPropertyParser.h"
@@ -69,6 +70,7 @@
 #include "DocumentLoader.h"
 #include "DocumentMarkerController.h"
 #include "DocumentTimeline.h"
+#include "DocumentTimelinesController.h"
 #include "Editor.h"
 #include "Element.h"
 #include "EventHandler.h"
@@ -121,6 +123,7 @@
 #include "InternalsSetLike.h"
 #include "JSDOMPromiseDeferred.h"
 #include "JSImageData.h"
+#include "JSServiceWorkerRegistration.h"
 #include "LegacySchemeRegistry.h"
 #include "LibWebRTCProvider.h"
 #include "LoaderStrategy.h"
@@ -161,6 +164,8 @@
 #include "PluginData.h"
 #include "PrintContext.h"
 #include "PseudoElement.h"
+#include "PushSubscription.h"
+#include "PushSubscriptionOptions.h"
 #include "RTCRtpSFrameTransform.h"
 #include "Range.h"
 #include "ReadableStream.h"
@@ -206,6 +211,7 @@
 #include "SystemSoundManager.h"
 #include "TextIterator.h"
 #include "TextPlaceholderElement.h"
+#include "ThreadableBlobRegistry.h"
 #include "TreeScope.h"
 #include "TypeConversions.h"
 #include "UserGestureIndicator.h"
@@ -583,10 +589,12 @@ void Internals::resetToConsistentState(Page& page)
 #if USE(LIBWEBRTC)
     auto& rtcProvider = page.libWebRTCProvider();
     WebCore::useRealRTCPeerConnectionFactory(rtcProvider);
-    rtcProvider.disableNonLocalhostConnections();
     LibWebRTCProvider::setH264HardwareEncoderAllowed(true);
-    RuntimeEnabledFeatures::sharedFeatures().setWebRTCH265CodecEnabled(true);
     page.settings().setWebRTCEncryptionEnabled(true);
+    rtcProvider.disableNonLocalhostConnections();
+    rtcProvider.setH265Support(true);
+    rtcProvider.setVP9Support(true, true);
+    rtcProvider.clearFactory();
 #endif
 
     page.setFullscreenAutoHideDuration(0_s);
@@ -829,6 +837,16 @@ String Internals::xhrResponseSource(XMLHttpRequest& request)
 String Internals::fetchResponseSource(FetchResponse& response)
 {
     return responseSourceToString(response.resourceResponse());
+}
+
+String Internals::blobInternalURL(const Blob& blob)
+{
+    return blob.url().string();
+}
+
+void Internals::isBlobInternalURLRegistered(const String& url, DOMPromiseDeferred<IDLBoolean>&& promise)
+{
+    promise.resolve(!!ThreadableBlobRegistry::blobSize(URL { { }, url }));
 }
 
 bool Internals::isSharingStyleSheetContents(HTMLLinkElement& a, HTMLLinkElement& b)
@@ -1613,6 +1631,22 @@ void Internals::setWebRTCVP9VTBSupport(bool value)
 #endif
 }
 
+bool Internals::isSupportingVP9VTB() const
+{
+#if USE(LIBWEBRTC)
+    if (auto* page = contextDocument()->page())
+        return page->libWebRTCProvider().isSupportingVP9VTB();
+#endif
+    return false;
+}
+
+void Internals::isVP9VTBDeccoderUsed(RTCPeerConnection& connection, DOMPromiseDeferred<IDLBoolean>&& promise)
+{
+    connection.gatherDecoderImplementationName([promise = WTFMove(promise)](auto&& name) mutable {
+        promise.resolve(name.contains("VideoToolBox"));
+    });
+}
+
 void Internals::setSFrameCounter(RTCRtpSFrameTransform& transform, const String& counter)
 {
     if (auto value = parseInteger<uint64_t>(counter))
@@ -1849,14 +1883,14 @@ ExceptionOr<void> Internals::setScrollViewPosition(int x, int y)
         return Exception { InvalidAccessError };
 
     auto& frameView = *document->view();
-    bool constrainsScrollingToContentEdgeOldValue = frameView.constrainsScrollingToContentEdge();
+    auto oldClamping = frameView.scrollClamping();
     bool scrollbarsSuppressedOldValue = frameView.scrollbarsSuppressed();
 
-    frameView.setConstrainsScrollingToContentEdge(false);
+    frameView.setScrollClamping(ScrollClamping::Unclamped);
     frameView.setScrollbarsSuppressed(false);
     frameView.setScrollOffsetFromInternals({ x, y });
     frameView.setScrollbarsSuppressed(scrollbarsSuppressedOldValue);
-    frameView.setConstrainsScrollingToContentEdge(constrainsScrollingToContentEdgeOldValue);
+    frameView.setScrollClamping(oldClamping);
 
     return { };
 }
@@ -3112,11 +3146,6 @@ ExceptionOr<void> Internals::setElementTracksDisplayListReplay(Element& element,
     if (!element.renderer())
         return Exception { InvalidAccessError };
 
-    if (is<HTMLCanvasElement>(element)) {
-        downcast<HTMLCanvasElement>(element).setTracksDisplayListReplay(isTrackingReplay);
-        return { };
-    }
-
     if (!element.renderer()->hasLayer())
         return Exception { InvalidAccessError };
 
@@ -3143,9 +3172,6 @@ ExceptionOr<String> Internals::displayListForElement(Element& element, unsigned 
     if (flags & DISPLAY_LIST_INCLUDES_PLATFORM_OPERATIONS)
         displayListFlags |= DisplayList::AsTextFlag::IncludesPlatformOperations;
 
-    if (is<HTMLCanvasElement>(element))
-        return downcast<HTMLCanvasElement>(element).displayListAsText(displayListFlags);
-
     if (!element.renderer()->hasLayer())
         return Exception { InvalidAccessError };
 
@@ -3170,9 +3196,6 @@ ExceptionOr<String> Internals::replayDisplayListForElement(Element& element, uns
     DisplayList::AsTextFlags displayListFlags = 0;
     if (flags & DISPLAY_LIST_INCLUDES_PLATFORM_OPERATIONS)
         displayListFlags |= DisplayList::AsTextFlag::IncludesPlatformOperations;
-
-    if (is<HTMLCanvasElement>(element))
-        return downcast<HTMLCanvasElement>(element).replayDisplayListAsText(displayListFlags);
 
     if (!element.renderer()->hasLayer())
         return Exception { InvalidAccessError };
@@ -3950,6 +3973,11 @@ void Internals::endSimulatedHDCPError(HTMLMediaElement& element)
         player->endSimulatedHDCPError();
 }
 
+ExceptionOr<bool> Internals::mediaPlayerRenderingCanBeAccelerated(HTMLMediaElement& element)
+{
+    return element.mediaPlayerRenderingCanBeAccelerated();
+}
+
 bool Internals::elementShouldBufferData(HTMLMediaElement& element)
 {
     return element.bufferingPolicy() < MediaPlayer::BufferingPolicy::LimitReadAhead;
@@ -4633,14 +4661,14 @@ void Internals::setPageMuted(StringView statesString)
     if (!document)
         return;
 
-    WebCore::MediaProducer::MutedStateFlags state;
+    WebCore::MediaProducerMutedStateFlags state;
     for (StringView stateString : statesString.split(',')) {
         if (equalLettersIgnoringASCIICase(stateString, "audio"))
-            state.add(MediaProducer::MutedState::AudioIsMuted);
+            state.add(MediaProducerMutedState::AudioIsMuted);
         if (equalLettersIgnoringASCIICase(stateString, "capturedevices"))
             state.add(MediaProducer::AudioAndVideoCaptureIsMuted);
         if (equalLettersIgnoringASCIICase(stateString, "screencapture"))
-            state.add(MediaProducer::MutedState::ScreenCaptureIsMuted);
+            state.add(MediaProducerMutedState::ScreenCaptureIsMuted);
     }
 
     if (Page* page = document->page())
@@ -4655,43 +4683,43 @@ String Internals::pageMediaState()
 
     auto state = document->page()->mediaState();
     StringBuilder string;
-    if (state.containsAny(MediaProducer::MediaState::IsPlayingAudio))
+    if (state.containsAny(MediaProducerMediaState::IsPlayingAudio))
         string.append("IsPlayingAudio,");
-    if (state.containsAny(MediaProducer::MediaState::IsPlayingVideo))
+    if (state.containsAny(MediaProducerMediaState::IsPlayingVideo))
         string.append("IsPlayingVideo,");
-    if (state.containsAny(MediaProducer::MediaState::IsPlayingToExternalDevice))
+    if (state.containsAny(MediaProducerMediaState::IsPlayingToExternalDevice))
         string.append("IsPlayingToExternalDevice,");
-    if (state.containsAny(MediaProducer::MediaState::RequiresPlaybackTargetMonitoring))
+    if (state.containsAny(MediaProducerMediaState::RequiresPlaybackTargetMonitoring))
         string.append("RequiresPlaybackTargetMonitoring,");
-    if (state.containsAny(MediaProducer::MediaState::ExternalDeviceAutoPlayCandidate))
+    if (state.containsAny(MediaProducerMediaState::ExternalDeviceAutoPlayCandidate))
         string.append("ExternalDeviceAutoPlayCandidate,");
-    if (state.containsAny(MediaProducer::MediaState::DidPlayToEnd))
+    if (state.containsAny(MediaProducerMediaState::DidPlayToEnd))
         string.append("DidPlayToEnd,");
-    if (state.containsAny(MediaProducer::MediaState::IsSourceElementPlaying))
+    if (state.containsAny(MediaProducerMediaState::IsSourceElementPlaying))
         string.append("IsSourceElementPlaying,");
 
-    if (state.containsAny(MediaProducer::MediaState::IsNextTrackControlEnabled))
+    if (state.containsAny(MediaProducerMediaState::IsNextTrackControlEnabled))
         string.append("IsNextTrackControlEnabled,");
-    if (state.containsAny(MediaProducer::MediaState::IsPreviousTrackControlEnabled))
+    if (state.containsAny(MediaProducerMediaState::IsPreviousTrackControlEnabled))
         string.append("IsPreviousTrackControlEnabled,");
 
-    if (state.containsAny(MediaProducer::MediaState::HasPlaybackTargetAvailabilityListener))
+    if (state.containsAny(MediaProducerMediaState::HasPlaybackTargetAvailabilityListener))
         string.append("HasPlaybackTargetAvailabilityListener,");
-    if (state.containsAny(MediaProducer::MediaState::HasAudioOrVideo))
+    if (state.containsAny(MediaProducerMediaState::HasAudioOrVideo))
         string.append("HasAudioOrVideo,");
-    if (state.containsAny(MediaProducer::MediaState::HasActiveAudioCaptureDevice))
+    if (state.containsAny(MediaProducerMediaState::HasActiveAudioCaptureDevice))
         string.append("HasActiveAudioCaptureDevice,");
-    if (state.containsAny(MediaProducer::MediaState::HasActiveVideoCaptureDevice))
+    if (state.containsAny(MediaProducerMediaState::HasActiveVideoCaptureDevice))
         string.append("HasActiveVideoCaptureDevice,");
-    if (state.containsAny(MediaProducer::MediaState::HasMutedAudioCaptureDevice))
+    if (state.containsAny(MediaProducerMediaState::HasMutedAudioCaptureDevice))
         string.append("HasMutedAudioCaptureDevice,");
-    if (state.containsAny(MediaProducer::MediaState::HasMutedVideoCaptureDevice))
+    if (state.containsAny(MediaProducerMediaState::HasMutedVideoCaptureDevice))
         string.append("HasMutedVideoCaptureDevice,");
-    if (state.containsAny(MediaProducer::MediaState::HasUserInteractedWithMediaElement))
+    if (state.containsAny(MediaProducerMediaState::HasUserInteractedWithMediaElement))
         string.append("HasUserInteractedWithMediaElement,");
-    if (state.containsAny(MediaProducer::MediaState::HasActiveDisplayCaptureDevice))
+    if (state.containsAny(MediaProducerMediaState::HasActiveDisplayCaptureDevice))
         string.append("HasActiveDisplayCaptureDevice,");
-    if (state.containsAny(MediaProducer::MediaState::HasMutedDisplayCaptureDevice))
+    if (state.containsAny(MediaProducerMediaState::HasMutedDisplayCaptureDevice))
         string.append("HasMutedDisplayCaptureDevice,");
 
     if (string.isEmpty())
@@ -5438,7 +5466,7 @@ void Internals::grabNextMediaStreamTrackFrame(TrackFramePromise&& promise)
 
 void Internals::videoSampleAvailable(MediaSample& sample)
 {
-    callOnMainThread([this, weakThis = makeWeakPtr(this), sample = Ref { sample }] {
+    callOnMainThread([this, weakThis = WeakPtr { *this }, sample = Ref { sample }] {
         if (!weakThis)
             return;
         m_trackVideoSampleCount++;
@@ -6009,7 +6037,7 @@ String Internals::highlightPseudoElementColor(const String& highlightName, Eleme
     if (!parentStyle)
         return { };
 
-    auto style = styleResolver.pseudoStyleForElement(element, { PseudoId::Highlight, highlightName }, *parentStyle);
+    auto style = styleResolver.pseudoStyleForElement(element, { PseudoId::Highlight, highlightName }, { parentStyle });
     if (!style)
         return { };
 
@@ -6122,13 +6150,13 @@ String Internals::windowLocationHost(DOMWindow& window)
 String Internals::systemColorForCSSValue(const String& cssValue, bool useDarkModeAppearance, bool useElevatedUserInterfaceLevel)
 {
     CSSValueID id = cssValueKeywordID(cssValue);
-    RELEASE_ASSERT(StyleColor::isSystemColor(id));
+    RELEASE_ASSERT(StyleColor::isSystemColorKeyword(id));
 
-    OptionSet<StyleColor::Options> options;
+    OptionSet<StyleColorOptions> options;
     if (useDarkModeAppearance)
-        options.add(StyleColor::Options::UseDarkAppearance);
+        options.add(StyleColorOptions::UseDarkAppearance);
     if (useElevatedUserInterfaceLevel)
-        options.add(StyleColor::Options::UseElevatedUserInterfaceLevel);
+        options.add(StyleColorOptions::UseElevatedUserInterfaceLevel);
     
     return serializationForCSS(RenderTheme::singleton().systemColor(id, options));
 }
@@ -6276,7 +6304,7 @@ ExceptionOr<RefPtr<WebXRTest>> Internals::xrTest()
         if (!navigator)
             return Exception { InvalidAccessError };
 
-        m_xrTest = WebXRTest::create(makeWeakPtr(&NavigatorWebXR::xr(*navigator)));
+        m_xrTest = WebXRTest::create(NavigatorWebXR::xr(*navigator));
     }
     return m_xrTest.get();
 }
@@ -6534,6 +6562,28 @@ ExceptionOr<void> Internals::setDocumentAutoplayPolicy(Document& document, Inter
 bool Internals::platformSupportsMetal(bool)
 {
     return false;
+}
+#endif
+
+void Internals::retainTextIteratorForDocumentContent()
+{
+    auto* document = contextDocument();
+    if (!document)
+        return;
+
+    auto range = makeRangeSelectingNodeContents(*document);
+    m_textIterator = makeUnique<TextIterator>(range);
+}
+
+#if ENABLE(SERVICE_WORKER)
+RefPtr<PushSubscription> Internals::createPushSubscription(Ref<ServiceWorkerRegistration>&& registration, const String& endpoint, std::optional<EpochTimeStamp> expirationTime, const ArrayBuffer& serverVAPIDPublicKey, const ArrayBuffer& clientECDHPublicKey, const ArrayBuffer& auth)
+{
+    auto myEndpoint = endpoint;
+    Vector<uint8_t> myServerVAPIDPublicKey { static_cast<const uint8_t*>(serverVAPIDPublicKey.data()), serverVAPIDPublicKey.byteLength() };
+    Vector<uint8_t> myClientECDHPublicKey { static_cast<const uint8_t*>(clientECDHPublicKey.data()), clientECDHPublicKey.byteLength() };
+    Vector<uint8_t> myAuth { static_cast<const uint8_t*>(auth.data()), auth.byteLength() };
+
+    return PushSubscription::create(WTFMove(registration), WTFMove(myEndpoint), expirationTime, WTFMove(myServerVAPIDPublicKey), WTFMove(myClientECDHPublicKey), WTFMove(myAuth));
 }
 #endif
 

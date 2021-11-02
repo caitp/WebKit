@@ -37,15 +37,19 @@
 #include "TimingFunction.h"
 #include "WebAnimation.h"
 #include "WebAnimationUtilities.h"
+#include <variant>
 #include <wtf/Forward.h>
 #include <wtf/Ref.h>
 #include <wtf/RefCounted.h>
 #include <wtf/RefPtr.h>
 #include <wtf/Seconds.h>
-#include <wtf/Variant.h>
 #include <wtf/WeakPtr.h>
 
 namespace WebCore {
+
+namespace Style {
+struct ResolutionContext;
+}
 
 class AnimationEffect : public RefCounted<AnimationEffect>, public CanMakeWeakPtr<AnimationEffect> {
 public:
@@ -61,7 +65,7 @@ public:
     ExceptionOr<void> bindingsUpdateTiming(std::optional<OptionalEffectTiming>);
     ExceptionOr<void> updateTiming(std::optional<OptionalEffectTiming>);
 
-    virtual void apply(RenderStyle& targetStyle, const RenderStyle* parentElementStyle, std::optional<Seconds> = std::nullopt) = 0;
+    virtual void apply(RenderStyle& targetStyle, const Style::ResolutionContext&, std::optional<Seconds> = std::nullopt) = 0;
     virtual void invalidate() = 0;
     virtual void animationDidTick() = 0;
     virtual void animationDidPlay() = 0;
@@ -71,7 +75,7 @@ public:
     virtual void animationTimelineDidChange(AnimationTimeline*) = 0;
 
     WebAnimation* animation() const { return m_animation.get(); }
-    virtual void setAnimation(WebAnimation* animation) { m_animation = makeWeakPtr(animation); }
+    virtual void setAnimation(WebAnimation* animation) { m_animation = animation; }
 
     Seconds delay() const { return m_delay; }
     void setDelay(const Seconds&);

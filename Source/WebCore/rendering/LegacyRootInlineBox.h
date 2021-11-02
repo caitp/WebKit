@@ -135,9 +135,9 @@ public:
     {
         ASSERT(!isDirty());
         if (m_floats)
-            m_floats->append(makeWeakPtr(floatingBox));
+            m_floats->append(floatingBox);
         else
-            m_floats = makeUnique<CleanLineFloatList>(1, makeWeakPtr(floatingBox));
+            m_floats = makeUnique<CleanLineFloatList>(1, floatingBox);
     }
 
     void removeFloat(RenderBox& floatingBox)
@@ -200,7 +200,7 @@ private:
     LayoutUnit beforeAnnotationsAdjustment() const;
 
     // Where this line ended. The exact object and the position within that object are stored so that
-    // we can create an InlineIterator beginning just after the end of this line.
+    // we can create an LegacyInlineIterator beginning just after the end of this line.
     WeakPtr<RenderObject> m_lineBreakObj;
     RefPtr<BidiContext> m_lineBreakContext;
 

@@ -56,14 +56,13 @@ page/scrolling/nicosia/ScrollingTreeOverflowScrollProxyNode.cpp
 page/scrolling/nicosia/ScrollingTreeOverflowScrollingNodeNicosia.cpp
 page/scrolling/nicosia/ScrollingTreePositionedNode.cpp
 page/scrolling/nicosia/ScrollingTreeScrollingNodeDelegateNicosia.cpp
-page/scrolling/nicosia/ScrollingTreeStickyNode.cpp
+page/scrolling/nicosia/ScrollingTreeStickyNodeNicosia.cpp
 
 platform/UserAgentQuirks.cpp
 
 platform/adwaita/ScrollbarThemeAdwaita.cpp
 platform/adwaita/ThemeAdwaita.cpp
 
-platform/generic/ScrollAnimatorGeneric.cpp
 platform/generic/ScrollbarsControllerGeneric.cpp
 
 platform/graphics/ANGLEWebKitBridge.cpp

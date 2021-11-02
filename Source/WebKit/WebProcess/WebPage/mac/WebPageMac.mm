@@ -1103,7 +1103,7 @@ bool WebPage::shouldAvoidComputingPostLayoutDataForEditorState() const
 
 void WebPage::setAccentColor(WebCore::Color color)
 {
-    [NSApp _setAccentColor:color.isValid() ? WebCore::nsColor(color) : nil];
+    [NSApp _setAccentColor:cocoaColorOrNil(color).get()];
 }
 
 #endif // HAVE(APP_ACCENT_COLORS)
@@ -1144,7 +1144,7 @@ void WebPage::openPDFWithPreview(PDFPluginIdentifier identifier, CompletionHandl
 
 void WebPage::createPDFHUD(PDFPlugin& plugin, const IntRect& boundingBox)
 {
-    auto addResult = m_pdfPlugInsWithHUD.add(plugin.identifier(), makeWeakPtr(plugin));
+    auto addResult = m_pdfPlugInsWithHUD.add(plugin.identifier(), plugin);
     if (addResult.isNewEntry)
         send(Messages::WebPageProxy::CreatePDFHUD(plugin.identifier(), boundingBox));
 }

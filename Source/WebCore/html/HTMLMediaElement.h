@@ -39,6 +39,7 @@
 #include "MediaPlayer.h"
 #include "MediaProducer.h"
 #include "MediaUniqueIdentifier.h"
+#include "ReducedResolutionSeconds.h"
 #include "TextTrackClient.h"
 #include "VideoTrackClient.h"
 #include "VisibilityChangeClient.h"
@@ -58,6 +59,14 @@
 #ifndef NDEBUG
 #include <wtf/StringPrintStream.h>
 #endif
+
+namespace JSC {
+class JSValue;
+}
+
+namespace PAL {
+class SessionID;
+}
 
 namespace WebCore {
 
@@ -107,7 +116,7 @@ class RemotePlayback;
 using CueInterval = PODInterval<MediaTime, TextTrackCue*>;
 using CueList = Vector<CueInterval>;
 
-using MediaProvider = std::optional<Variant<
+using MediaProvider = std::optional < std::variant <
 #if ENABLE(MEDIA_STREAM)
     RefPtr<MediaStream>,
 #endif
@@ -171,10 +180,10 @@ public:
     PlatformLayer* platformLayer() const;
     bool isVideoLayerInline();
     void setPreparedToReturnVideoLayerToInline(bool);
-    void waitForPreparedForInlineThen(WTF::Function<void()>&& completionHandler = [] { });
+    void waitForPreparedForInlineThen(Function<void()>&& completionHandler = [] { });
 #if ENABLE(VIDEO_PRESENTATION_MODE)
     RetainPtr<PlatformLayer> createVideoFullscreenLayer();
-    WEBCORE_EXPORT void setVideoFullscreenLayer(PlatformLayer*, WTF::Function<void()>&& completionHandler = [] { });
+    WEBCORE_EXPORT void setVideoFullscreenLayer(PlatformLayer*, Function<void()>&& completionHandler = [] { });
 #ifdef __OBJC__
     PlatformLayer* videoFullscreenLayer() const { return m_videoFullscreenLayer.get(); }
 #endif
@@ -519,7 +528,7 @@ public:
 
     double maxBufferedTime() const;
 
-    MediaProducer::MediaStateFlags mediaState() const override;
+    MediaProducerMediaStateFlags mediaState() const override;
 
     void layoutSizeChanged();
     void visibilityDidChange();
@@ -548,7 +557,7 @@ public:
 
 #if ENABLE(MEDIA_STREAM)
     void mediaStreamCaptureStarted();
-    bool hasMediaStreamSrcObject() const { return m_mediaProvider && WTF::holds_alternative<RefPtr<MediaStream>>(*m_mediaProvider); }
+    bool hasMediaStreamSrcObject() const { return m_mediaProvider && std::holds_alternative<RefPtr<MediaStream>>(*m_mediaProvider); }
 #endif
 
     bool supportsSeeking() const override;
@@ -593,6 +602,8 @@ public:
 
     using EventTarget::dispatchEvent;
     void dispatchEvent(Event&) override;
+
+    WEBCORE_EXPORT bool mediaPlayerRenderingCanBeAccelerated() final;
 
 protected:
     HTMLMediaElement(const QualifiedName&, Document&, bool createdByParser);
@@ -679,7 +690,6 @@ private:
     void mediaPlayerResourceNotSupported() final;
     void mediaPlayerRepaint() final;
     void mediaPlayerSizeChanged() final;
-    bool mediaPlayerRenderingCanBeAccelerated() final;
     void mediaPlayerRenderingModeChanged() final;
     bool mediaPlayerAcceleratedCompositingEnabled() final;
     void mediaPlayerEngineUpdated() final;
@@ -916,7 +926,7 @@ private:
     void updateCaptionContainer();
     void ensureMediaControlsShadowRoot();
 
-    using JSSetupFunction = WTF::Function<bool(JSDOMGlobalObject&, JSC::JSGlobalObject&, ScriptController&, DOMWrapperWorld&)>;
+    using JSSetupFunction = Function<bool(JSDOMGlobalObject&, JSC::JSGlobalObject&, ScriptController&, DOMWrapperWorld&)>;
     bool setupAndCallJS(const JSSetupFunction&);
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
@@ -1033,7 +1043,7 @@ private:
     VideoFullscreenMode m_videoFullscreenMode { VideoFullscreenModeNone };
     bool m_videoFullscreenStandby { false };
     bool m_preparedForInline;
-    WTF::Function<void()> m_preparedForInlineCompletionHandler;
+    Function<void()> m_preparedForInlineCompletionHandler;
 
     bool m_temporarilyAllowingInlinePlaybackAfterFullscreen { false };
 
@@ -1204,7 +1214,7 @@ private:
 #endif
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
-    MediaProducer::MediaStateFlags m_mediaState;
+    MediaProducerMediaStateFlags m_mediaState;
     MonotonicTime m_currentPlaybackTargetIsWirelessEventFiredTime;
     bool m_hasPlaybackTargetAvailabilityListeners { false };
     bool m_failedToPlayToWirelessTarget { false };

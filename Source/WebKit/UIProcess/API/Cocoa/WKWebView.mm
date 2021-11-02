@@ -83,8 +83,6 @@
 #import "WKUserContentControllerInternal.h"
 #import "WKWebViewConfigurationInternal.h"
 #import "WKWebViewContentProvider.h"
-#import "WKWebViewPrivateForTestingIOS.h"
-#import "WKWebViewIOS.h"
 #import "WKWebViewMac.h"
 #import "WKWebpagePreferencesInternal.h"
 #import "WKWebsiteDataStoreInternal.h"
@@ -168,6 +166,8 @@
 #import "WKContentViewInteraction.h"
 #import "WKScrollView.h"
 #import "WKWebViewContentProviderRegistry.h"
+#import "WKWebViewIOS.h"
+#import "WKWebViewPrivateForTestingIOS.h"
 #import <MobileCoreServices/MobileCoreServices.h>
 #import <UIKit/UIApplication.h>
 #import <pal/spi/cf/CFNotificationCenterSPI.h>
@@ -564,6 +564,10 @@ static void hardwareKeyboardAvailabilityChangedCallback(CFNotificationCenterRef,
 
     if (!linkedOnOrAfter(WebCore::SDKVersion::FirstWhereSiteSpecificQuirksAreEnabledByDefault))
         pageConfiguration->preferences()->setNeedsSiteSpecificQuirks(false);
+
+#if PLATFORM(IOS_FAMILY)
+    pageConfiguration->preferences()->setAlternateFormControlDesignEnabled(WebKit::defaultAlternateFormControlDesignEnabled());
+#endif
 }
 
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration
@@ -719,12 +723,17 @@ static void hardwareKeyboardAvailabilityChangedCallback(CFNotificationCenterRef,
 - (WKNavigation *)loadRequest:(NSURLRequest *)request
 {
     THROW_IF_SUSPENDED;
+    if (_page->isServiceWorkerPage())
+        [NSException raise:NSInternalInconsistencyException format:@"The WKWebView was used to load a service worker"];
     return wrapper(_page->loadRequest(request));
 }
 
 - (WKNavigation *)loadFileURL:(NSURL *)URL allowingReadAccessToURL:(NSURL *)readAccessURL
 {
     THROW_IF_SUSPENDED;
+    if (_page->isServiceWorkerPage())
+        [NSException raise:NSInternalInconsistencyException format:@"The WKWebView was used to load a service worker"];
+
     if (![URL isFileURL])
         [NSException raise:NSInvalidArgumentException format:@"%@ is not a file URL", URL];
 
@@ -745,6 +754,9 @@ static void hardwareKeyboardAvailabilityChangedCallback(CFNotificationCenterRef,
 - (WKNavigation *)loadData:(NSData *)data MIMEType:(NSString *)MIMEType characterEncodingName:(NSString *)characterEncodingName baseURL:(NSURL *)baseURL
 {
     THROW_IF_SUSPENDED;
+    if (_page->isServiceWorkerPage())
+        [NSException raise:NSInternalInconsistencyException format:@"The WKWebView was used to load a service worker"];
+
     return wrapper(_page->loadData({ static_cast<const uint8_t*>(data.bytes), data.length }, MIMEType, characterEncodingName, baseURL.absoluteString));
 }
 
@@ -770,13 +782,6 @@ static void hardwareKeyboardAvailabilityChangedCallback(CFNotificationCenterRef,
 
     if (!path)
         [NSException raise:NSInvalidArgumentException format:@"Invalid resume data"];
-
-#if USE(LEGACY_CFNETWORK_DOWNLOADS)
-    // Mojave CFNetwork fails to resume a download if the destination does not exist.
-    // If someone has removed the destination file, make an empty file at that location.
-    if (![[NSFileManager defaultManager] fileExistsAtPath:path])
-        [[NSData data] writeToFile:path atomically:YES];
-#endif
 
     _page->resumeDownload(API::Data::createWithoutCopying(resumeData), path, [completionHandler = makeBlockPtr(completionHandler)] (auto* download) {
         if (download)
@@ -1036,9 +1041,9 @@ static WKMediaPlaybackState toWKMediaPlaybackState(WebKit::MediaPlaybackState me
 - (WKMediaCaptureState)cameraCaptureState
 {
     auto state = _page->reportedMediaState();
-    if (state & WebCore::MediaProducer::MediaState::HasActiveVideoCaptureDevice)
+    if (state & WebCore::MediaProducerMediaState::HasActiveVideoCaptureDevice)
         return WKMediaCaptureStateActive;
-    if (state & WebCore::MediaProducer::MediaState::HasMutedVideoCaptureDevice)
+    if (state & WebCore::MediaProducerMediaState::HasMutedVideoCaptureDevice)
         return WKMediaCaptureStateMuted;
     return WKMediaCaptureStateNone;
 }
@@ -1046,9 +1051,9 @@ static WKMediaPlaybackState toWKMediaPlaybackState(WebKit::MediaPlaybackState me
 - (WKMediaCaptureState)microphoneCaptureState
 {
     auto state = _page->reportedMediaState();
-    if (state & WebCore::MediaProducer::MediaState::HasActiveAudioCaptureDevice)
+    if (state & WebCore::MediaProducerMediaState::HasActiveAudioCaptureDevice)
         return WKMediaCaptureStateActive;
-    if (state & WebCore::MediaProducer::MediaState::HasMutedAudioCaptureDevice)
+    if (state & WebCore::MediaProducerMediaState::HasMutedAudioCaptureDevice)
         return WKMediaCaptureStateMuted;
     return WKMediaCaptureStateNone;
 }
@@ -1060,16 +1065,16 @@ static WKMediaPlaybackState toWKMediaPlaybackState(WebKit::MediaPlaybackState me
         completionHandler = [] { };
 
     if (state == WKMediaCaptureStateNone) {
-        _page->stopMediaCapture(WebCore::MediaProducer::MediaCaptureKind::Audio, [completionHandler = makeBlockPtr(completionHandler)] {
+        _page->stopMediaCapture(WebCore::MediaProducerMediaCaptureKind::Audio, [completionHandler = makeBlockPtr(completionHandler)] {
             completionHandler();
         });
         return;
     }
     auto mutedState = _page->mutedStateFlags();
     if (state == WKMediaCaptureStateActive)
-        mutedState.remove(WebCore::MediaProducer::MutedState::AudioCaptureIsMuted);
+        mutedState.remove(WebCore::MediaProducerMutedState::AudioCaptureIsMuted);
     else if (state == WKMediaCaptureStateMuted)
-        mutedState.add(WebCore::MediaProducer::MutedState::AudioCaptureIsMuted);
+        mutedState.add(WebCore::MediaProducerMutedState::AudioCaptureIsMuted);
     _page->setMuted(mutedState, [completionHandler = makeBlockPtr(completionHandler)] {
         completionHandler();
     });
@@ -1082,16 +1087,16 @@ static WKMediaPlaybackState toWKMediaPlaybackState(WebKit::MediaPlaybackState me
         completionHandler = [] { };
 
     if (state == WKMediaCaptureStateNone) {
-        _page->stopMediaCapture(WebCore::MediaProducer::MediaCaptureKind::Video, [completionHandler = makeBlockPtr(completionHandler)] {
+        _page->stopMediaCapture(WebCore::MediaProducerMediaCaptureKind::Video, [completionHandler = makeBlockPtr(completionHandler)] {
             completionHandler();
         });
         return;
     }
     auto mutedState = _page->mutedStateFlags();
     if (state == WKMediaCaptureStateActive)
-        mutedState.remove(WebCore::MediaProducer::MutedState::VideoCaptureIsMuted);
+        mutedState.remove(WebCore::MediaProducerMutedState::VideoCaptureIsMuted);
     else if (state == WKMediaCaptureStateMuted)
-        mutedState.add(WebCore::MediaProducer::MutedState::VideoCaptureIsMuted);
+        mutedState.add(WebCore::MediaProducerMutedState::VideoCaptureIsMuted);
     _page->setMuted(mutedState, [completionHandler = makeBlockPtr(completionHandler)] {
         completionHandler();
     });
@@ -1217,8 +1222,9 @@ static WKMediaPlaybackState toWKMediaPlaybackState(WebKit::MediaPlaybackState me
     CGFloat deviceScale = useIntrinsicDeviceScaleFactor ? UIScreen.mainScreen.scale : _page->deviceScaleFactor();
     CGFloat imageWidth = useIntrinsicDeviceScaleFactor ? snapshotWidth : snapshotWidth * deviceScale;
     RetainPtr<WKWebView> strongSelf = self;
-    auto callSnapshotRect = [strongSelf, rectInViewCoordinates, imageWidth, deviceScale, handler] {
-        [strongSelf _snapshotRect:rectInViewCoordinates intoImageOfWidth:imageWidth completionHandler:[strongSelf, handler, deviceScale](CGImageRef snapshotImage) {
+    BOOL afterScreenUpdates = snapshotConfiguration && snapshotConfiguration.afterScreenUpdates;
+    auto callSnapshotRect = [strongSelf, afterScreenUpdates, rectInViewCoordinates, imageWidth, deviceScale, handler] {
+        [strongSelf _snapshotRectAfterScreenUpdates:afterScreenUpdates rectInViewCoordinates:rectInViewCoordinates intoImageOfWidth:imageWidth completionHandler:[strongSelf, handler, deviceScale](CGImageRef snapshotImage) {
             RetainPtr<NSError> error;
             RetainPtr<UIImage> image;
             
@@ -1460,7 +1466,7 @@ inline OptionSet<WebKit::FindOptions> toFindOptions(WKFindConfiguration *configu
 
 #pragma mark - macOS/iOS internal
 
-- (void)_showSafeBrowsingWarning:(const WebKit::SafeBrowsingWarning&)warning completionHandler:(CompletionHandler<void(Variant<WebKit::ContinueUnsafeLoad, URL>&&)>&&)completionHandler
+- (void)_showSafeBrowsingWarning:(const WebKit::SafeBrowsingWarning&)warning completionHandler:(CompletionHandler<void(std::variant<WebKit::ContinueUnsafeLoad, URL>&&)>&&)completionHandler
 {
     _safeBrowsingWarning = adoptNS([[WKSafeBrowsingWarning alloc] initWithFrame:self.bounds safeBrowsingWarning:warning completionHandler:[weakSelf = WeakObjCPtr<WKWebView>(self), completionHandler = WTFMove(completionHandler)] (auto&& result) mutable {
         completionHandler(WTFMove(result));
@@ -1762,15 +1768,12 @@ static _WKSelectionAttributes selectionAttributes(const WebKit::EditorState& edi
 
 - (CocoaColor *)themeColor
 {
-    auto themeColor = _page->themeColor();
-    if (!themeColor.isValid())
-        return nil;
-    return WebCore::platformColor(themeColor);
+    return cocoaColorOrNil(_page->themeColor()).autorelease();
 }
 
 - (CocoaColor *)underPageBackgroundColor
 {
-    return WebCore::platformColor(_page->underPageBackgroundColor());
+    return cocoaColor(_page->underPageBackgroundColor()).autorelease();
 }
 
 - (void)setUnderPageBackgroundColor:(CocoaColor *)underPageBackgroundColorOverride
@@ -2270,7 +2273,7 @@ static RetainPtr<NSArray> wkTextManipulationErrors(NSArray<_WKTextManipulationIt
 - (void)_stopMediaCapture
 {
     THROW_IF_SUSPENDED;
-    _page->stopMediaCapture(WebCore::MediaProducer::MediaCaptureKind::AudioVideo);
+    _page->stopMediaCapture(WebCore::MediaProducerMediaCaptureKind::AudioVideo);
 }
 
 - (void)_stopAllMediaPlayback
@@ -2392,6 +2395,22 @@ static void convertAndAddHighlight(Vector<Ref<WebKit::SharedMemory>>& buffers, N
         break;
     }
     return wrapper(_page->loadRequest(request, policy));
+}
+
+- (void)_loadServiceWorker:(NSURL *)url  completionHandler:(void (^)(BOOL success))completionHandler
+{
+    THROW_IF_SUSPENDED;
+    if (_page->isServiceWorkerPage())
+        [NSException raise:NSInternalInconsistencyException format:@"The WKWebView was already used to load a service worker"];
+
+    _page->loadServiceWorker(url, [completionHandler = makeBlockPtr(completionHandler)](bool success) mutable {
+        completionHandler(success);
+    });
+}
+
+- (void)_loadServiceWorker:(NSURL *)url
+{
+    [self _loadServiceWorker:url completionHandler:^(BOOL) { }];
 }
 
 - (void)_grantAccessToAssetServices
@@ -2731,7 +2750,7 @@ static void convertAndAddHighlight(Vector<Ref<WebKit::SharedMemory>>& buffers, N
 {
     THROW_IF_SUSPENDED;
     auto safeBrowsingWarning = WebKit::SafeBrowsingWarning::create(url, title, warning, details);
-    auto wrapper = [completionHandler = makeBlockPtr(completionHandler)] (Variant<WebKit::ContinueUnsafeLoad, URL>&& variant) {
+    auto wrapper = [completionHandler = makeBlockPtr(completionHandler)] (std::variant<WebKit::ContinueUnsafeLoad, URL>&& variant) {
         switchOn(variant, [&] (WebKit::ContinueUnsafeLoad continueUnsafeLoad) {
             switch (continueUnsafeLoad) {
             case WebKit::ContinueUnsafeLoad::Yes:
@@ -2939,6 +2958,14 @@ static inline OptionSet<WebCore::LayoutMilestone> layoutMilestones(_WKRenderingP
 {
     THROW_IF_SUSPENDED;
     _page->getContentsAsString(WebKit::ContentAsStringIncludesChildFrames::No, [handler = makeBlockPtr(completionHandler)](String string) {
+        handler(string, nil);
+    });
+}
+
+- (void)_getContentsAsStringWithCompletionHandlerKeepIPCConnectionAliveForTesting:(void (^)(NSString *, NSError *))completionHandler
+{
+    THROW_IF_SUSPENDED;
+    _page->getContentsAsString(WebKit::ContentAsStringIncludesChildFrames::No, [handler = makeBlockPtr(completionHandler), connection = RefPtr { _page->process().connection() }](String string) {
         handler(string, nil);
     });
 }
@@ -3248,18 +3275,12 @@ static inline OptionSet<WebKit::FindOptions> toFindOptions(_WKFindOptions wkFind
 // FIXME: Remove old `-[WKWebView _pageExtendedBackgroundColor]` SPI <rdar://77789732>
 - (CocoaColor *)_pageExtendedBackgroundColor
 {
-    auto pageExtendedBackgroundColor = _page->pageExtendedBackgroundColor();
-    if (!pageExtendedBackgroundColor.isValid())
-        return nil;
-    return WebCore::platformColor(pageExtendedBackgroundColor);
+    return cocoaColorOrNil(_page->pageExtendedBackgroundColor()).autorelease();
 }
 
 - (CocoaColor *)_sampledPageTopColor
 {
-    auto sampledPageTopColor = _page->sampledPageTopColor();
-    if (!sampledPageTopColor.isValid())
-        return nil;
-    return WebCore::platformColor(sampledPageTopColor);
+    return cocoaColorOrNil(_page->sampledPageTopColor()).autorelease();
 }
 
 - (id <_WKInputDelegate>)_inputDelegate
@@ -3584,14 +3605,14 @@ static inline OptionSet<WebKit::FindOptions> toFindOptions(_WKFindOptions wkFind
 - (void)_setPageMuted:(_WKMediaMutedState)mutedState
 {
     THROW_IF_SUSPENDED;
-    WebCore::MediaProducer::MutedStateFlags coreState;
+    WebCore::MediaProducerMutedStateFlags coreState;
 
     if (mutedState & _WKMediaAudioMuted)
-        coreState.add(WebCore::MediaProducer::MutedState::AudioIsMuted);
+        coreState.add(WebCore::MediaProducerMutedState::AudioIsMuted);
     if (mutedState & _WKMediaCaptureDevicesMuted)
         coreState.add(WebCore::MediaProducer::AudioAndVideoCaptureIsMuted);
     if (mutedState & _WKMediaScreenCaptureMuted)
-        coreState.add(WebCore::MediaProducer::MutedState::ScreenCaptureIsMuted);
+        coreState.add(WebCore::MediaProducerMutedState::ScreenCaptureIsMuted);
 
     _page->setMuted(coreState);
 }
@@ -3600,7 +3621,7 @@ static inline OptionSet<WebKit::FindOptions> toFindOptions(_WKFindOptions wkFind
 {
     THROW_IF_SUSPENDED;
 #if ENABLE(DATA_DETECTION)
-    _page->removeDataDetectedLinks([completion = makeBlockPtr(completion), page = makeWeakPtr(_page.get())] (auto& result) {
+    _page->removeDataDetectedLinks([completion = makeBlockPtr(completion), page = WeakPtr { _page.get() }] (auto& result) {
         if (page)
             page->setDataDetectionResult(result);
         if (completion)

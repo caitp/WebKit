@@ -27,14 +27,14 @@
 
 #include <JavaScriptCore/ArrayBuffer.h>
 #include <JavaScriptCore/ArrayBufferView.h>
+#include <variant>
 #include <wtf/RefPtr.h>
-#include <wtf/Variant.h>
 
 namespace WebCore {
 
 class BufferSource {
 public:
-    using VariantType = WTF::Variant<RefPtr<JSC::ArrayBufferView>, RefPtr<JSC::ArrayBuffer>>;
+    using VariantType = std::variant<RefPtr<JSC::ArrayBufferView>, RefPtr<JSC::ArrayBuffer>>;
 
     BufferSource() { }
     BufferSource(VariantType&& variant)
@@ -45,14 +45,21 @@ public:
 
     const uint8_t* data() const
     {
-        return WTF::visit([](auto& buffer) -> const uint8_t* {
+        return std::visit([](auto& buffer) -> const uint8_t* {
             return buffer ? static_cast<const uint8_t*>(buffer->data()) : nullptr;
+        }, m_variant);
+    }
+    
+    void* mutableData() const
+    {
+        return std::visit([](auto& buffer) -> void* {
+            return buffer->data();
         }, m_variant);
     }
 
     size_t length() const
     {
-        return WTF::visit([](auto& buffer) -> size_t {
+        return std::visit([](auto& buffer) -> size_t {
             return buffer ? buffer->byteLength() : 0;
         }, m_variant);
     }

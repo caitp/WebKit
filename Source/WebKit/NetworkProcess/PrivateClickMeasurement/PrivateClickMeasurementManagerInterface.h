@@ -35,6 +35,10 @@ class CertificateInfo;
 
 namespace WebKit {
 
+namespace Daemon {
+class Connection;
+}
+
 enum class PrivateClickMeasurementAttributionType : bool { Unattributed, Attributed };
 
 class PrivateClickMeasurementManager;
@@ -50,12 +54,14 @@ public:
     using PrivateClickMeasurement = WebCore::PrivateClickMeasurement;
     using RegistrableDomain = WebCore::RegistrableDomain;
     using SourceSite = WebCore::PrivateClickMeasurement::SourceSite;
+    using ApplicationBundleIdentifier = String;
 
-    virtual void storeUnattributed(PrivateClickMeasurement&&) = 0;
-    virtual void handleAttribution(AttributionTriggerData&&, const URL& requestURL, WebCore::RegistrableDomain&& redirectDomain, const URL& firstPartyURL) = 0;
+    virtual void storeUnattributed(PrivateClickMeasurement&&, CompletionHandler<void()>&&) = 0;
+    virtual void handleAttribution(AttributionTriggerData&&, const URL& requestURL, WebCore::RegistrableDomain&& redirectDomain, const URL& firstPartyURL, const ApplicationBundleIdentifier&) = 0;
     virtual void clear(CompletionHandler<void()>&&) = 0;
     virtual void clearForRegistrableDomain(const RegistrableDomain&, CompletionHandler<void()>&&) = 0;
     virtual void migratePrivateClickMeasurementFromLegacyStorage(PrivateClickMeasurement&&, PrivateClickMeasurementAttributionType) = 0;
+    virtual void setDebugModeIsEnabled(bool) = 0;
 
     virtual void toStringForTesting(CompletionHandler<void(String)>&&) const = 0;
     virtual void setOverrideTimerForTesting(bool value) = 0;
@@ -64,15 +70,18 @@ public:
     virtual void setAttributionReportURLsForTesting(URL&& sourceURL, URL&& destinationURL) = 0;
     virtual void markAllUnattributedAsExpiredForTesting() = 0;
     virtual void markAttributedPrivateClickMeasurementsAsExpiredForTesting(CompletionHandler<void()>&&) = 0;
-    virtual void setEphemeralMeasurementForTesting(bool) = 0;
     virtual void setPCMFraudPreventionValuesForTesting(String&& unlinkableToken, String&& secretToken, String&& signature, String&& keyID) = 0;
     virtual void startTimerImmediatelyForTesting() = 0;
+    virtual void setPrivateClickMeasurementAppBundleIDForTesting(ApplicationBundleIdentifier&&) = 0;
     virtual void destroyStoreForTesting(CompletionHandler<void()>&&) = 0;
     virtual void allowTLSCertificateChainForLocalPCMTesting(const WebCore::CertificateInfo&) = 0;
 };
 
 constexpr const char* protocolVersionKey { "version" };
 constexpr uint64_t protocolVersionValue { 1 };
+
+constexpr const char* protocolDebugMessageLevelKey { "debug message level" };
+constexpr const char* protocolDebugMessageKey { "debug message" };
 
 constexpr const char* protocolMessageTypeKey { "message type" };
 enum class MessageType : uint8_t {
@@ -81,6 +90,7 @@ enum class MessageType : uint8_t {
     Clear,
     ClearForRegistrableDomain,
     MigratePrivateClickMeasurementFromLegacyStorage,
+    SetDebugModeIsEnabled,
     ToStringForTesting,
     SetOverrideTimerForTesting,
     SetTokenPublicKeyURLForTesting,
@@ -88,9 +98,9 @@ enum class MessageType : uint8_t {
     SetAttributionReportURLsForTesting,
     MarkAllUnattributedAsExpiredForTesting,
     MarkAttributedPrivateClickMeasurementsAsExpiredForTesting,
-    SetEphemeralMeasurementForTesting,
     SetPCMFraudPreventionValuesForTesting,
     StartTimerImmediatelyForTesting,
+    SetPrivateClickMeasurementAppBundleIDForTesting,
     DestroyStoreForTesting,
     AllowTLSCertificateChainForLocalPCMTesting
 };
@@ -98,7 +108,8 @@ enum class MessageType : uint8_t {
 constexpr const char* protocolEncodedMessageKey { "encoded message" };
 using EncodedMessage = Vector<uint8_t>;
 
-void decodeMessageAndSendToManager(MessageType, Vector<uint8_t>&& message, CompletionHandler<void(Vector<uint8_t>&&)>&&);
+void decodeMessageAndSendToManager(const Daemon::Connection&, MessageType, Span<const uint8_t> encodedMessage, CompletionHandler<void(Vector<uint8_t>&&)>&&);
+void doDailyActivityInManager();
 bool messageTypeSendsReply(MessageType);
 
 void initializePCMStorageInDirectory(const String&);
@@ -117,6 +128,7 @@ template<> struct EnumTraits<WebKit::PCM::MessageType> {
         WebKit::PCM::MessageType::Clear,
         WebKit::PCM::MessageType::ClearForRegistrableDomain,
         WebKit::PCM::MessageType::MigratePrivateClickMeasurementFromLegacyStorage,
+        WebKit::PCM::MessageType::SetDebugModeIsEnabled,
         WebKit::PCM::MessageType::ToStringForTesting,
         WebKit::PCM::MessageType::SetOverrideTimerForTesting,
         WebKit::PCM::MessageType::SetTokenPublicKeyURLForTesting,
@@ -124,9 +136,9 @@ template<> struct EnumTraits<WebKit::PCM::MessageType> {
         WebKit::PCM::MessageType::SetAttributionReportURLsForTesting,
         WebKit::PCM::MessageType::MarkAllUnattributedAsExpiredForTesting,
         WebKit::PCM::MessageType::MarkAttributedPrivateClickMeasurementsAsExpiredForTesting,
-        WebKit::PCM::MessageType::SetEphemeralMeasurementForTesting,
         WebKit::PCM::MessageType::SetPCMFraudPreventionValuesForTesting,
         WebKit::PCM::MessageType::StartTimerImmediatelyForTesting,
+        WebKit::PCM::MessageType::SetPrivateClickMeasurementAppBundleIDForTesting,
         WebKit::PCM::MessageType::DestroyStoreForTesting,
         WebKit::PCM::MessageType::AllowTLSCertificateChainForLocalPCMTesting
     >;

@@ -37,6 +37,7 @@
 #include "MIMETypeRegistry.h"
 #include "MemoryCache.h"
 #include "RenderElement.h"
+#include "SVGElementTypeHelpers.h"
 #include "SVGImage.h"
 #include "SecurityOrigin.h"
 #include "Settings.h"
@@ -97,7 +98,7 @@ CachedImage::~CachedImage()
 
 void CachedImage::load(CachedResourceLoader& loader)
 {
-    m_skippingRevalidationDocument = makeWeakPtr(loader.document());
+    m_skippingRevalidationDocument = loader.document();
     if (loader.shouldPerformImageLoad(url()))
         CachedResource::load(loader);
     else

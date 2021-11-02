@@ -41,6 +41,7 @@
 #include "RenderFileUploadControl.h"
 #include "RuntimeEnabledFeatures.h"
 #include "Settings.h"
+#include "ShadowPseudoIds.h"
 #include "ShadowRoot.h"
 #include "UserGestureIndicator.h"
 #include <wtf/FileSystem.h>
@@ -66,6 +67,7 @@ namespace WebCore {
 
 using namespace HTMLNames;
 
+// FIXME: This can likely be an HTMLDivElement.
 class UploadButtonElement final : public HTMLInputElement {
     WTF_MAKE_ISO_ALLOCATED_INLINE(UploadButtonElement);
 public:
@@ -93,9 +95,8 @@ Ref<UploadButtonElement> UploadButtonElement::createInternal(Document& document,
 {
     auto button = adoptRef(*new UploadButtonElement(document));
     static MainThreadNeverDestroyed<const AtomString> buttonName("button", AtomString::ConstructFromLiteral);
-    static MainThreadNeverDestroyed<const AtomString> fileSelectorButtonName("file-selector-button", AtomString::ConstructFromLiteral);
     button->setType(buttonName);
-    button->setPseudo(fileSelectorButtonName);
+    button->setPseudo(ShadowPseudoIds::fileSelectorButton());
     button->setValue(value);
     return button;
 }
@@ -436,7 +437,7 @@ void FileInputType::filesChosen(const Vector<FileChooserFileInfo>& paths, const 
         return;
     }
 
-    m_directoryFileListCreator = DirectoryFileListCreator::create([this, weakThis = makeWeakPtr(*this), icon = RefPtr { icon }](Ref<FileList>&& fileList) mutable {
+    m_directoryFileListCreator = DirectoryFileListCreator::create([this, weakThis = WeakPtr { *this }, icon = RefPtr { icon }](Ref<FileList>&& fileList) mutable {
         ASSERT(isMainThread());
         if (!weakThis)
             return;

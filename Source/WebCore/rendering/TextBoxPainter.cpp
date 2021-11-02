@@ -29,8 +29,7 @@
 #include "Editor.h"
 #include "EventRegion.h"
 #include "GraphicsContext.h"
-#include "LayoutIntegrationLineIterator.h"
-#include "LayoutIntegrationRunIterator.h"
+#include "InlineIteratorLine.h"
 #include "LegacyInlineTextBox.h"
 #include "PaintInfo.h"
 #include "RenderBlock.h"
@@ -45,20 +44,20 @@
 namespace WebCore {
 
 TextBoxPainter::TextBoxPainter(const LegacyInlineTextBox& textBox, PaintInfo& paintInfo, const LayoutPoint& paintOffset)
-    : TextBoxPainter(LayoutIntegration::textRunFor(&textBox), paintInfo, paintOffset)
+    : TextBoxPainter(InlineIterator::textBoxFor(&textBox), paintInfo, paintOffset)
 {
     m_emphasisMarkExistsAndIsAbove = textBox.emphasisMarkExistsAndIsAbove(m_style);
 }
 
 #if ENABLE(LAYOUT_FORMATTING_CONTEXT)
 TextBoxPainter::TextBoxPainter(const LayoutIntegration::InlineContent& inlineContent, const InlineDisplay::Box& box, PaintInfo& paintInfo, const LayoutPoint& paintOffset)
-    : TextBoxPainter(LayoutIntegration::textRunFor(inlineContent, box), paintInfo, paintOffset)
+    : TextBoxPainter(InlineIterator::textBoxFor(inlineContent, box), paintInfo, paintOffset)
 {
 }
 #endif
 
-TextBoxPainter::TextBoxPainter(LayoutIntegration::TextRunIterator&& textBox, PaintInfo& paintInfo, const LayoutPoint& paintOffset)
-    : m_textBox(WTFMove(textBox))
+TextBoxPainter::TextBoxPainter(const InlineIterator::TextBoxIterator& textBox, PaintInfo& paintInfo, const LayoutPoint& paintOffset)
+    : m_textBox(textBox)
     , m_renderer(m_textBox->renderer())
     , m_document(m_renderer.document())
     , m_style(m_textBox->style())
@@ -372,7 +371,7 @@ void TextBoxPainter::paintDecoration(const StyledMarkedText& markedText, const F
     auto textDecorations = m_style.textDecorationsInEffect();
     textDecorations.add(TextDecorationPainter::textDecorationsInEffectForStyle(markedText.style.textDecorationStyles));
     TextDecorationPainter decorationPainter { context, textDecorations, m_renderer, m_isFirstLine, font, markedText.style.textDecorationStyles };
-    decorationPainter.setTextRunIterator(m_textBox);
+    decorationPainter.setTextBox(m_textBox);
     decorationPainter.setWidth(snappedSelectionRect.width());
     decorationPainter.setIsHorizontal(textBox().isHorizontal());
     if (markedText.style.textShadow) {
@@ -426,7 +425,7 @@ static inline void mirrorRTLSegment(float logicalWidth, TextDirection direction,
     start = logicalWidth - width - start;
 }
 
-static float textPosition(const LayoutIntegration::TextRunIterator& textBox)
+static float textPosition(const InlineIterator::TextBoxIterator& textBox)
 {
     // When computing the width of a text run, RenderBlock::computeInlineDirectionPositionsForLine() doesn't include the actual offset
     // from the containing block edge in its measurement. textPosition() should be consistent so the text are rendered in the same width.
@@ -495,7 +494,7 @@ FloatRect TextBoxPainter::calculateUnionOfAllDocumentMarkerBounds(const LegacyIn
     FloatRect result;
     auto markedTexts = MarkedText::collectForDocumentMarkers(textBox.renderer(), textBox.selectableRange(), MarkedText::PaintPhase::Decoration);
     for (auto& markedText : MarkedText::subdivide(markedTexts, MarkedText::OverlapStrategy::Frontmost))
-        result = unionRect(result, calculateDocumentMarkerBounds(LayoutIntegration::textRunFor(&textBox), markedText));
+        result = unionRect(result, calculateDocumentMarkerBounds(InlineIterator::textBoxFor(&textBox), markedText));
     return result;
 }
 
@@ -571,7 +570,7 @@ FloatRect TextBoxPainter::computePaintRect(const LayoutPoint& paintOffset)
     return { boxOrigin, FloatSize(textBox().logicalWidth(), textBox().logicalHeight()) };
 }
 
-FloatRect TextBoxPainter::calculateDocumentMarkerBounds(const LayoutIntegration::TextRunIterator& textBox, const MarkedText& markedText)
+FloatRect TextBoxPainter::calculateDocumentMarkerBounds(const InlineIterator::TextBoxIterator& textBox, const MarkedText& markedText)
 {
     auto& font = textBox->fontCascade();
     auto ascent = font.fontMetrics().ascent();
@@ -624,7 +623,7 @@ const ShadowData* TextBoxPainter::debugTextShadow() const
     if (!textBox().legacyInlineBox())
         return nullptr;
 
-    static NeverDestroyed<ShadowData> debugTextShadow(IntPoint(0, 0), 10, 20, ShadowStyle::Normal, true, SRGBA<uint8_t> { 150, 0, 0, 190 });
+    static NeverDestroyed<ShadowData> debugTextShadow(LengthPoint(Length(LengthType::Fixed), Length(LengthType::Fixed)), Length(10, LengthType::Fixed), Length(20, LengthType::Fixed), ShadowStyle::Normal, true, SRGBA<uint8_t> { 150, 0, 0, 190 });
     return &debugTextShadow.get();
 }
 

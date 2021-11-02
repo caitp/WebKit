@@ -58,7 +58,7 @@ Ref<DocumentTimeline> DocumentTimeline::create(Document& document, DocumentTimel
 DocumentTimeline::DocumentTimeline(Document& document, Seconds originTime)
     : AnimationTimeline()
     , m_tickScheduleTimer(*this, &DocumentTimeline::scheduleAnimationResolution)
-    , m_document(makeWeakPtr(document))
+    , m_document(document)
     , m_originTime(originTime)
 {
     if (auto* controller = this->controller())
@@ -242,7 +242,7 @@ bool DocumentTimeline::animationCanBeRemoved(WebAnimation& animation)
         }
     }
 
-    for (auto& animationWithHigherCompositeOrder : WTF::makeReversedRange(animations)) {
+    for (auto& animationWithHigherCompositeOrder : makeReversedRange(animations)) {
         if (&animation == animationWithHigherCompositeOrder)
             break;
 
@@ -357,28 +357,6 @@ bool DocumentTimeline::computeExtentOfAnimation(RenderElement& renderer, LayoutR
         return matchingEffect->computeExtentOfTransformAnimation(bounds);
 
     return true;
-}
-
-bool DocumentTimeline::isRunningAnimationOnRenderer(RenderElement& renderer, CSSPropertyID property) const
-{
-    auto styleable = Styleable::fromRenderer(renderer);
-    if (!styleable)
-        return false;
-
-    auto* animations = styleable->animations();
-    if (!animations)
-        return false;
-
-    for (const auto& animation : *animations) {
-        auto playState = animation->playState();
-        if (playState != WebAnimation::PlayState::Running && playState != WebAnimation::PlayState::Paused)
-            continue;
-        auto* effect = animation->effect();
-        if (is<KeyframeEffect>(effect) && downcast<KeyframeEffect>(effect)->animatedProperties().contains(property))
-            return true;
-    }
-
-    return false;
 }
 
 bool DocumentTimeline::isRunningAcceleratedAnimationOnRenderer(RenderElement& renderer, CSSPropertyID property) const

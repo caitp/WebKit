@@ -295,9 +295,6 @@ CodeBlock::CodeBlock(VM& vm, Structure* structure, CopyParsedBlockTag, CodeBlock
     , m_constantRegisters(other.m_constantRegisters)
     , m_functionDecls(other.m_functionDecls)
     , m_functionExprs(other.m_functionExprs)
-    , m_osrExitCounter(0)
-    , m_optimizationDelayCounter(0)
-    , m_reoptimizationRetryCounter(0)
     , m_metadata(other.m_metadata)
     , m_creationTime(MonotonicTime::now())
 {
@@ -343,9 +340,6 @@ CodeBlock::CodeBlock(VM& vm, Structure* structure, ScriptExecutable* ownerExecut
     , m_ownerExecutable(vm, this, ownerExecutable)
     , m_vm(&vm)
     , m_instructionsRawPointer(unlinkedCodeBlock->instructions().rawPointer())
-    , m_osrExitCounter(0)
-    , m_optimizationDelayCounter(0)
-    , m_reoptimizationRetryCounter(0)
     , m_metadata(unlinkedCodeBlock->metadata().link())
     , m_creationTime(MonotonicTime::now())
 {
@@ -437,7 +431,6 @@ bool CodeBlock::finishCreation(VM& vm, ScriptExecutable* ownerExecutable, Unlink
 
     auto link_profile = [&](const auto& /*instruction*/, auto /*bytecode*/, auto& metadata) {
         static_assert(std::is_same_v<ValueProfile, decltype(metadata.m_profile)>);
-        m_numberOfNonArgumentValueProfiles++;
     };
 
     auto link_objectAllocationProfile = [&](const auto& /*instruction*/, auto bytecode, auto& metadata) {
@@ -536,15 +529,11 @@ bool CodeBlock::finishCreation(VM& vm, ScriptExecutable* ownerExecutable, Unlink
 
         case op_iterator_open: {
             INITIALIZE_METADATA(OpIteratorOpen)
-
-            m_numberOfNonArgumentValueProfiles += 3;
             break;
         }
 
         case op_iterator_next: {
             INITIALIZE_METADATA(OpIteratorNext)
-
-            m_numberOfNonArgumentValueProfiles += 3;
             break;
         }
 
@@ -733,12 +722,6 @@ bool CodeBlock::finishCreation(VM& vm, ScriptExecutable* ownerExecutable, Unlink
             break;
         }
 
-        case op_loop_hint: {
-            if (UNLIKELY(Options::returnEarlyFromInfiniteLoopsForFuzzing()))
-                vm.addLoopHintExecutionCounter(instruction.ptr());
-            break;
-        }
-        
         default:
             break;
         }
@@ -799,6 +782,8 @@ void CodeBlock::setupWithUnlinkedBaselineCode(Ref<BaselineJITCode> jitCode)
 
         RELEASE_ASSERT(jitData.m_jitConstantPool.isEmpty());
         jitData.m_jitConstantPool = FixedVector<void*>(jitCode->m_constantPool.size());
+        jitData.m_stubInfos = FixedVector<StructureStubInfo>(jitCode->m_unlinkedStubInfos.size());
+        jitData.m_callLinkInfos = FixedVector<CallLinkInfo>(jitCode->m_unlinkedCalls.size());
         for (size_t i = 0; i < jitCode->m_constantPool.size(); ++i) {
             auto entry = jitCode->m_constantPool.at(i);
             switch (entry.type()) {
@@ -806,17 +791,19 @@ void CodeBlock::setupWithUnlinkedBaselineCode(Ref<BaselineJITCode> jitCode)
                 jitData.m_jitConstantPool[i] = m_globalObject.get();
                 break;
             case JITConstantPool::Type::CallLinkInfo: {
-                UnlinkedCallLinkInfo& unlinkedCallLinkInfo = *static_cast<UnlinkedCallLinkInfo*>(entry.pointer());
-                CallLinkInfo* callLinkInfo = jitData.m_callLinkInfos.add(CodeOrigin(unlinkedCallLinkInfo.bytecodeIndex));
-                callLinkInfo->initializeDataIC(vm(), unlinkedCallLinkInfo, GPRInfo::regT0, GPRInfo::regT2);
-                jitData.m_jitConstantPool[i] = callLinkInfo;
+                unsigned index = bitwise_cast<uintptr_t>(entry.pointer());
+                UnlinkedCallLinkInfo& unlinkedCallLinkInfo = jitCode->m_unlinkedCalls[index];
+                CallLinkInfo& callLinkInfo = jitData.m_callLinkInfos[index];
+                callLinkInfo.initializeDataIC(vm(), unlinkedCallLinkInfo, GPRInfo::regT0, GPRInfo::regT2);
+                jitData.m_jitConstantPool[i] = &callLinkInfo;
                 break;
             }
             case JITConstantPool::Type::StructureStubInfo: {
-                UnlinkedStructureStubInfo& unlinkedStubInfo = *static_cast<UnlinkedStructureStubInfo*>(entry.pointer());
-                StructureStubInfo* stubInfo = jitData.m_stubInfos.add(unlinkedStubInfo.accessType, CodeOrigin(unlinkedStubInfo.bytecodeIndex));
-                stubInfo->initializeFromUnlinkedStructureStubInfo(this, unlinkedStubInfo);
-                jitData.m_jitConstantPool[i] = stubInfo;
+                unsigned index = bitwise_cast<uintptr_t>(entry.pointer());
+                UnlinkedStructureStubInfo& unlinkedStubInfo = jitCode->m_unlinkedStubInfos[index];
+                StructureStubInfo& stubInfo = jitData.m_stubInfos[index];
+                stubInfo.initializeFromUnlinkedStructureStubInfo(this, unlinkedStubInfo);
+                jitData.m_jitConstantPool[i] = &stubInfo;
                 break;
             }
             case JITConstantPool::Type::FunctionDecl: {
@@ -860,13 +847,6 @@ CodeBlock::~CodeBlock()
     // But for CodeBlock, we are ensuring the order: CodeBlock gets destroyed before UnlinkedCodeBlock gets destroyed.
     // So, we can access member UnlinkedCodeBlock safely here. We bypass the assertion by using unvalidatedGet.
     UnlinkedCodeBlock* unlinkedCodeBlock = m_unlinkedCode.unvalidatedGet();
-
-    if (UNLIKELY(Options::returnEarlyFromInfiniteLoopsForFuzzing() && JITCode::isBaselineCode(jitType()))) {
-        for (const auto& instruction : unlinkedCodeBlock->instructions()) {
-            if (instruction->is<OpLoopHint>())
-                vm.removeLoopHintExecutionCounter(instruction.ptr());
-        }
-    }
 
     if (JITCode::isBaselineCode(jitType())) {
         if (m_metadata) {
@@ -923,11 +903,19 @@ CodeBlock::~CodeBlock()
 
 #if ENABLE(JIT)
     if (auto* jitData = m_jitData.get()) {
-        for (StructureStubInfo* stubInfo : jitData->m_stubInfos) {
+        for (auto& stubInfo : jitData->m_stubInfos) {
+            stubInfo.aboutToDie();
+            stubInfo.deref();
+        }
+    }
+#if ENABLE(DFG_JIT)
+    if (JITCode::isOptimizingJIT(jitType())) {
+        for (auto* stubInfo : jitCode()->dfgCommon()->m_stubInfos) {
             stubInfo->aboutToDie();
             stubInfo->deref();
         }
     }
+#endif
 #endif // ENABLE(JIT)
 }
 
@@ -949,6 +937,8 @@ bool CodeBlock::isConstantOwnedByUnlinkedCodeBlock(VirtualRegister reg) const
     }
     case SourceCodeRepresentation::LinkTimeConstant:
         return false;
+    default:
+        RELEASE_ASSERT_NOT_REACHED();
     }
 }
 
@@ -1257,10 +1247,16 @@ void CodeBlock::propagateTransitions(const ConcurrentJSLocker&, Visitor& visitor
 #if ENABLE(JIT)
     if (JITCode::isJIT(jitType())) {
         if (auto* jitData = m_jitData.get()) {
-            for (StructureStubInfo* stubInfo : jitData->m_stubInfos)
-                stubInfo->propagateTransitions(visitor);
+            for (auto& stubInfo : jitData->m_stubInfos)
+                stubInfo.propagateTransitions(visitor);
         }
     }
+#if ENABLE(DFG_JIT)
+    if (JITCode::isOptimizingJIT(jitType())) {
+        for (auto* stubInfo : jitCode()->dfgCommon()->m_stubInfos)
+            stubInfo->propagateTransitions(visitor);
+    }
+#endif
 #endif // ENABLE(JIT)
     
 #if ENABLE(DFG_JIT)
@@ -1597,15 +1593,25 @@ CodeBlock::JITData& CodeBlock::ensureJITDataSlow(const ConcurrentJSLocker&)
 void CodeBlock::finalizeJITInlineCaches()
 {
     if (auto* jitData = m_jitData.get()) {
-        for (CallLinkInfo* callLinkInfo : jitData->m_callLinkInfos)
-            callLinkInfo->visitWeak(vm());
+        for (auto& callLinkInfo : jitData->m_callLinkInfos)
+            callLinkInfo.visitWeak(vm());
+        for (auto& stubInfo : jitData->m_stubInfos) {
+            ConcurrentJSLockerBase locker(NoLockingNecessary);
+            stubInfo.visitWeakReferences(locker, this);
+        }
+    }
 
-        for (StructureStubInfo* stubInfo : jitData->m_stubInfos) {
+#if ENABLE(DFG_JIT)
+    if (JITCode::isOptimizingJIT(jitType())) {
+        DFG::CommonData* dfgCommon = m_jitCode->dfgCommon();
+        for (auto* callLinkInfo : dfgCommon->m_callLinkInfos)
+            callLinkInfo->visitWeak(vm());
+        for (auto* stubInfo : dfgCommon->m_stubInfos) {
             ConcurrentJSLockerBase locker(NoLockingNecessary);
             stubInfo->visitWeakReferences(locker, this);
         }
     }
-
+#endif
 
 #if ASSERT_ENABLED
     if (jitType() == JITType::BaselineJIT) {
@@ -1696,14 +1702,18 @@ void CodeBlock::getICStatusMap(const ConcurrentJSLocker&, ICStatusMap& result)
 #if ENABLE(JIT)
     if (JITCode::isJIT(jitType())) {
         if (auto* jitData = m_jitData.get()) {
-            for (StructureStubInfo* stubInfo : jitData->m_stubInfos)
-                result.add(stubInfo->codeOrigin, ICStatus()).iterator->value.stubInfo = stubInfo;
-            for (CallLinkInfo* callLinkInfo : jitData->m_callLinkInfos)
-                result.add(callLinkInfo->codeOrigin(), ICStatus()).iterator->value.callLinkInfo = callLinkInfo;
+            for (auto& stubInfo : jitData->m_stubInfos)
+                result.add(stubInfo.codeOrigin, ICStatus()).iterator->value.stubInfo = &stubInfo;
+            for (auto& callLinkInfo : jitData->m_callLinkInfos)
+                result.add(callLinkInfo.codeOrigin(), ICStatus()).iterator->value.callLinkInfo = &callLinkInfo;
         }
 #if ENABLE(DFG_JIT)
         if (JITCode::isOptimizingJIT(jitType())) {
             DFG::CommonData* dfgCommon = m_jitCode->dfgCommon();
+            for (auto* stubInfo : dfgCommon->m_stubInfos)
+                result.add(stubInfo->codeOrigin, ICStatus()).iterator->value.stubInfo = stubInfo;
+            for (auto* callLinkInfo : dfgCommon->m_callLinkInfos)
+                result.add(callLinkInfo->codeOrigin(), ICStatus()).iterator->value.callLinkInfo = callLinkInfo;
             for (auto& pair : dfgCommon->recordedStatuses.calls)
                 result.add(pair.first, ICStatus()).iterator->value.callStatus = pair.second.get();
             for (auto& pair : dfgCommon->recordedStatuses.gets)
@@ -1729,39 +1739,45 @@ void CodeBlock::getICStatusMap(ICStatusMap& result)
 }
 
 #if ENABLE(JIT)
-StructureStubInfo* CodeBlock::addStubInfo(AccessType accessType, CodeOrigin codeOrigin)
-{
-    ConcurrentJSLocker locker(m_lock);
-    return ensureJITData(locker).m_stubInfos.add(accessType, codeOrigin);
-}
-
 StructureStubInfo* CodeBlock::findStubInfo(CodeOrigin codeOrigin)
 {
     ConcurrentJSLocker locker(m_lock);
     if (auto* jitData = m_jitData.get()) {
-        for (StructureStubInfo* stubInfo : jitData->m_stubInfos) {
+        for (auto& stubInfo : jitData->m_stubInfos) {
+            if (stubInfo.codeOrigin == codeOrigin)
+                return &stubInfo;
+        }
+    }
+
+#if ENABLE(DFG_JIT)
+    if (JITCode::isOptimizingJIT(jitType())) {
+        for (auto* stubInfo : jitCode()->dfgCommon()->m_stubInfos) {
             if (stubInfo->codeOrigin == codeOrigin)
                 return stubInfo;
         }
     }
+#endif
     return nullptr;
-}
-
-CallLinkInfo* CodeBlock::addCallLinkInfo(CodeOrigin codeOrigin)
-{
-    ConcurrentJSLocker locker(m_lock);
-    return ensureJITData(locker).m_callLinkInfos.add(codeOrigin);
 }
 
 CallLinkInfo* CodeBlock::getCallLinkInfoForBytecodeIndex(BytecodeIndex index)
 {
     ConcurrentJSLocker locker(m_lock);
     if (auto* jitData = m_jitData.get()) {
-        for (CallLinkInfo* callLinkInfo : jitData->m_callLinkInfos) {
+        for (auto& callLinkInfo : jitData->m_callLinkInfos) {
+            if (callLinkInfo.codeOrigin() == CodeOrigin(index))
+                return &callLinkInfo;
+        }
+    }
+#if ENABLE(DFG_JIT)
+    if (JITCode::isOptimizingJIT(jitType())) {
+        DFG::CommonData* dfgCommon = m_jitCode->dfgCommon();
+        for (auto* callLinkInfo : dfgCommon->m_callLinkInfos) {
             if (callLinkInfo->codeOrigin() == CodeOrigin(index))
                 return callLinkInfo;
         }
     }
+#endif
     return nullptr;
 }
 
@@ -1803,9 +1819,9 @@ void CodeBlock::resetJITData()
         // these *infos, but when we have an OSR exit linked to this CodeBlock, we won't downgrade
         // to LLInt.
 
-        for (StructureStubInfo* stubInfo : jitData->m_stubInfos) {
-            stubInfo->aboutToDie();
-            stubInfo->deref();
+        for (auto& stubInfo : jitData->m_stubInfos) {
+            stubInfo.aboutToDie();
+            stubInfo.deref();
         }
 
         // We can clear this because the DFG's queries to these data structures are guarded by whether
@@ -1858,14 +1874,16 @@ void CodeBlock::stronglyVisitStrongReferences(const ConcurrentJSLocker& locker, 
 
 #if ENABLE(JIT)
     if (auto* jitData = m_jitData.get()) {
-        for (StructureStubInfo* stubInfo : jitData->m_stubInfos)
-            stubInfo->visitAggregate(visitor);
+        for (auto& stubInfo : jitData->m_stubInfos)
+            stubInfo.visitAggregate(visitor);
     }
 #endif
 
 #if ENABLE(DFG_JIT)
     if (JITCode::isOptimizingJIT(jitType())) {
         DFG::CommonData* dfgCommon = m_jitCode->dfgCommon();
+        for (auto* stubInfo : dfgCommon->m_stubInfos)
+            stubInfo->visitAggregate(visitor);
         dfgCommon->recordedStatuses.visitAggregate(visitor);
         visitOSRExitTargets(locker, visitor);
     }
@@ -2315,9 +2333,16 @@ void CodeBlock::jettison(Profiler::JettisonReason reason, ReoptimizationMode mod
     {
         ConcurrentJSLocker locker(m_lock);
         if (JITData* jitData = m_jitData.get()) {
-            for (CallLinkInfo* callLinkInfo : jitData->m_callLinkInfos)
+            for (auto& callLinkInfo : jitData->m_callLinkInfos)
+                callLinkInfo.setClearedByJettison();
+        }
+#if ENABLE(DFG_JIT)
+        if (JITCode::isOptimizingJIT(jitType())) {
+            DFG::CommonData* dfgCommon = m_jitCode->dfgCommon();
+            for (auto* callLinkInfo : dfgCommon->m_callLinkInfos)
                 callLinkInfo->setClearedByJettison();
         }
+#endif
     }
 #endif
 
@@ -3518,17 +3543,23 @@ std::optional<CodeOrigin> CodeBlock::findPC(void* pc)
     {
         ConcurrentJSLocker locker(m_lock);
         if (auto* jitData = m_jitData.get()) {
-            for (StructureStubInfo* stubInfo : jitData->m_stubInfos) {
-                if (stubInfo->containsPC(pc))
-                    return std::optional<CodeOrigin>(stubInfo->codeOrigin);
+            for (auto& stubInfo : jitData->m_stubInfos) {
+                if (stubInfo.containsPC(pc))
+                    return stubInfo.codeOrigin;
             }
         }
+#if ENABLE(DFG_JIT)
+        if (JITCode::isOptimizingJIT(jitType())) {
+            DFG::CommonData* dfgCommon = m_jitCode->dfgCommon();
+            for (auto* stubInfo : dfgCommon->m_stubInfos) {
+                if (stubInfo->containsPC(pc))
+                    return stubInfo->codeOrigin;
+            }
+        }
+#endif
     }
 
-    if (std::optional<CodeOrigin> codeOrigin = m_jitCode->findPC(this, pc))
-        return codeOrigin;
-
-    return std::nullopt;
+    return m_jitCode->findPC(this, pc);
 }
 #endif // ENABLE(JIT)
 

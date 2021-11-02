@@ -41,10 +41,12 @@
 #include "ChromeClient.h"
 #include "DOMWindow.h"
 #include "DocumentTimeline.h"
+#include "DocumentTimelinesController.h"
 #include "DocumentType.h"
 #include "Editing.h"
 #include "Editor.h"
 #include "EditorClient.h"
+#include "ElementInlines.h"
 #include "Event.h"
 #include "EventHandler.h"
 #include "EventNames.h"
@@ -84,6 +86,7 @@
 #include "RuntimeEnabledFeatures.h"
 #include "SVGDocument.h"
 #include "SVGDocumentExtensions.h"
+#include "SVGElementTypeHelpers.h"
 #include "ScriptController.h"
 #include "ScriptSourceCode.h"
 #include "ScrollingCoordinator.h"
@@ -99,8 +102,8 @@
 #include "UserTypingGestureIndicator.h"
 #include "VisibleUnits.h"
 #include "markup.h"
-#include "npruntime_impl.h"
 #include "runtime_root.h"
+#include <JavaScriptCore/APICast.h>
 #include <JavaScriptCore/RegularExpression.h>
 #include <wtf/HexNumber.h>
 #include <wtf/RefCountedLeakCounter.h>
@@ -110,6 +113,11 @@
 
 #if ENABLE(DATA_DETECTION)
 #include "DataDetectionResultsStorage.h"
+#endif
+
+#if ENABLE(SERVICE_WORKER)
+#include "JSServiceWorkerGlobalScope.h"
+#include "ServiceWorkerGlobalScope.h"
 #endif
 
 #define FRAME_RELEASE_LOG_ERROR(channel, fmt, ...) RELEASE_LOG_ERROR(channel, "%p - Frame::" fmt, this, ##__VA_ARGS__)
@@ -152,12 +160,12 @@ static inline float parentTextZoomFactor(Frame* frame)
 
 Frame::Frame(Page& page, HTMLFrameOwnerElement* ownerElement, UniqueRef<FrameLoaderClient>&& frameLoaderClient)
     : m_mainFrame(ownerElement ? page.mainFrame() : *this)
-    , m_page(makeWeakPtr(page))
+    , m_page(page)
     , m_settings(&page.settings())
     , m_treeNode(*this, parentFromOwnerElement(ownerElement))
     , m_loader(makeUniqueRef<FrameLoader>(*this, WTFMove(frameLoaderClient)))
     , m_navigationScheduler(makeUniqueRef<NavigationScheduler>(*this))
-    , m_ownerElement(makeWeakPtr(ownerElement))
+    , m_ownerElement(ownerElement)
     , m_script(makeUniqueRef<ScriptController>(*this))
     , m_pageZoomFactor(parentPageZoomFactor(this))
     , m_textZoomFactor(parentTextZoomFactor(this))
@@ -854,7 +862,7 @@ std::optional<SimpleRange> Frame::rangeForPoint(const IntPoint& framePoint)
     auto position = visiblePositionForPoint(framePoint);
 
     auto containerText = position.deepEquivalent().containerText();
-    if (!containerText || !containerText->renderer() || containerText->renderer()->style().userSelect() == UserSelect::None)
+    if (!containerText || !containerText->renderer() || containerText->renderer()->style().userSelectIncludingInert() == UserSelect::None)
         return std::nullopt;
 
     if (auto previousCharacterRange = makeSimpleRange(position.previous(), position)) {
@@ -1136,6 +1144,18 @@ void Frame::resetScript()
 {
     resetWindowProxy();
     m_script = makeUniqueRef<ScriptController>(*this);
+}
+
+Frame* Frame::fromJSContext(JSContextRef context)
+{
+    JSC::JSGlobalObject* globalObjectObj = toJS(context);
+    if (auto* window = JSC::jsDynamicCast<JSDOMWindow*>(globalObjectObj->vm(), globalObjectObj))
+        return window->wrapped().frame();
+#if ENABLE(SERVICE_WORKER)
+    if (auto* serviceWorkerGlobalScope = JSC::jsDynamicCast<JSServiceWorkerGlobalScope*>(globalObjectObj->vm(), globalObjectObj))
+        return serviceWorkerGlobalScope->wrapped().serviceWorkerPage() ? &serviceWorkerGlobalScope->wrapped().serviceWorkerPage()->mainFrame() : nullptr;
+#endif
+    return nullptr;
 }
 
 #if ENABLE(DATA_DETECTION)

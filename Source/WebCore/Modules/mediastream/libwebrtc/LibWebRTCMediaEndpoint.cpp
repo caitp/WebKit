@@ -92,6 +92,8 @@ void LibWebRTCMediaEndpoint::restartIce()
 bool LibWebRTCMediaEndpoint::setConfiguration(LibWebRTCProvider& client, webrtc::PeerConnectionInterface::RTCConfiguration&& configuration)
 {
     configuration.sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
+    configuration.crypto_options = webrtc::CryptoOptions { };
+    configuration.crypto_options->srtp.enable_gcm_crypto_suites = true;
 
     if (!m_backend) {
         auto& document = downcast<Document>(*m_peerConnectionBackend.connection().scriptExecutionContext());
@@ -253,13 +255,37 @@ void LibWebRTCMediaEndpoint::doCreateAnswer()
 
 rtc::scoped_refptr<LibWebRTCStatsCollector> LibWebRTCMediaEndpoint::createStatsCollector(Ref<DeferredPromise>&& promise)
 {
-    return LibWebRTCStatsCollector::create([promise = WTFMove(promise), protectedThis = Ref { *this }](auto&& report) mutable {
+    return LibWebRTCStatsCollector::create([promise = WTFMove(promise), protectedThis = Ref { *this }](auto&& rtcReport) mutable {
         ASSERT(isMainThread());
-        if (protectedThis->isStopped() || !report)
+        if (protectedThis->isStopped())
             return;
 
-        promise->resolve<IDLInterface<RTCStatsReport>>(report.releaseNonNull());
+        promise->resolve<IDLInterface<RTCStatsReport>>(LibWebRTCStatsCollector::createReport(rtcReport));
     });
+}
+
+void LibWebRTCMediaEndpoint::gatherDecoderImplementationName(Function<void(String&&)>&& callback)
+{
+    if (!m_backend) {
+        callback({ });
+        return;
+    }
+    auto collector = LibWebRTCStatsCollector::create([callback = WTFMove(callback)](auto&& rtcReport) mutable {
+        ASSERT(isMainThread());
+        if (rtcReport) {
+            for (const auto& rtcStats : *rtcReport) {
+                if (rtcStats.type() == webrtc::RTCInboundRTPStreamStats::kType) {
+                    auto& inboundRTPStats = static_cast<const webrtc::RTCInboundRTPStreamStats&>(rtcStats);
+                    if (inboundRTPStats.decoder_implementation.is_defined()) {
+                        callback(fromStdString(*inboundRTPStats.decoder_implementation));
+                        return;
+                    }
+                }
+            }
+        }
+        callback({ });
+    });
+    m_backend->GetStats(WTFMove(collector));
 }
 
 void LibWebRTCMediaEndpoint::getStats(Ref<DeferredPromise>&& promise)

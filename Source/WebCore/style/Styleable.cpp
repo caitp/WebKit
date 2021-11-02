@@ -39,6 +39,9 @@
 #include "Element.h"
 #include "KeyframeEffect.h"
 #include "KeyframeEffectStack.h"
+#include "RenderElement.h"
+#include "RenderListItem.h"
+#include "RenderListMarker.h"
 #include "RenderStyle.h"
 #include "StylePropertyShorthand.h"
 #include "StyleResolver.h"
@@ -47,6 +50,65 @@
 #include "WebAnimationUtilities.h"
 
 namespace WebCore {
+
+const std::optional<const Styleable> Styleable::fromRenderer(const RenderElement& renderer)
+{
+    switch (renderer.style().styleType()) {
+    case PseudoId::Backdrop:
+        for (auto& topLayerElement : renderer.document().topLayerElements()) {
+            if (topLayerElement->renderer() && topLayerElement->renderer()->backdropRenderer() == &renderer)
+                return Styleable(topLayerElement.get(), PseudoId::Backdrop);
+        }
+        break;
+    case PseudoId::Marker:
+        if (auto* ancestor = renderer.parent()) {
+            while (ancestor && !ancestor->element())
+                ancestor = ancestor->parent();
+            ASSERT(is<RenderListItem>(ancestor));
+            ASSERT(downcast<RenderListItem>(ancestor)->markerRenderer() == &renderer);
+            return Styleable(*ancestor->element(), PseudoId::Marker);
+        }
+        break;
+    case PseudoId::After:
+    case PseudoId::Before:
+    case PseudoId::None:
+        if (auto* element = renderer.element())
+            return fromElement(*element);
+        break;
+    default:
+        return std::nullopt;
+    }
+
+    return std::nullopt;
+}
+
+RenderElement* Styleable::renderer() const
+{
+    switch (pseudoId) {
+    case PseudoId::After:
+        if (auto* afterPseudoElement = element.afterPseudoElement())
+            return afterPseudoElement->renderer();
+        break;
+    case PseudoId::Backdrop:
+        if (auto* hostRenderer = element.renderer())
+            return hostRenderer->backdropRenderer().get();
+        break;
+    case PseudoId::Before:
+        if (auto* beforePseudoElement = element.beforePseudoElement())
+            return beforePseudoElement->renderer();
+        break;
+    case PseudoId::Marker:
+        if (is<RenderListItem>(element.renderer()))
+            return downcast<RenderListItem>(*element.renderer()).markerRenderer();
+        break;
+    case PseudoId::None:
+        return element.renderer();
+    default:
+        ASSERT_NOT_REACHED();
+    }
+
+    return nullptr;
+}
 
 void Styleable::animationWasAdded(WebAnimation& animation) const
 {
@@ -150,7 +212,7 @@ static bool shouldConsiderAnimation(Element& element, const Animation& animation
     return false;
 }
 
-void Styleable::updateCSSAnimations(const RenderStyle* currentStyle, const RenderStyle& newStyle, const RenderStyle* parentElementStyle) const
+void Styleable::updateCSSAnimations(const RenderStyle* currentStyle, const RenderStyle& newStyle, const Style::ResolutionContext& resolutionContext) const
 {
     auto& keyframeEffectStack = ensureKeyframeEffectStack();
 
@@ -200,7 +262,7 @@ void Styleable::updateCSSAnimations(const RenderStyle* currentStyle, const Rende
             }
 
             if (!foundMatchingAnimation)
-                newAnimations.add(CSSAnimation::create(*this, currentAnimation, currentStyle, newStyle, parentElementStyle));
+                newAnimations.add(CSSAnimation::create(*this, currentAnimation, currentStyle, newStyle, resolutionContext));
         }
     }
 
@@ -327,7 +389,7 @@ static void updateCSSTransitionsForStyleableAndProperty(const Styleable& styleab
             // If a transition has not yet started or started when animations were last updated, use the timeline time at its creation
             // as its start time to ensure that it will produce a style with progress > 0.
             bool shouldUseTimelineTimeAtCreation = is<CSSTransition>(animation) && (!animation->startTime() || *animation->startTime() == styleable.element.document().timeline().currentTime());
-            animation->resolve(animatedStyle, nullptr, shouldUseTimelineTimeAtCreation ? downcast<CSSTransition>(*animation).timelineTimeAtCreation() : std::nullopt);
+            animation->resolve(animatedStyle, { nullptr }, shouldUseTimelineTimeAtCreation ? downcast<CSSTransition>(*animation).timelineTimeAtCreation() : std::nullopt);
             return animatedStyle;
         }
 
@@ -347,7 +409,7 @@ static void updateCSSTransitionsForStyleableAndProperty(const Styleable& styleab
     auto afterChangeStyle = [&]() -> const RenderStyle {
         if (is<CSSAnimation>(animation) && animation->isRelevant()) {
             auto animatedStyle = RenderStyle::clone(newStyle);
-            animation->resolve(animatedStyle, nullptr);
+            animation->resolve(animatedStyle, { nullptr });
             return animatedStyle;
         }
 

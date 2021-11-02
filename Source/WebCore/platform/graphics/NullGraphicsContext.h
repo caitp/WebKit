@@ -55,7 +55,7 @@ private:
     bool invalidatingImagesWithAsyncDecodes() const final { return m_paintInvalidationReasons == PaintInvalidationReasons::InvalidatingImagesWithAsyncDecodes; }
     bool detectingContentfulPaint() const final { return m_paintInvalidationReasons == PaintInvalidationReasons::DetectingContentfulPaint; }
 
-    void updateState(const GraphicsContextState&, GraphicsContextState::StateChangeFlags) final { }
+    void didUpdateState(const GraphicsContextState&, GraphicsContextState::StateChangeFlags) final { }
 
 #if USE(CG) || USE(DIRECT2D)
     void setIsAcceleratedContext(bool) final { }
@@ -114,8 +114,6 @@ private:
 
     void drawDotsForDocumentMarker(const FloatRect&, DocumentMarkerLineStyle) final { }
 
-    ImageDrawResult drawImage(Image&, const FloatPoint&, const ImagePaintingOptions& = { ImageOrientation::FromImage }) final { return ImageDrawResult::DidNothing; }
-    ImageDrawResult drawImage(Image&, const FloatRect&, const ImagePaintingOptions& = { ImageOrientation::FromImage }) final { return ImageDrawResult::DidNothing; }
     ImageDrawResult drawImage(Image&, const FloatRect&, const FloatRect&, const ImagePaintingOptions& = { ImageOrientation::FromImage }) final { return ImageDrawResult::DidNothing; }
 
     ImageDrawResult drawTiledImage(Image&, const FloatRect&, const FloatPoint&, const FloatSize&, const FloatSize&, const ImagePaintingOptions& = { }) final { return ImageDrawResult::DidNothing; }

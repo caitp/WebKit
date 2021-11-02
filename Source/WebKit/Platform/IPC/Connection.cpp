@@ -428,6 +428,7 @@ void Connection::invalidate()
     }
     
     m_isValid = false;
+    clearAsyncReplyHandlers(*this);
 
     m_connectionQueue->dispatch([protectedThis = Ref { *this }]() mutable {
         protectedThis->platformInvalidate();
@@ -453,7 +454,7 @@ UniqueRef<Encoder> Connection::createSyncMessageEncoder(MessageName messageName,
     return encoder;
 }
 
-bool Connection::sendMessage(UniqueRef<Encoder>&& encoder, OptionSet<SendOption> sendOptions)
+bool Connection::sendMessage(UniqueRef<Encoder>&& encoder, OptionSet<SendOption> sendOptions, std::optional<Thread::QOS> qos)
 {
     if (!isValid())
         return false;
@@ -493,9 +494,15 @@ bool Connection::sendMessage(UniqueRef<Encoder>&& encoder, OptionSet<SendOption>
     }
     
     // FIXME: We should add a boolean flag so we don't call this when work has already been scheduled.
-    m_connectionQueue->dispatch([protectedThis = Ref { *this }]() mutable {
+    auto sendOutgoingMessages = [protectedThis = Ref { *this }]() mutable {
         protectedThis->sendOutgoingMessages();
-    });
+    };
+
+    if (qos)
+        m_connectionQueue->dispatchWithQOS(WTFMove(sendOutgoingMessages), *qos);
+    else
+        m_connectionQueue->dispatch(WTFMove(sendOutgoingMessages));
+
     return true;
 }
 
@@ -852,7 +859,7 @@ void Connection::enableIncomingMessagesThrottling()
 #if ENABLE(IPC_TESTING_API)
 void Connection::addMessageObserver(const MessageObserver& observer)
 {
-    m_messageObservers.append(makeWeakPtr(observer));
+    m_messageObservers.append(observer);
 }
 #endif
 
@@ -936,6 +943,9 @@ void Connection::sendOutgoingMessages()
 
 void Connection::dispatchSyncMessage(Decoder& decoder)
 {
+    // FIXME: If the message is invalid, we should send back a SyncMessageError.
+    // Currently we just wait for a timeout to happen, which will block the WebContent process.
+
     ASSERT(isMainRunLoop());
     ASSERT(decoder.isSyncMessage());
 
@@ -969,7 +979,6 @@ void Connection::dispatchSyncMessage(Decoder& decoder)
         wasHandled = m_client.didReceiveSyncMessage(*this, decoder, replyEncoder);
     }
 
-    // FIXME: If the message was invalid, we should send back a SyncMessageError.
 #if ENABLE(IPC_TESTING_API)
     ASSERT(decoder.isValid() || m_ignoreInvalidMessageForTesting);
 #else

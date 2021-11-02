@@ -40,7 +40,7 @@
 #include "CachedScript.h"
 #include "CertificateInfo.h"
 #include "CertificateSummary.h"
-#include "Document.h"
+#include "DocumentInlines.h"
 #include "DocumentLoader.h"
 #include "DocumentThreadableLoader.h"
 #include "FormData.h"
@@ -841,7 +841,7 @@ Protocol::ErrorStringOr<void> InspectorNetworkAgent::enable()
             auto identifier = channel->progressIdentifier();
             didCreateWebSocket(identifier, webSocket->url());
 
-            auto cookieRequestHeaderFieldValue = [document = makeWeakPtr(document)](const URL& url) -> String {
+            auto cookieRequestHeaderFieldValue = [document = WeakPtr { document }](const URL& url) -> String {
                 if (!document || !document->page())
                     return { };
                 return document->page()->cookieJar().cookieRequestHeaderFieldValue(*document, url);

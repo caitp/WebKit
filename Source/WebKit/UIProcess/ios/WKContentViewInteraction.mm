@@ -99,8 +99,7 @@
 #import <MobileCoreServices/UTCoreTypes.h>
 #import <UniformTypeIdentifiers/UTCoreTypes.h>
 #import <WebCore/AppHighlight.h>
-#import <WebCore/Color.h>
-#import <WebCore/ColorIOS.h>
+#import <WebCore/ColorCocoa.h>
 #import <WebCore/ColorSerialization.h>
 #import <WebCore/CompositionHighlight.h>
 #import <WebCore/DOMPasteAccess.h>
@@ -476,7 +475,7 @@ constexpr double fasterTapSignificantZoomThreshold = 0.8;
         [[_contentView formAccessoryView] showAutoFillButtonWithTitle:title];
     else
         [[_contentView formAccessoryView] hideAutoFillButton];
-    if (!WebKit::currentUserInterfaceIdiomIsPhoneOrWatch())
+    if (!WebKit::currentUserInterfaceIdiomIsSmallScreen())
         [_contentView reloadInputViews];
 }
 
@@ -1029,6 +1028,9 @@ static WKDragSessionContext *ensureLocalDragSessionContext(id <UIDragSession> se
     _needsDeferredEndScrollingSelectionUpdate = NO;
     _isChangingFocus = NO;
     _isBlurringFocusedElement = NO;
+#if USE(UICONTEXTMENU)
+    _isDisplayingContextMenuWithAnimation = NO;
+#endif
 
 #if USE(UICONTEXTMENU) && ENABLE(IMAGE_ANALYSIS)
     _contextMenuWasTriggeredByImageAnalysisTimeout = NO;
@@ -1582,7 +1584,7 @@ typedef NS_ENUM(NSInteger, EndEditingReason) {
                 if (_focusRequiresStrongPasswordAssistance)
                     return true;
 
-                if (WebKit::currentUserInterfaceIdiomIsPhoneOrWatch())
+                if (WebKit::currentUserInterfaceIdiomIsSmallScreen())
                     return true;
             }
 
@@ -2012,7 +2014,7 @@ static NSValue *nsSizeForTapHighlightBorderRadius(WebCore::IntSize borderRadius,
     if (![_highlightView superview])
         return;
 
-    [_highlightView setColor:adoptNS([[UIColor alloc] initWithCGColor:cachedCGColor(_tapHighlightInformation.color)]).get()];
+    [_highlightView setColor:cocoaColor(_tapHighlightInformation.color).get()];
 
     auto& highlightedQuads = _tapHighlightInformation.quads;
     bool allRectilinear = true;
@@ -2162,18 +2164,18 @@ static NSValue *nsSizeForTapHighlightBorderRadius(WebCore::IntSize borderRadius,
     // We check both the system preference and the page preference, because we only want this
     // to apply in "desktop" mode.
     if (preferences.preferFasterClickOverDoubleTap() && _page->preferFasterClickOverDoubleTap()) {
-        RELEASE_LOG(ViewGestures, "Potential tap found an element and fast taps are preferred. Trigger click. (%p)", self);
+        RELEASE_LOG(ViewGestures, "Potential tap found an element and fast taps are preferred. Trigger click. (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
         if (preferences.zoomOnDoubleTapWhenRoot() && nodeIsRootLevel) {
-            RELEASE_LOG(ViewGestures, "The click handler was on a root-level element, so don't disable double-tap. (%p)", self);
+            RELEASE_LOG(ViewGestures, "The click handler was on a root-level element, so don't disable double-tap. (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
             return;
         }
 
         if (preferences.alwaysZoomOnDoubleTap()) {
-            RELEASE_LOG(ViewGestures, "DTTZ is forced on, so don't disable double-tap. (%p)", self);
+            RELEASE_LOG(ViewGestures, "DTTZ is forced on, so don't disable double-tap. (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
             return;
         }
 
-        RELEASE_LOG(ViewGestures, "Give preference to click by disabling double-tap. (%p)", self);
+        RELEASE_LOG(ViewGestures, "Give preference to click by disabling double-tap. (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
         [self _setDoubleTapGesturesEnabled:NO];
         return;
     }
@@ -2181,11 +2183,11 @@ static NSValue *nsSizeForTapHighlightBorderRadius(WebCore::IntSize borderRadius,
     auto currentScale = self._contentZoomScale;
     auto targetScale = _smartMagnificationController->zoomFactorForTargetRect(renderRect, fitEntireRect, viewportMinimumScale, viewportMaximumScale);
     if (std::min(targetScale, currentScale) / std::max(targetScale, currentScale) > fasterTapSignificantZoomThreshold) {
-        RELEASE_LOG(ViewGestures, "Potential tap would not cause a significant zoom. Trigger click. (%p)", self);
+        RELEASE_LOG(ViewGestures, "Potential tap would not cause a significant zoom. Trigger click. (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
         [self _setDoubleTapGesturesEnabled:NO];
         return;
     }
-    RELEASE_LOG(ViewGestures, "Potential tap may cause significant zoom. Wait. (%p)", self);
+    RELEASE_LOG(ViewGestures, "Potential tap may cause significant zoom. Wait. (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
 }
 
 - (void)_cancelLongPressGestureRecognizer
@@ -2257,7 +2259,7 @@ static NSValue *nsSizeForTapHighlightBorderRadius(WebCore::IntSize borderRadius,
         if (self._shouldUseContextMenusForFormControls)
             return NO;
 #endif
-        return WebKit::currentUserInterfaceIdiomIsPhoneOrWatch();
+        return WebKit::currentUserInterfaceIdiomIsSmallScreen();
     }
     default:
         return YES;
@@ -2312,7 +2314,7 @@ static NSValue *nsSizeForTapHighlightBorderRadius(WebCore::IntSize borderRadius,
         fontSize:_focusedElementInformation.nodeFontSize
         minimumScale:_focusedElementInformation.minimumScaleFactor
         maximumScale:_focusedElementInformation.maximumScaleFactorIgnoringAlwaysScalable
-        allowScaling:_focusedElementInformation.allowsUserScalingIgnoringAlwaysScalable && WebKit::currentUserInterfaceIdiomIsPhoneOrWatch()
+        allowScaling:_focusedElementInformation.allowsUserScalingIgnoringAlwaysScalable && WebKit::currentUserInterfaceIdiomIsSmallScreen()
         forceScroll:[self requiresAccessoryView]];
 }
 
@@ -2887,7 +2889,7 @@ static inline bool isSamePair(UIGestureRecognizer *a, UIGestureRecognizer *b, UI
         return YES;
 #endif
 
-    return _positionInformation.isSelectable;
+    return _positionInformation.isSelectable();
 }
 
 - (BOOL)pointIsNearMarkedText:(CGPoint)point
@@ -2953,6 +2955,9 @@ static inline bool isSamePair(UIGestureRecognizer *a, UIGestureRecognizer *b, UI
 
     WebKit::InteractionInformationRequest request(WebCore::roundedIntPoint(point));
     if (![self ensurePositionInformationIsUpToDate:request])
+        return NO;
+
+    if (gesture == UIWKGestureLoupe && _positionInformation.selectability == WebKit::InteractionInformationAtPosition::Selectability::UnselectableDueToUserSelectNone)
         return NO;
 
 #if ENABLE(DATALIST_ELEMENT)
@@ -3079,12 +3084,12 @@ static inline bool isSamePair(UIGestureRecognizer *a, UIGestureRecognizer *b, UI
 - (void)_endPotentialTapAndEnableDoubleTapGesturesIfNecessary
 {
     if (self.webView._allowsDoubleTapGestures) {
-        RELEASE_LOG(ViewGestures, "ending potential tap - double taps are back. (%p)", self);
+        RELEASE_LOG(ViewGestures, "ending potential tap - double taps are back. (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
 
         [self _setDoubleTapGesturesEnabled:YES];
     }
 
-    RELEASE_LOG(ViewGestures, "Ending potential tap. (%p)", self);
+    RELEASE_LOG(ViewGestures, "Ending potential tap. (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
 
     _potentialTapInProgress = NO;
 }
@@ -3100,7 +3105,7 @@ static inline bool isSamePair(UIGestureRecognizer *a, UIGestureRecognizer *b, UI
 
     bool shouldRequestMagnificationInformation = _page->preferences().fasterClicksEnabled();
     if (shouldRequestMagnificationInformation)
-        RELEASE_LOG(ViewGestures, "Single tap identified. Request details on potential zoom. (%p)", self);
+        RELEASE_LOG(ViewGestures, "Single tap identified. Request details on potential zoom. (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
 
     _page->potentialTapAtPosition(gestureRecognizer.location, shouldRequestMagnificationInformation, [self nextTapIdentifier]);
     _potentialTapInProgress = YES;
@@ -3123,7 +3128,7 @@ static void cancelPotentialTapIfNecessary(WKContentView* contentView)
     cancelPotentialTapIfNecessary(self);
     if (auto* singleTapTouchIdentifier = [_singleTapGestureRecognizer lastActiveTouchIdentifier]) {
         WebCore::PointerID pointerId = [singleTapTouchIdentifier unsignedIntValue];
-        if (m_commitPotentialTapPointerId != pointerId)
+        if (_commitPotentialTapPointerId != pointerId)
             _page->touchWithIdentifierWasRemoved(pointerId);
     }
 
@@ -3133,14 +3138,14 @@ static void cancelPotentialTapIfNecessary(WKContentView* contentView)
 
 - (void)_doubleTapDidFail:(UITapGestureRecognizer *)gestureRecognizer
 {
-    RELEASE_LOG(ViewGestures, "Double tap was not recognized. (%p)", self);
+    RELEASE_LOG(ViewGestures, "Double tap was not recognized. (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
     ASSERT(gestureRecognizer == _doubleTapGestureRecognizer);
 }
 
 - (void)_commitPotentialTapFailed
 {
-    _page->touchWithIdentifierWasRemoved(m_commitPotentialTapPointerId);
-    m_commitPotentialTapPointerId = 0;
+    _page->touchWithIdentifierWasRemoved(_commitPotentialTapPointerId);
+    _commitPotentialTapPointerId = 0;
 
     [self _cancelInteraction];
     
@@ -3160,10 +3165,10 @@ static void cancelPotentialTapIfNecessary(WKContentView* contentView)
 
 - (void)_didCompleteSyntheticClick
 {
-    _page->touchWithIdentifierWasRemoved(m_commitPotentialTapPointerId);
-    m_commitPotentialTapPointerId = 0;
+    _page->touchWithIdentifierWasRemoved(_commitPotentialTapPointerId);
+    _commitPotentialTapPointerId = 0;
 
-    RELEASE_LOG(ViewGestures, "Synthetic click completed. (%p)", self);
+    RELEASE_LOG(ViewGestures, "Synthetic click completed. (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
     [self _resetInputViewDeferral];
 }
 
@@ -3188,12 +3193,12 @@ static void cancelPotentialTapIfNecessary(WKContentView* contentView)
     if ([_inputPeripheral singleTapShouldEndEditing])
         [_inputPeripheral endEditing];
 
-    RELEASE_LOG(ViewGestures, "Single tap recognized - commit potential tap (%p)", self);
+    RELEASE_LOG(ViewGestures, "Single tap recognized - commit potential tap (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
 
     WebCore::PointerID pointerId = WebCore::mousePointerID;
     if (auto* singleTapTouchIdentifier = [_singleTapGestureRecognizer lastActiveTouchIdentifier]) {
         pointerId = [singleTapTouchIdentifier unsignedIntValue];
-        m_commitPotentialTapPointerId = pointerId;
+        _commitPotentialTapPointerId = pointerId;
     }
     _page->commitPotentialTap(WebKit::webEventModifierFlags(gestureRecognizer.modifierFlags), _layerTreeTransactionIdAtLastInteractionStart, pointerId);
 
@@ -3203,7 +3208,7 @@ static void cancelPotentialTapIfNecessary(WKContentView* contentView)
 
 - (void)_doubleTapRecognized:(UITapGestureRecognizer *)gestureRecognizer
 {
-    RELEASE_LOG(ViewGestures, "Identified a double tap (%p)", self);
+    RELEASE_LOG(ViewGestures, "Identified a double tap (%p, pageProxyID=%llu)", self, _page->identifier().toUInt64());
 
     [self _resetIsDoubleTapPending];
     _lastInteractionLocation = gestureRecognizer.location;
@@ -3336,7 +3341,7 @@ static void cancelPotentialTapIfNecessary(WKContentView* contentView)
         if (self._shouldUseContextMenusForFormControls)
             return NO;
 #endif
-        return WebKit::currentUserInterfaceIdiomIsPhoneOrWatch();
+        return WebKit::currentUserInterfaceIdiomIsSmallScreen();
     }
     case WebKit::InputType::Text:
     case WebKit::InputType::Password:
@@ -3349,7 +3354,7 @@ static void cancelPotentialTapIfNecessary(WKContentView* contentView)
     case WebKit::InputType::ContentEditable:
     case WebKit::InputType::TextArea:
     case WebKit::InputType::Week:
-        return WebKit::currentUserInterfaceIdiomIsPhoneOrWatch();
+        return WebKit::currentUserInterfaceIdiomIsSmallScreen();
     }
 }
 
@@ -3689,10 +3694,10 @@ WEBCORE_COMMAND_FOR_WEBVIEW(pasteAndMatchStyle);
         return [UIColor clearColor];
 
     if (!_page->editorState().isMissingPostLayoutData) {
-        WebCore::Color caretColor = _page->editorState().postLayoutData().caretColor;
-        if (caretColor.isValid())
-            return [UIColor colorWithCGColor:cachedCGColor(caretColor)];
+        if (auto caretColor = _page->editorState().postLayoutData().caretColor; caretColor.isValid())
+            return cocoaColor(caretColor).autorelease();
     }
+
     return [self _inheritedInteractionTintColor];
 }
 
@@ -4273,6 +4278,8 @@ static inline UIWKSelectionFlags toUIWKSelectionFlags(OptionSet<WebKit::Selectio
     NSInteger uiFlags = UIWKNone;
     if (flags.contains(WebKit::WordIsNearTap))
         uiFlags |= UIWKWordIsNearTap;
+    if (flags.contains(WebKit::SelectionFlipped))
+        uiFlags |= UIWKSelectionFlipped;
     if (flags.contains(WebKit::PhraseBoundaryChanged))
         uiFlags |= UIWKPhraseBoundaryChanged;
 
@@ -4284,6 +4291,8 @@ static inline OptionSet<WebKit::SelectionFlags> toSelectionFlags(UIWKSelectionFl
     OptionSet<WebKit::SelectionFlags> flags;
     if (uiFlags & UIWKWordIsNearTap)
         flags.add(WebKit::WordIsNearTap);
+    if (uiFlags & UIWKSelectionFlipped)
+        flags.add(WebKit::SelectionFlipped);
     if (uiFlags & UIWKPhraseBoundaryChanged)
         flags.add(WebKit::PhraseBoundaryChanged);
     return flags;
@@ -4882,7 +4891,7 @@ static void selectionChangedWithTouch(WKContentView *view, const WebCore::IntPoi
     [accessoryView setNextEnabled:_focusedElementInformation.hasNextNode];
     [accessoryView setPreviousEnabled:_focusedElementInformation.hasPreviousNode];
 
-    if (!WebKit::currentUserInterfaceIdiomIsPhoneOrWatch()) {
+    if (!WebKit::currentUserInterfaceIdiomIsSmallScreen()) {
         [accessoryView setClearVisible:NO];
         return;
     }
@@ -5111,7 +5120,7 @@ static Vector<WebCore::CompositionHighlight> compositionHighlights(NSAttributedS
 
         WebCore::Color highlightColor { WebCore::CompositionHighlight::defaultCompositionFillColor };
         if (UIColor *uiColor = attributes[NSBackgroundColorAttributeName])
-            highlightColor = WebCore::colorFromUIColor(uiColor);
+            highlightColor = WebCore::colorFromCocoaColor(uiColor);
         highlights.append({ static_cast<unsigned>(range.location), static_cast<unsigned>(NSMaxRange(range)), highlightColor });
     }];
 
@@ -5251,7 +5260,7 @@ static WebKit::WritingDirection coreWritingDirection(NSWritingDirection directio
 #if PLATFORM(MACCATALYST)
     WebKit::InteractionInformationRequest request(WebCore::roundedIntPoint(point));
     [self requestAsynchronousPositionInformationUpdate:request];
-    if ([self _currentPositionInformationIsApproximatelyValidForRequest:request radiusForApproximation:2] && _positionInformation.isSelectable)
+    if ([self _currentPositionInformationIsApproximatelyValidForRequest:request radiusForApproximation:2] && _positionInformation.isSelectable())
         return [WKTextPosition textPositionWithRect:_positionInformation.caretRect];
 #endif
     return nil;
@@ -7714,7 +7723,7 @@ static bool canUseQuickboardControllerFor(UITextContentType type)
 
 - (BOOL)_shouldUseLegacySelectPopoverDismissalBehavior
 {
-    if (WebKit::currentUserInterfaceIdiomIsPhoneOrWatch())
+    if (WebKit::currentUserInterfaceIdiomIsSmallScreen())
         return NO;
 
     if (_focusedElementInformation.elementType != WebKit::InputType::Select)
@@ -7960,6 +7969,11 @@ static WebCore::DataOwnerType coreDataOwnerType(_UIDataOwner platformType)
 
 #if ENABLE(DRAG_SUPPORT)
         if (gesture.delegate == [_dragInteraction _initiationDriver])
+            return YES;
+#endif
+
+#if ENABLE(IMAGE_ANALYSIS)
+        if (gestureRecognizer == _imageAnalysisGestureRecognizer || gestureRecognizer == _imageAnalysisTimeoutGestureRecognizer)
             return YES;
 #endif
 
@@ -8593,7 +8607,7 @@ static RetainPtr<UITargetedPreview> createFallbackTargetedPreview(UIView *rootVi
     if (_positionInformation.isLink && _positionInformation.linkIndicator.contentImage) {
         auto indicator = _positionInformation.linkIndicator;
         auto textIndicatorImage = uiImageForImage(indicator.contentImage.get());
-        targetedPreview = createTargetedPreview(textIndicatorImage.get(), self, self.containerForContextMenuHintPreviews, indicator.textBoundingRectInRootViewCoordinates, indicator.textRectsInBoundingRectCoordinates, [UIColor colorWithCGColor:cachedCGColor(indicator.estimatedBackgroundColor)]);
+        targetedPreview = createTargetedPreview(textIndicatorImage.get(), self, self.containerForContextMenuHintPreviews, indicator.textBoundingRectInRootViewCoordinates, indicator.textRectsInBoundingRectCoordinates, cocoaColor(indicator.estimatedBackgroundColor).get());
     } else if ((_positionInformation.isAttachment || _positionInformation.isImage) && _positionInformation.image) {
         auto cgImage = _positionInformation.image->makeCGImageCopy();
         auto image = adoptNS([[UIImage alloc] initWithCGImage:cgImage.get()]);
@@ -8619,6 +8633,8 @@ static RetainPtr<UITargetedPreview> createFallbackTargetedPreview(UIView *rootVi
     if (_contextMenuElementInfo)
         return;
 #endif
+    if (_isDisplayingContextMenuWithAnimation)
+        return;
 #if ENABLE(DATA_DETECTION)
     // We are also using this container for the action sheet assistant...
     if ([_actionSheetAssistant hasContextMenuInteraction])
@@ -8854,9 +8870,9 @@ static Vector<WebCore::IntSize> sizesOfPlaceholderElementsToInsertWhenDroppingIt
 
     [self cleanUpDragSourceSessionState];
 
-    auto prepareForSession = [weakSelf = WeakObjCPtr<WKContentView>(self), session = retainPtr(session), completion = makeBlockPtr(completion)] (WebKit::ProceedWithTextSelectionInImage ProceedWithTextSelectionInImage) {
+    auto prepareForSession = [weakSelf = WeakObjCPtr<WKContentView>(self), session = retainPtr(session), completion = makeBlockPtr(completion)] (WebKit::ProceedWithTextSelectionInImage proceedWithTextSelectionInImage) {
         auto strongSelf = weakSelf.get();
-        if (!strongSelf || ProceedWithTextSelectionInImage == WebKit::ProceedWithTextSelectionInImage::Yes)
+        if (!strongSelf || proceedWithTextSelectionInImage == WebKit::ProceedWithTextSelectionInImage::Yes)
             return;
 
         auto dragOrigin = [session locationInView:strongSelf.get()];
@@ -9815,7 +9831,7 @@ static RetainPtr<NSItemProvider> createItemProvider(const WebKit::WebPageProxy& 
     [_imageAnalysisDeferringGestureRecognizer endDeferral:shouldPreventGestures];
 }
 
-- (void)_doAfterPendingImageAnalysis:(void(^)(WebKit::ProceedWithTextSelectionInImage ProceedWithTextSelectionInImage))block
+- (void)_doAfterPendingImageAnalysis:(void(^)(WebKit::ProceedWithTextSelectionInImage))block
 {
     if (self.hasPendingImageAnalysisRequest)
         _actionsToPerformAfterPendingImageAnalysis.append(makeBlockPtr(block));
@@ -9823,12 +9839,12 @@ static RetainPtr<NSItemProvider> createItemProvider(const WebKit::WebPageProxy& 
         block(WebKit::ProceedWithTextSelectionInImage::No);
 }
 
-- (void)_invokeAllActionsToPerformAfterPendingImageAnalysis:(WebKit::ProceedWithTextSelectionInImage)ProceedWithTextSelectionInImage
+- (void)_invokeAllActionsToPerformAfterPendingImageAnalysis:(WebKit::ProceedWithTextSelectionInImage)proceedWithTextSelectionInImage
 {
     _pendingImageAnalysisRequestIdentifier = std::nullopt;
     _elementPendingImageAnalysis = std::nullopt;
     for (auto block : std::exchange(_actionsToPerformAfterPendingImageAnalysis, { }))
-        block(ProceedWithTextSelectionInImage);
+        block(proceedWithTextSelectionInImage);
 }
 
 #endif // ENABLE(IMAGE_ANALYSIS)
@@ -10016,7 +10032,7 @@ static RetainPtr<NSItemProvider> createItemProvider(const WebKit::WebPageProxy& 
 - (VKImageAnalyzer *)imageAnalyzer
 {
     if (!_imageAnalyzer)
-        _imageAnalyzer = adoptNS([PAL::allocVKImageAnalyzerInstance() init]);
+        _imageAnalyzer = WebKit::createImageAnalyzer();
     return _imageAnalyzer.get();
 }
 
@@ -10083,17 +10099,17 @@ static RetainPtr<NSItemProvider> createItemProvider(const WebKit::WebPageProxy& 
     _elementPendingImageAnalysis = std::nullopt;
 }
 
-- (RetainPtr<VKImageAnalyzerRequest>)createImageAnalysisRequest:(VKAnalysisTypes)analysisTypes image:(UIImage *)image imageURL:(NSURL *)imageURL
+- (RetainPtr<VKImageAnalyzerRequest>)createImageAnalyzerRequest:(VKAnalysisTypes)analysisTypes image:(CGImageRef)image imageURL:(NSURL *)imageURL
 {
-    auto request = adoptNS([PAL::allocVKImageAnalyzerRequestInstance() initWithImage:image orientation:VKImageOrientationUp requestType:analysisTypes]);
+    auto request = WebKit::createImageAnalyzerRequest(image, analysisTypes);
     [request setImageURL:imageURL];
     [request setPageURL:[NSURL _web_URLWithWTFString:_page->currentURL()]];
     return request;
 }
 
-- (RetainPtr<VKImageAnalyzerRequest>)createImageAnalysisRequest:(VKAnalysisTypes)analysisTypes image:(UIImage *)image
+- (RetainPtr<VKImageAnalyzerRequest>)createImageAnalyzerRequest:(VKAnalysisTypes)analysisTypes image:(CGImageRef)image
 {
-    return [self createImageAnalysisRequest:analysisTypes image:image imageURL:_positionInformation.imageURL];
+    return [self createImageAnalyzerRequest:analysisTypes image:image imageURL:_positionInformation.imageURL];
 }
 
 #if USE(UICONTEXTMENU) && ENABLE(IMAGE_ANALYSIS_FOR_MACHINE_READABLE_CODES)
@@ -10135,13 +10151,7 @@ static RetainPtr<NSItemProvider> createItemProvider(const WebKit::WebPageProxy& 
         return;
     }
 
-    auto image = adoptNS([[UIImage alloc] initWithCGImage:cgImage.get()]);
-    if (!image) {
-        completion({ });
-        return;
-    }
-
-    auto request = [self createImageAnalysisRequest:VKAnalysisTypeText image:image.get()];
+    auto request = [self createImageAnalyzerRequest:VKAnalysisTypeText image:cgImage.get()];
     [[self imageAnalyzer] processRequest:request.get() progressHandler:nil completionHandler:makeBlockPtr([completion = WTFMove(completion)] (VKImageAnalysis *result, NSError *) mutable {
         completion(WebKit::makeTextRecognitionResult(result));
     }).get()];
@@ -10206,12 +10216,6 @@ static RetainPtr<NSItemProvider> createItemProvider(const WebKit::WebPageProxy& 
             return;
         }
 
-        auto image = adoptNS([[UIImage alloc] initWithCGImage:cgImage.get()]);
-        if (!image) {
-            [strongSelf _invokeAllActionsToPerformAfterPendingImageAnalysis:WebKit::ProceedWithTextSelectionInImage::No];
-            return;
-        }
-
         RELEASE_LOG(Images, "Image analysis preflight gesture initiated (request %" PRIu64 ").", requestIdentifier.toUInt64());
 
         strongSelf->_elementPendingImageAnalysis = information.imageElementContext;
@@ -10219,8 +10223,8 @@ static RetainPtr<NSItemProvider> createItemProvider(const WebKit::WebPageProxy& 
         auto requestLocation = information.request.point;
         WebCore::ElementContext elementContext = *information.imageElementContext;
 
-        auto requestForTextSelection = [strongSelf createImageAnalysisRequest:VKAnalysisTypeText image:image.get()];
-        auto requestForContextMenu = [strongSelf createImageAnalysisRequest:VKAnalysisTypeVisualSearch | VKAnalysisTypeMachineReadableCode | VKAnalysisTypeAppClip image:image.get()];
+        auto requestForTextSelection = [strongSelf createImageAnalyzerRequest:VKAnalysisTypeText image:cgImage.get()];
+        auto requestForContextMenu = [strongSelf createImageAnalyzerRequest:VKAnalysisTypeVisualSearch | VKAnalysisTypeMachineReadableCode | VKAnalysisTypeAppClip image:cgImage.get()];
 
         auto textAnalysisStartTime = MonotonicTime::now();
         [[strongSelf imageAnalyzer] processRequest:requestForTextSelection.get() progressHandler:nil completionHandler:[requestIdentifier = WTFMove(requestIdentifier), weakSelf, elementContext, requestLocation, requestForContextMenu, gestureDeferralToken, textAnalysisStartTime] (VKImageAnalysis *result, NSError *error) mutable {
@@ -10316,16 +10320,12 @@ static RetainPtr<NSItemProvider> createItemProvider(const WebKit::WebPageProxy& 
         if (!cgImage)
             return;
 
-        auto image = adoptNS([[UIImage alloc] initWithCGImage:cgImage.get()]);
-        if (!image)
-            return;
-
         RELEASE_LOG(Images, "Image analysis timeout gesture initiated.");
         // FIXME: We need to implement some way to cache image analysis results per element, so that we don't end up
         // making redundant image analysis requests for the same image data.
 
         auto visualSearchAnalysisStartTime = MonotonicTime::now();
-        auto requestForContextMenu = [strongSelf createImageAnalysisRequest:VKAnalysisTypeVisualSearch | VKAnalysisTypeMachineReadableCode | VKAnalysisTypeAppClip image:image.get()];
+        auto requestForContextMenu = [strongSelf createImageAnalyzerRequest:VKAnalysisTypeVisualSearch | VKAnalysisTypeMachineReadableCode | VKAnalysisTypeAppClip image:cgImage.get()];
         [[strongSelf imageAnalyzer] processRequest:requestForContextMenu.get() progressHandler:nil completionHandler:[weakSelf, location, visualSearchAnalysisStartTime] (VKImageAnalysis *result, NSError *error) {
             auto strongSelf = weakSelf.get();
             if (!strongSelf)
@@ -10534,13 +10534,14 @@ static RetainPtr<NSItemProvider> createItemProvider(const WebKit::WebPageProxy& 
 
 #if HAVE(LINK_PREVIEW)
     if ([userInterfaceItem isEqualToString:@"contextMenu"]) {
-        if (self._shouldUseContextMenus)
+        if (self._shouldUseContextMenus) {
             return @{ userInterfaceItem: @{
                 @"url": _positionInformation.url.isValid() ? WTF::userVisibleString(_positionInformation.url) : @"",
                 @"isLink": [NSNumber numberWithBool:_positionInformation.isLink],
                 @"isImage": [NSNumber numberWithBool:_positionInformation.isImage],
                 @"imageURL": _positionInformation.imageURL.isValid() ? WTF::userVisibleString(_positionInformation.imageURL) : @""
             } };
+        }
         NSString *url = [_previewItemController previewData][UIPreviewDataLink];
         return @{ userInterfaceItem: @{
             @"url": url,
@@ -10870,9 +10871,9 @@ static UIMenu *menuFromLegacyPreviewOrDefaultActions(UIViewController *previewVi
     if (!self.webView.configuration._longPressActionsEnabled)
         return completion(nil);
 
-    auto getConfigurationAndContinue = [weakSelf = WeakObjCPtr<WKContentView>(self), interaction = retainPtr(interaction), completion = makeBlockPtr(completion), triggeredByImageAnalysisTimeout] (WebKit::ProceedWithTextSelectionInImage ProceedWithTextSelectionInImage) {
+    auto getConfigurationAndContinue = [weakSelf = WeakObjCPtr<WKContentView>(self), interaction = retainPtr(interaction), completion = makeBlockPtr(completion), triggeredByImageAnalysisTimeout] (WebKit::ProceedWithTextSelectionInImage proceedWithTextSelectionInImage) {
         auto strongSelf = weakSelf.get();
-        if (!strongSelf || ProceedWithTextSelectionInImage == WebKit::ProceedWithTextSelectionInImage::Yes) {
+        if (!strongSelf || proceedWithTextSelectionInImage == WebKit::ProceedWithTextSelectionInImage::Yes) {
             completion(nil);
             return;
         }
@@ -11142,9 +11143,19 @@ static UIMenu *menuFromLegacyPreviewOrDefaultActions(UIViewController *previewVi
 {
     if (!_webView)
         return;
+
+    _isDisplayingContextMenuWithAnimation = YES;
+    [animator addCompletion:[weakSelf = WeakObjCPtr<WKContentView>(self)] {
+        if (auto strongSelf = weakSelf.get()) {
+            ASSERT_IMPLIES(strongSelf->_isDisplayingContextMenuWithAnimation, [strongSelf->_contextMenuHintContainerView window]);
+            strongSelf->_isDisplayingContextMenuWithAnimation = NO;
+        }
+    }];
+
     auto uiDelegate = static_cast<id<WKUIDelegatePrivate>>(self.webView.UIDelegate);
     if (!uiDelegate)
         return;
+
     if ([uiDelegate respondsToSelector:@selector(webView:contextMenuWillPresentForElement:)])
         [uiDelegate webView:self.webView contextMenuWillPresentForElement:_contextMenuElementInfo.get()];
     else if ([uiDelegate respondsToSelector:@selector(_webView:contextMenuWillPresentForElement:)]) {
@@ -11303,6 +11314,8 @@ static UIMenu *menuFromLegacyPreviewOrDefaultActions(UIViewController *previewVi
         auto strongSelf = weakSelf.get();
         if (!strongSelf)
             return;
+
+        strongSelf->_isDisplayingContextMenuWithAnimation = NO;
         [strongSelf _removeContextMenuHintContainerIfPossible];
         [strongSelf->_webView _didDismissContextMenu];
     }];

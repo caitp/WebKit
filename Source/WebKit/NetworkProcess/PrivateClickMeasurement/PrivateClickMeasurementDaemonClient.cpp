@@ -26,15 +26,20 @@
 #include "config.h"
 #include "PrivateClickMeasurementDaemonClient.h"
 
-#include <WebCore/NotImplemented.h>
+#if PLATFORM(COCOA)
+#include "PCMDaemonConnectionSet.h"
+#endif
 
-namespace WebKit {
+namespace WebKit::PCM {
 
-namespace PCM {
-
-void DaemonClient::broadcastConsoleMessage(JSC::MessageLevel, const String&)
+void DaemonClient::broadcastConsoleMessage(JSC::MessageLevel level, const String& message)
 {
-    notImplemented();
+#if PLATFORM(COCOA)
+    DaemonConnectionSet::singleton().broadcastConsoleMessage(level, message);
+#else
+    UNUSED_PARAM(level);
+    UNUSED_PARAM(message);
+#endif
 }
 
 bool DaemonClient::featureEnabled() const
@@ -44,10 +49,11 @@ bool DaemonClient::featureEnabled() const
 
 bool DaemonClient::debugModeEnabled() const
 {
-    notImplemented();
+#if PLATFORM(COCOA)
+    return DaemonConnectionSet::singleton().debugModeEnabled();
+#else
     return false;
+#endif
 }
-
-} // namespace PCM
 
 } // namespace WebKit

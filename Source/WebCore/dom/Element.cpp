@@ -42,10 +42,12 @@
 #include "DOMRectList.h"
 #include "DOMTokenList.h"
 #include "DOMWindow.h"
+#include "DocumentInlines.h"
 #include "DocumentSharedObjectPool.h"
 #include "DocumentTimeline.h"
 #include "Editing.h"
 #include "ElementAnimationRareData.h"
+#include "ElementInlines.h"
 #include "ElementIterator.h"
 #include "ElementRareData.h"
 #include "EventDispatcher.h"
@@ -101,7 +103,7 @@
 #include "RenderWidget.h"
 #include "RuntimeEnabledFeatures.h"
 #include "SVGDocumentExtensions.h"
-#include "SVGElement.h"
+#include "SVGElementTypeHelpers.h"
 #include "SVGNames.h"
 #include "SVGSVGElement.h"
 #include "ScriptDisallowedScope.h"
@@ -189,6 +191,30 @@ static Attr* findAttrNodeInList(Vector<RefPtr<Attr>>& attrNodeList, const AtomSt
             return node.get();
     }
     return nullptr;
+}
+
+static bool shouldAutofocus(const Element& element)
+{
+    if (!element.hasAttributeWithoutSynchronization(HTMLNames::autofocusAttr))
+        return false;
+
+    auto& document = element.document();
+    if (!element.isConnected() || !document.hasBrowsingContext())
+        return false;
+    if (document.isSandboxed(SandboxAutomaticFeatures)) {
+        // FIXME: This message should be moved off the console once a solution to https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
+        document.addConsoleMessage(MessageSource::Security, MessageLevel::Error, "Blocked autofocusing on a form control because the form's frame is sandboxed and the 'allow-scripts' permission is not set."_s);
+        return false;
+    }
+    if (!document.frame()->isMainFrame() && !document.topOrigin().isSameOriginDomain(document.securityOrigin())) {
+        document.addConsoleMessage(MessageSource::Security, MessageLevel::Error, "Blocked autofocusing on a form control in a cross-origin subframe."_s);
+        return false;
+    }
+
+    if (document.topDocument().isAutofocusProcessed())
+        return false;
+
+    return true;
 }
 
 Ref<Element> Element::create(const QualifiedName& tagName, Document& document)
@@ -905,7 +931,7 @@ inline ScrollAlignment toScrollAlignmentForBlockDirection(std::optional<ScrollLo
     }
 }
 
-void Element::scrollIntoView(std::optional<Variant<bool, ScrollIntoViewOptions>>&& arg)
+void Element::scrollIntoView(std::optional<std::variant<bool, ScrollIntoViewOptions>>&& arg)
 {
     document().updateLayoutIgnorePendingStylesheets();
 
@@ -918,9 +944,9 @@ void Element::scrollIntoView(std::optional<Variant<bool, ScrollIntoViewOptions>>
     ScrollIntoViewOptions options;
     if (arg) {
         auto value = arg.value();
-        if (WTF::holds_alternative<ScrollIntoViewOptions>(value))
-            options = WTF::get<ScrollIntoViewOptions>(value);
-        else if (!WTF::get<bool>(value))
+        if (std::holds_alternative<ScrollIntoViewOptions>(value))
+            options = std::get<ScrollIntoViewOptions>(value);
+        else if (!std::get<bool>(value))
             options.blockPosition = ScrollLogicalPosition::End;
     }
 
@@ -1000,6 +1026,8 @@ void Element::scrollBy(double x, double y)
 
 void Element::scrollTo(const ScrollToOptions& options, ScrollClamping clamping, ScrollSnapPointSelectionMethod snapPointSelectionMethod)
 {
+    LOG_WITH_STREAM(Scrolling, stream << "Element " << *this << " scrollTo " << options.left << ", " << options.top);
+
     if (!document().settings().CSSOMViewScrollingAPIEnabled()) {
         // If the element is the root element and document is in quirks mode, terminate these steps.
         // Note that WebKit always uses quirks mode document scrolling behavior. See Document::scrollingElement().
@@ -1036,7 +1064,7 @@ void Element::scrollTo(const ScrollToOptions& options, ScrollClamping clamping, 
         clampToInteger(scrollToOptions.top.value() * renderer->style().effectiveZoom())
     );
 
-    auto animated = useSmoothScrolling(scrollToOptions.behavior.value_or(ScrollBehavior::Auto), this) ? AnimatedScroll::Yes : AnimatedScroll::No;
+    auto animated = useSmoothScrolling(scrollToOptions.behavior.value_or(ScrollBehavior::Auto), this) ? ScrollIsAnimated::Yes : ScrollIsAnimated::No;
     auto scrollPositionChangeOptions = ScrollPositionChangeOptions::createProgrammaticWithOptions(clamping, animated, snapPointSelectionMethod);
     renderer->setScrollPosition(scrollPosition, scrollPositionChangeOptions);
 }
@@ -1365,7 +1393,7 @@ void Element::setScrollLeft(int newLeft)
     document().updateLayoutIgnorePendingStylesheets();
 
     auto options = ScrollPositionChangeOptions::createProgrammatic();
-    options.animated = useSmoothScrolling(ScrollBehavior::Auto, this) ? AnimatedScroll::Yes : AnimatedScroll::No;
+    options.animated = useSmoothScrolling(ScrollBehavior::Auto, this) ? ScrollIsAnimated::Yes : ScrollIsAnimated::No;
 
     if (document().scrollingElement() == this) {
         if (auto* frame = documentFrameWithNonNullView()) {
@@ -1388,7 +1416,7 @@ void Element::setScrollTop(int newTop)
     document().updateLayoutIgnorePendingStylesheets();
 
     auto options = ScrollPositionChangeOptions::createProgrammatic();
-    options.animated = useSmoothScrolling(ScrollBehavior::Auto, this) ? AnimatedScroll::Yes : AnimatedScroll::No;
+    options.animated = useSmoothScrolling(ScrollBehavior::Auto, this) ? ScrollIsAnimated::Yes : ScrollIsAnimated::No;
 
     if (document().scrollingElement() == this) {
         if (auto* frame = documentFrameWithNonNullView()) {
@@ -1970,9 +1998,9 @@ Style::Resolver& Element::styleResolver()
     return document().styleScope().resolver();
 }
 
-Style::ElementStyle Element::resolveStyle(const RenderStyle* parentStyle)
+Style::ElementStyle Element::resolveStyle(const Style::ResolutionContext& resolutionContext)
 {
-    return styleResolver().styleForElement(*this, parentStyle);
+    return styleResolver().styleForElement(*this, resolutionContext);
 }
 
 static void invalidateForSiblingCombinators(Element* sibling)
@@ -2241,6 +2269,9 @@ Node::InsertedIntoAncestorResult Element::insertedIntoAncestor(InsertionType ins
     if (UNLIKELY(hasTagName(articleTag) && newDocument))
         newDocument->registerArticleElement(*this);
 
+    if (shouldAutofocus(*this))
+        document().topDocument().appendAutofocusCandidate(*this);
+
     return InsertedIntoAncestorResult::Done;
 }
 
@@ -2350,7 +2381,7 @@ void Element::addShadowRoot(Ref<ShadowRoot>&& newShadowRoot)
 
         ensureElementRareData().setShadowRoot(WTFMove(newShadowRoot));
 
-        shadowRoot.setHost(makeWeakPtr<Element>(this));
+        shadowRoot.setHost(*this);
         shadowRoot.setParentTreeScope(treeScope());
 
 #if ASSERT_ENABLED
@@ -3097,7 +3128,7 @@ void Element::focus(const FocusOptions& options)
 
     if (Page* page = document->page()) {
         auto& frame = *document->frame();
-        if (!frame.hasHadUserInteraction() && !frame.isMainFrame() && !document->topDocument().securityOrigin().isSameOriginDomain(document->securityOrigin()))
+        if (!frame.hasHadUserInteraction() && !frame.isMainFrame() && !document->topOrigin().isSameOriginDomain(document->securityOrigin()))
             return;
 
         FocusOptions optionsWithVisibility = options;
@@ -3171,6 +3202,11 @@ void Element::blur()
         else
             document().setFocusedElement(nullptr);
     }
+}
+
+void Element::runFocusingStepsForAutofocus()
+{
+    focus();
 }
 
 void Element::dispatchFocusInEvent(const AtomString& eventType, RefPtr<Element>&& oldFocusedElement)
@@ -4400,7 +4436,7 @@ void Element::didDetachRenderers()
     ASSERT(hasCustomStyleResolveCallbacks());
 }
 
-std::optional<Style::ElementStyle> Element::resolveCustomStyle(const RenderStyle&, const RenderStyle*)
+std::optional<Style::ElementStyle> Element::resolveCustomStyle(const Style::ResolutionContext&, const RenderStyle*)
 {
     ASSERT(hasCustomStyleResolveCallbacks());
     return std::nullopt;
@@ -4613,17 +4649,17 @@ Element* Element::findAnchorElementForLink(String& outAnchorName)
     return nullptr;
 }
 
-ExceptionOr<Ref<WebAnimation>> Element::animate(JSC::JSGlobalObject& lexicalGlobalObject, JSC::Strong<JSC::JSObject>&& keyframes, std::optional<Variant<double, KeyframeAnimationOptions>>&& options)
+ExceptionOr<Ref<WebAnimation>> Element::animate(JSC::JSGlobalObject& lexicalGlobalObject, JSC::Strong<JSC::JSObject>&& keyframes, std::optional<std::variant<double, KeyframeAnimationOptions>>&& options)
 {
     String id = "";
-    std::optional<Variant<double, KeyframeEffectOptions>> keyframeEffectOptions;
+    std::optional<std::variant<double, KeyframeEffectOptions>> keyframeEffectOptions;
     if (options) {
         auto optionsValue = options.value();
-        Variant<double, KeyframeEffectOptions> keyframeEffectOptionsVariant;
-        if (WTF::holds_alternative<double>(optionsValue))
-            keyframeEffectOptionsVariant = WTF::get<double>(optionsValue);
+        std::variant<double, KeyframeEffectOptions> keyframeEffectOptionsVariant;
+        if (std::holds_alternative<double>(optionsValue))
+            keyframeEffectOptionsVariant = std::get<double>(optionsValue);
         else {
-            auto keyframeEffectOptions = WTF::get<KeyframeAnimationOptions>(optionsValue);
+            auto keyframeEffectOptions = std::get<KeyframeAnimationOptions>(optionsValue);
             id = keyframeEffectOptions.id;
             keyframeEffectOptionsVariant = WTFMove(keyframeEffectOptions);
         }

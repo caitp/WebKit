@@ -33,7 +33,7 @@
 #include "CSSFontSelector.h"
 #include "DOMTokenList.h"
 #include "DOMWindow.h"
-#include "Element.h"
+#include "ElementInlines.h"
 #include "EventNames.h"
 #include "FrameView.h"
 #include "HTMLDialogElement.h"
@@ -316,8 +316,7 @@ void Adjuster::adjust(RenderStyle& style, const RenderStyle* userAgentAppearance
 
         // Top layer elements are always position: absolute; unless the position is set to fixed.
         // https://fullscreen.spec.whatwg.org/#new-stacking-layer
-        bool isInTopLayer = style.styleType() == PseudoId::Backdrop || (m_element && m_element->isInTopLayer());
-        if (style.position() != PositionType::Absolute && style.position() != PositionType::Fixed && isInTopLayer)
+        if (style.position() != PositionType::Absolute && style.position() != PositionType::Fixed && isInTopLayerOrBackdrop(style, m_element))
             style.setPosition(PositionType::Absolute);
 
         // Absolute/fixed positioned elements, floating elements and the document element need block-like outside display.
@@ -382,7 +381,8 @@ void Adjuster::adjust(RenderStyle& style, const RenderStyle* userAgentAppearance
             || style.hasIsolation()
             || style.position() == PositionType::Sticky
             || style.position() == PositionType::Fixed
-            || style.willChangeCreatesStackingContext())
+            || style.willChangeCreatesStackingContext()
+            || isInTopLayerOrBackdrop(style, m_element))
             style.setUsedZIndex(0);
     }
 
@@ -499,8 +499,8 @@ void Adjuster::adjust(RenderStyle& style, const RenderStyle* userAgentAppearance
     if (style.hasPseudoStyle(PseudoId::FirstLetter))
         style.setUnique();
 
-    // FIXME: when dropping the -webkit prefix on transform-style, we should also have opacity < 1 cause flattening.
     if (style.preserves3D() && (style.overflowX() != Overflow::Visible
+        || style.hasOpacity()
         || style.overflowY() != Overflow::Visible
         || style.hasClip()
         || style.clipPath()
@@ -596,7 +596,7 @@ static bool hasEffectiveDisplayNoneForDisplayContents(const Element& element)
 
 void Adjuster::adjustDisplayContentsStyle(RenderStyle& style) const
 {
-    bool isInTopLayer = style.styleType() == PseudoId::Backdrop || (m_element && m_element->isInTopLayer());
+    bool isInTopLayer = isInTopLayerOrBackdrop(style, m_element);
     if (isInTopLayer || m_document.documentElement() == m_element) {
         style.setEffectiveDisplay(DisplayType::Block);
         return;

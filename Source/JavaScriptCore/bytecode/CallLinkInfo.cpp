@@ -72,19 +72,6 @@ CallLinkInfo::CallType CallLinkInfo::callTypeFor(OpcodeID opcodeID)
     return Call;
 }
 
-CallLinkInfo::CallLinkInfo(CodeOrigin codeOrigin)
-    : m_codeOrigin(codeOrigin)
-    , m_hasSeenShouldRepatch(false)
-    , m_hasSeenClosure(false)
-    , m_clearedByGC(false)
-    , m_clearedByVirtual(false)
-    , m_allowStubs(true)
-    , m_clearedByJettison(false)
-    , m_callType(None)
-    , m_useDataIC(static_cast<unsigned>(UseDataIC::Yes))
-{
-}
-
 CallLinkInfo::~CallLinkInfo()
 {
     clearStub();
@@ -304,8 +291,11 @@ MacroAssembler::JumpList CallLinkInfo::emitFastPathImpl(CallLinkInfo* callLinkIn
     CCallHelpers::JumpList slowPath;
 
     if (useDataIC == UseDataIC::Yes) {
+        // FIXME: This scratch register is not generally safe to use on ARMv7, as the macro
+        //        assembler always assumes it is available. At the moment, it does happen to work
+        //        with the code below.
         GPRReg scratchGPR = jit.scratchRegister();
-        jit.loadPtr(CCallHelpers::Address(callLinkInfoGPR, offsetOfCallee()), scratchGPR); 
+        jit.loadPtr(CCallHelpers::Address(callLinkInfoGPR, offsetOfCallee()), scratchGPR);
         CCallHelpers::Jump goPolymorphic;
         {
             DisallowMacroScratchRegisterUsage disallowScratch(jit);

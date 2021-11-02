@@ -121,6 +121,7 @@
 #include <JavaScriptCore/ScriptCallStackFactory.h>
 #include <algorithm>
 #include <memory>
+#include <variant>
 #include <wtf/IsoMallocInlines.h>
 #include <wtf/Language.h>
 #include <wtf/MainThread.h>
@@ -128,7 +129,6 @@
 #include <wtf/NeverDestroyed.h>
 #include <wtf/Ref.h>
 #include <wtf/SetForScope.h>
-#include <wtf/Variant.h>
 #include <wtf/text/WTFString.h>
 
 #if ENABLE(USER_MESSAGE_HANDLERS)
@@ -1712,8 +1712,10 @@ void DOMWindow::scrollTo(const ScrollToOptions& options, ScrollClamping clamping
 
     // This is an optimization for the common case of scrolling to (0, 0) when the scroller is already at the origin.
     // If an animated scroll is in progress, this optimization is skipped to ensure that the animated scroll is really stopped.
-    if (view->currentScrollBehaviorStatus() == ScrollBehaviorStatus::NotInAnimation && !scrollToOptions.left.value() && !scrollToOptions.top.value() && view->contentsScrollPosition() == IntPoint(0, 0))
+    if (view->scrollAnimationStatus() == ScrollAnimationStatus::NotAnimating && !scrollToOptions.left.value() && !scrollToOptions.top.value() && view->contentsScrollPosition().isZero()) {
+        LOG_WITH_STREAM(Scrolling, stream << "DOMWindow::scrollTo bailing because going to 0,0");
         return;
+    }
 
     document()->updateLayoutIgnorePendingStylesheets();
 
@@ -1721,7 +1723,7 @@ void DOMWindow::scrollTo(const ScrollToOptions& options, ScrollClamping clamping
 
     // FIXME: Should we use document()->scrollingElement()?
     // See https://bugs.webkit.org/show_bug.cgi?id=205059
-    auto animated = useSmoothScrolling(scrollToOptions.behavior.value_or(ScrollBehavior::Auto), document()->documentElement()) ? AnimatedScroll::Yes : AnimatedScroll::No;
+    auto animated = useSmoothScrolling(scrollToOptions.behavior.value_or(ScrollBehavior::Auto), document()->documentElement()) ? ScrollIsAnimated::Yes : ScrollIsAnimated::No;
     auto scrollPositionChangeOptions = ScrollPositionChangeOptions::createProgrammaticWithOptions(clamping, animated, snapPointSelectionMethod);
     view->setContentsScrollPosition(layoutPos, scrollPositionChangeOptions);
 }
@@ -1799,7 +1801,7 @@ ExceptionOr<int> DOMWindow::setTimeout(JSC::JSGlobalObject& state, std::unique_p
 
     // FIXME: Should this check really happen here? Or should it happen when code is about to eval?
     if (action->type() == ScheduledAction::Type::Code) {
-        if (!context->contentSecurityPolicy()->allowEval(&state))
+        if (!context->contentSecurityPolicy()->allowEval(&state, LogToConsole::Yes))
             return 0;
     }
 
@@ -1824,7 +1826,7 @@ ExceptionOr<int> DOMWindow::setInterval(JSC::JSGlobalObject& state, std::unique_
 
     // FIXME: Should this check really happen here? Or should it happen when code is about to eval?
     if (action->type() == ScheduledAction::Type::Code) {
-        if (!context->contentSecurityPolicy()->allowEval(&state))
+        if (!context->contentSecurityPolicy()->allowEval(&state, LogToConsole::Yes))
             return 0;
     }
 
@@ -2490,7 +2492,7 @@ bool DOMWindow::isInsecureScriptAccess(DOMWindow& activeWindow, const String& ur
     return true;
 }
 
-ExceptionOr<RefPtr<Frame>> DOMWindow::createWindow(const String& urlString, const AtomString& frameName, const WindowFeatures& initialWindowFeatures, DOMWindow& activeWindow, Frame& firstFrame, Frame& openerFrame, const WTF::Function<void(DOMWindow&)>& prepareDialogFunction)
+ExceptionOr<RefPtr<Frame>> DOMWindow::createWindow(const String& urlString, const AtomString& frameName, const WindowFeatures& initialWindowFeatures, DOMWindow& activeWindow, Frame& firstFrame, Frame& openerFrame, const Function<void(DOMWindow&)>& prepareDialogFunction)
 {
     RefPtr activeFrame = activeWindow.frame();
     if (!activeFrame)
@@ -2537,7 +2539,7 @@ ExceptionOr<RefPtr<Frame>> DOMWindow::createWindow(const String& urlString, cons
     if (created) {
         ResourceRequest resourceRequest { completedURL, referrer, ResourceRequestCachePolicy::UseProtocolCachePolicy };
         FrameLoader::addSameSiteInfoToRequestIfNeeded(resourceRequest, openerFrame.document());
-        FrameLoadRequest frameLoadRequest { *activeWindow.document(), activeWindow.document()->securityOrigin(), WTFMove(resourceRequest), "_self"_s, initiatedByMainFrame };
+        FrameLoadRequest frameLoadRequest { *activeWindow.document(), activeWindow.document()->securityOrigin(), WTFMove(resourceRequest), selfTargetFrameName(), initiatedByMainFrame };
         frameLoadRequest.setShouldOpenExternalURLsPolicy(activeDocument->shouldOpenExternalURLsPolicyToPropagate());
         newFrame->loader().changeLocation(WTFMove(frameLoadRequest));
     } else if (!urlString.isEmpty()) {
@@ -2606,9 +2608,9 @@ ExceptionOr<RefPtr<WindowProxy>> DOMWindow::open(DOMWindow& activeWindow, DOMWin
     // Get the target frame for the special cases of _top and _parent.
     // In those cases, we schedule a location change right now and return early.
     RefPtr<Frame> targetFrame;
-    if (equalIgnoringASCIICase(frameName, "_top"))
+    if (isTopTargetFrameName(frameName))
         targetFrame = &frame->tree().top();
-    else if (equalIgnoringASCIICase(frameName, "_parent")) {
+    else if (isParentTargetFrameName(frameName)) {
         if (RefPtr parent = frame->tree().parent())
             targetFrame = parent;
         else
@@ -2642,7 +2644,7 @@ ExceptionOr<RefPtr<WindowProxy>> DOMWindow::open(DOMWindow& activeWindow, DOMWin
     return newFrame ? &newFrame->windowProxy() : RefPtr<WindowProxy> { nullptr };
 }
 
-void DOMWindow::showModalDialog(const String& urlString, const String& dialogFeaturesString, DOMWindow& activeWindow, DOMWindow& firstWindow, const WTF::Function<void (DOMWindow&)>& prepareDialogFunction)
+void DOMWindow::showModalDialog(const String& urlString, const String& dialogFeaturesString, DOMWindow& activeWindow, DOMWindow& firstWindow, const Function<void(DOMWindow&)>& prepareDialogFunction)
 {
     if (!isCurrentlyDisplayedInFrame())
         return;

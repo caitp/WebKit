@@ -63,7 +63,7 @@ public:
     static Ref<FetchResponse> error(ScriptExecutionContext&);
     static ExceptionOr<Ref<FetchResponse>> redirect(ScriptExecutionContext&, const String& url, int status);
 
-    using NotificationCallback = WTF::Function<void(ExceptionOr<FetchResponse&>&&)>;
+    using NotificationCallback = Function<void(ExceptionOr<FetchResponse&>&&)>;
     static void fetch(ScriptExecutionContext&, FetchRequest&, NotificationCallback&&);
 
     void startConsumingStream(unsigned);
@@ -85,7 +85,7 @@ public:
     void feedStream() final;
     void cancel() final;
 
-    using ResponseData = Variant<std::nullptr_t, Ref<FormData>, Ref<SharedBuffer>>;
+    using ResponseData = std::variant<std::nullptr_t, Ref<FormData>, Ref<SharedBuffer>>;
     ResponseData consumeBody();
     void setBodyData(ResponseData&&, uint64_t bodySizeWithPadding);
 

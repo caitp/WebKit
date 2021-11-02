@@ -108,7 +108,7 @@ enum class UsedLegacyTLS : bool;
 
 struct StringWithDirection;
 
-typedef WTF::Function<void (PolicyAction, PolicyCheckIdentifier)> FramePolicyFunction;
+typedef Function<void (PolicyAction, PolicyCheckIdentifier)> FramePolicyFunction;
 
 class WEBCORE_EXPORT FrameLoaderClient {
     WTF_MAKE_FAST_ALLOCATED;
@@ -323,11 +323,16 @@ public:
     virtual bool shouldPaintBrokenImage(const URL&) const { return true; }
 
     virtual void dispatchGlobalObjectAvailable(DOMWrapperWorld&) { }
+    virtual void dispatchServiceWorkerGlobalObjectAvailable(DOMWrapperWorld&) { }
     virtual void dispatchWillDisconnectDOMWindowExtensionFromGlobalObject(DOMWindowExtension*) { }
     virtual void dispatchDidReconnectDOMWindowExtensionToGlobalObject(DOMWindowExtension*) { }
     virtual void dispatchWillDestroyGlobalObjectForDOMWindowExtension(DOMWindowExtension*) { }
 
     virtual void willInjectUserScript(DOMWrapperWorld&) { }
+
+#if ENABLE(SERVICE_WORKER)
+    virtual void didFinishServiceWorkerPageRegistration(bool success) { UNUSED_PARAM(success); }
+#endif
 
 #if ENABLE(WEB_RTC)
     virtual void dispatchWillStartUsingPeerConnectionHandler(RTCPeerConnectionHandler*) { }

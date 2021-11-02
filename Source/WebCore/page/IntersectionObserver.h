@@ -25,12 +25,14 @@
 
 #pragma once
 
+#include "Document.h"
 #include "GCReachableRef.h"
 #include "IntersectionObserverCallback.h"
 #include "IntersectionObserverEntry.h"
 #include "LengthBox.h"
+#include "ReducedResolutionSeconds.h"
+#include <variant>
 #include <wtf/RefCounted.h>
-#include <wtf/Variant.h>
 #include <wtf/WeakPtr.h>
 #include <wtf/text/WTFString.h>
 
@@ -42,7 +44,6 @@ class AbstractSlotVisitor;
 
 namespace WebCore {
 
-class Document;
 class Element;
 class ContainerNode;
 
@@ -66,9 +67,9 @@ struct IntersectionObserverData {
 class IntersectionObserver : public RefCounted<IntersectionObserver>, public CanMakeWeakPtr<IntersectionObserver> {
 public:
     struct Init {
-        std::optional<Variant<RefPtr<Element>, RefPtr<Document>>> root;
+        std::optional<std::variant<RefPtr<Element>, RefPtr<Document>>> root;
         String rootMargin;
-        Variant<double, Vector<double>> threshold;
+        std::variant<double, Vector<double>> threshold;
     };
 
     static ExceptionOr<Ref<IntersectionObserver>> create(Document&, Ref<IntersectionObserverCallback>&&, Init&&);
@@ -120,6 +121,7 @@ private:
     Vector<WeakPtr<Element>> m_observationTargets;
     Vector<GCReachableRef<Element>> m_pendingTargets;
     Vector<Ref<IntersectionObserverEntry>> m_queuedEntries;
+    Vector<GCReachableRef<Element>> m_targetsWaitingForFirstObservation;
 };
 
 

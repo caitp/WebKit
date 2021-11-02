@@ -33,6 +33,7 @@
 namespace WebCore {
 
 class RenderBlockFlow;
+class RenderInline;
 
 namespace LayoutIntegration {
 
@@ -61,7 +62,7 @@ enum class AvoidanceReason : uint64_t {
     FlowHasLineSnap                              = 1LLU  << 21,
     FlowHasTextEmphasisFillOrMark                = 1LLU  << 22,
     // Unused                                    = 1LLU  << 23,
-    FlowHasPseudoFirstLine                       = 1LLU  << 24,
+    // Unused                                    = 1LLU  << 24,
     FlowHasPseudoFirstLetter                     = 1LLU  << 25,
     FlowHasTextCombine                           = 1LLU  << 26,
     // Unused                                    = 1LLU  << 27,
@@ -70,7 +71,7 @@ enum class AvoidanceReason : uint64_t {
     // Unused                                    = 1LLU  << 30,
     FlowHasSVGFont                               = 1LLU  << 31,
     FlowTextHasDirectionCharacter                = 1LLU  << 32,
-    FlowIsMissingPrimaryFont                     = 1LLU  << 33,
+    // Unused                                    = 1LLU  << 33,
     // Unused                                    = 1LLU  << 34,
     FlowTextIsCombineText                        = 1LLU  << 35,
     FlowTextIsRenderCounter                      = 1LLU  << 36,
@@ -97,13 +98,14 @@ enum class AvoidanceReason : uint64_t {
     ChildBoxHasUnsupportedStyle                  = 1LLU  << 57,
     UnsupportedImageMap                          = 1LLU  << 58,
     InlineBoxNeedsLayer                          = 1LLU  << 59,
-    InlineBoxHasBorderOrBorderImage              = 1LLU  << 60,
-    InlineBoxHasBackground                       = 1LLU  << 61,
+    BoxDecorationBreakClone                      = 1LLU  << 60,
+    // Unused                                    = 1LLU  << 61,
     EndOfReasons                                 = 1LLU  << 62
 };
 
 bool canUseForLineLayout(const RenderBlockFlow&);
 bool canUseForLineLayoutAfterStyleChange(const RenderBlockFlow&, StyleDifference);
+bool canUseForLineLayoutAfterInlineBoxStyleChange(const RenderInline&, StyleDifference);
 
 enum class IncludeReasons { First , All };
 OptionSet<AvoidanceReason> canUseForLineLayoutWithReason(const RenderBlockFlow&, IncludeReasons);

@@ -35,18 +35,14 @@ class ResourceError;
 class ResourceResponse;
 }
 
-namespace WebKit {
-
-namespace PCM {
+namespace WebKit::PCM {
 
 class NetworkLoader {
     WTF_MAKE_FAST_ALLOCATED;
 public:
-    using Callback = CompletionHandler<void(const WebCore::ResourceError&, const WebCore::ResourceResponse&, const RefPtr<JSON::Object>&)>;
+    using Callback = CompletionHandler<void(const String&, const RefPtr<JSON::Object>&)>;
     static void start(URL&&, RefPtr<JSON::Object>&&, WebCore::PrivateClickMeasurement::PcmDataCarried, Callback&&);
     static void allowTLSCertificateChainForLocalPCMTesting(const WebCore::CertificateInfo&);
 };
 
-} // namespace PCM
-
-} // namespace WebKit
+} // namespace WebKit::PCM

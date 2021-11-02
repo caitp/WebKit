@@ -26,6 +26,9 @@
 #import "config.h"
 #import "PCMDaemonEntryPoint.h"
 
+#import "DaemonDecoder.h"
+#import "DaemonUtilities.h"
+#import "PCMDaemonConnectionSet.h"
 #import "PrivateClickMeasurementConnection.h"
 #import "PrivateClickMeasurementManagerInterface.h"
 #import "PrivateClickMeasurementXPCUtilities.h"
@@ -34,6 +37,7 @@
 #import <wtf/FileSystem.h>
 #import <wtf/HashSet.h>
 #import <wtf/NeverDestroyed.h>
+#import <wtf/OSObjectPtr.h>
 #import <wtf/RetainPtr.h>
 #import <wtf/RunLoop.h>
 #import <wtf/cocoa/Entitlements.h>
@@ -42,13 +46,6 @@
 // FIXME: Add daemon plist to repository.
 
 namespace WebKit {
-
-static HashSet<RetainPtr<xpc_connection_t>>& peers()
-{
-    ASSERT(RunLoop::isMain());
-    static NeverDestroyed<HashSet<RetainPtr<xpc_connection_t>>> set;
-    return set.get();
-}
 
 static CompletionHandler<void(PCM::EncodedMessage&&)> replySender(PCM::MessageType messageType, OSObjectPtr<xpc_object_t>&& request)
 {
@@ -66,43 +63,15 @@ static void connectionEventHandler(xpc_object_t request)
     if (xpc_get_type(request) != XPC_TYPE_DICTIONARY)
         return;
     if (xpc_dictionary_get_uint64(request, PCM::protocolVersionKey) != PCM::protocolVersionValue) {
-        NSLog(@"received request that was not the current protocol version");
+        NSLog(@"Received request that was not the current protocol version");
         return;
     }
 
     auto messageType { static_cast<PCM::MessageType>(xpc_dictionary_get_uint64(request, PCM::protocolMessageTypeKey)) };
     size_t dataSize { 0 };
     const void* data = xpc_dictionary_get_data(request, PCM::protocolEncodedMessageKey, &dataSize);
-    PCM::EncodedMessage encodedMessage { static_cast<const uint8_t*>(data), dataSize };
-    decodeMessageAndSendToManager(messageType, WTFMove(encodedMessage), replySender(messageType, request));
-}
-
-static void startListeningForMachServiceConnections(const char* serviceName)
-{
-    static NeverDestroyed<OSObjectPtr<xpc_connection_t>> listener = xpc_connection_create_mach_service(serviceName, dispatch_get_main_queue(), XPC_CONNECTION_MACH_SERVICE_LISTENER);
-    xpc_connection_set_event_handler(listener.get().get(), ^(xpc_object_t peer) {
-        if (xpc_get_type(peer) != XPC_TYPE_CONNECTION)
-            return;
-
-        // FIXME: Add an entitlement check here so that only the network process can successfully connect.
-
-        xpc_connection_set_event_handler(peer, ^(xpc_object_t event) {
-            if (event == XPC_ERROR_CONNECTION_INVALID)
-                NSLog(@"Failed to start listening for connections to mach service %s, likely because it is not registered with launchd", serviceName);
-            if (event == XPC_ERROR_CONNECTION_INTERRUPTED) {
-                NSLog(@"removing peer connection %p", peer);
-                peers().remove(peer);
-                return;
-            }
-            connectionEventHandler(event);
-        });
-        xpc_connection_set_target_queue(peer, dispatch_get_main_queue());
-        xpc_connection_activate(peer);
-
-        NSLog(@"adding peer connection %p", peer);
-        peers().add(peer);
-    });
-    xpc_connection_activate(listener.get().get());
+    Span<const uint8_t> encodedMessage { static_cast<const uint8_t*>(data), dataSize };
+    decodeMessageAndSendToManager(Daemon::Connection(xpc_dictionary_get_remote_connection(request)), messageType, encodedMessage, replySender(messageType, request));
 }
 
 static void registerScheduledActivityHandler()
@@ -110,21 +79,44 @@ static void registerScheduledActivityHandler()
     NSLog(@"Registering XPC activity");
     xpc_activity_register("com.apple.webkit.adattributiond.activity", XPC_ACTIVITY_CHECK_IN, ^(xpc_activity_t activity) {
         if (xpc_activity_get_state(activity) == XPC_ACTIVITY_STATE_CHECK_IN) {
-            xpc_object_t criteria = xpc_activity_copy_criteria(activity);
+            NSLog(@"Activity checking in");
+            auto criteria = adoptNS(xpc_activity_copy_criteria(activity));
 
-            // FIXME: set values here that align with values from the plist.
+            // These values should align with values from com.apple.webkit.adattributiond.plist
+            constexpr auto oneHourSeconds = 3600;
+            constexpr auto oneDaySeconds = 24 * oneHourSeconds;
+            xpc_dictionary_set_uint64(criteria.get(), XPC_ACTIVITY_INTERVAL, oneDaySeconds);
+            xpc_dictionary_set_uint64(criteria.get(), XPC_ACTIVITY_GRACE_PERIOD, oneHourSeconds);
+            xpc_dictionary_set_string(criteria.get(), XPC_ACTIVITY_PRIORITY, XPC_ACTIVITY_PRIORITY_MAINTENANCE);
+            xpc_dictionary_set_bool(criteria.get(), XPC_ACTIVITY_ALLOW_BATTERY, true);
+            xpc_dictionary_set_uint64(criteria.get(), XPC_ACTIVITY_RANDOM_INITIAL_DELAY, oneDaySeconds);
+            xpc_dictionary_set_bool(criteria.get(), XPC_ACTIVITY_REQUIRE_NETWORK_CONNECTIVITY, true);
+            xpc_dictionary_set_bool(criteria.get(), XPC_ACTIVITY_REPEATING, true);
 
-            xpc_activity_set_criteria(activity, criteria);
+            xpc_activity_set_criteria(activity, criteria.get());
             return;
         }
 
-        // FIXME: Add code here that does daily tasks of PrivateClickMeasurementManager.
+        NSLog(@"XPC activity happening");
+        PCM::doDailyActivityInManager();
     });
 }
 
 static void enterSandbox()
 {
+#if PLATFORM(MAC)
     // FIXME: Enter a sandbox here. We should only need read/write access to our database and network access and nothing else.
+#endif
+}
+
+static void connectionAdded(xpc_connection_t connection)
+{
+    PCM::DaemonConnectionSet::singleton().add(connection);
+}
+
+static void connectionRemoved(xpc_connection_t connection)
+{
+    PCM::DaemonConnectionSet::singleton().remove(connection);
 }
 
 int PCMDaemonMain(int argc, const char** argv)
@@ -139,7 +131,7 @@ int PCMDaemonMain(int argc, const char** argv)
 
     @autoreleasepool {
         enterSandbox();
-        startListeningForMachServiceConnections(machServiceName);
+        startListeningForMachServiceConnections(machServiceName, "com.apple.private.webkit.adattributiond", connectionAdded, connectionRemoved, connectionEventHandler);
         if (startActivity)
             registerScheduledActivityHandler();
         WTF::initializeMainThread();

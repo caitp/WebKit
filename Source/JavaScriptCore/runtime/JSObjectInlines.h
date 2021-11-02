@@ -90,14 +90,14 @@ ALWAYS_INLINE bool JSObject::canPerformFastPutInline(VM& vm, PropertyName proper
 }
 
 template<typename CallbackWhenNoException>
-ALWAYS_INLINE typename std::result_of<CallbackWhenNoException(bool, PropertySlot&)>::type JSObject::getPropertySlot(JSGlobalObject* globalObject, PropertyName propertyName, CallbackWhenNoException callback) const
+ALWAYS_INLINE typename std::invoke_result<CallbackWhenNoException, bool, PropertySlot&>::type JSObject::getPropertySlot(JSGlobalObject* globalObject, PropertyName propertyName, CallbackWhenNoException callback) const
 {
     PropertySlot slot(this, PropertySlot::InternalMethodType::Get);
     return getPropertySlot(globalObject, propertyName, slot, callback);
 }
 
 template<typename CallbackWhenNoException>
-ALWAYS_INLINE typename std::result_of<CallbackWhenNoException(bool, PropertySlot&)>::type JSObject::getPropertySlot(JSGlobalObject* globalObject, PropertyName propertyName, PropertySlot& slot, CallbackWhenNoException callback) const
+ALWAYS_INLINE typename std::invoke_result<CallbackWhenNoException, bool, PropertySlot&>::type JSObject::getPropertySlot(JSGlobalObject* globalObject, PropertyName propertyName, PropertySlot& slot, CallbackWhenNoException callback) const
 {
     VM& vm = getVM(globalObject);
     auto scope = DECLARE_THROW_SCOPE(vm);
@@ -465,21 +465,15 @@ inline bool JSObject::canGetIndexQuicklyForTypedArray(unsigned i) const
     }
 }
 
-inline bool JSObject::canSetIndexQuicklyForTypedArray(unsigned i, JSValue value) const
+inline JSValue JSObject::getIndexQuicklyForTypedArray(unsigned i, ArrayProfile* arrayProfile) const
 {
-    switch (type()) {
-#define CASE_TYPED_ARRAY_TYPE(name) \
-    case name ## ArrayType :\
-        return jsCast<const JS ## name ## Array *>(this)->canSetIndexQuickly(i, value);
-        FOR_EACH_TYPED_ARRAY_TYPE_EXCLUDING_DATA_VIEW(CASE_TYPED_ARRAY_TYPE)
-#undef CASE_TYPED_ARRAY_TYPE
-    default:
-        return false;
-    }
-}
+#if USE(LARGE_TYPED_ARRAYS)
+    if (i > ArrayProfile::s_smallTypedArrayMaxLength && arrayProfile)
+        arrayProfile->setMayBeLargeTypedArray();
+#else
+    UNUSED_PARAM(arrayProfile);
+#endif
 
-inline JSValue JSObject::getIndexQuicklyForTypedArray(unsigned i) const
-{
     switch (type()) {
 #define CASE_TYPED_ARRAY_TYPE(name) \
     case name ## ArrayType : {\
@@ -512,7 +506,50 @@ inline void JSObject::setIndexQuicklyForTypedArray(unsigned i, JSValue value)
         return;
     }
 }
-    
+
+inline void JSObject::setIndexQuicklyForArrayStorageIndexingType(VM& vm, unsigned i, JSValue v)
+{
+    ArrayStorage* storage = this->butterfly()->arrayStorage();
+    WriteBarrier<Unknown>& x = storage->m_vector[i];
+    JSValue old = x.get();
+    x.set(vm, this, v);
+    if (!old) {
+        ++storage->m_numValuesInVector;
+        if (i >= storage->length())
+            storage->setLength(i + 1);
+    }
+}
+
+inline bool JSObject::trySetIndexQuicklyForTypedArray(unsigned i, JSValue v, ArrayProfile* arrayProfile)
+{
+    switch (type()) {
+#if USE(LARGE_TYPED_ARRAYS)
+#define UPDATE_ARRAY_PROFILE(i, arrayProfile) do { \
+        if ((i > ArrayProfile::s_smallTypedArrayMaxLength) && arrayProfile)\
+            arrayProfile->setMayBeLargeTypedArray();\
+    } while (false)
+#else
+#define UPDATE_ARRAY_PROFILE(i, arrayProfile) do { \
+    UNUSED_PARAM(arrayProfile);\
+    } while (false)
+#endif
+#define CASE_TYPED_ARRAY_TYPE(name) \
+    case name ## ArrayType : { \
+        auto* typedArray = jsCast<JS ## name ## Array *>(this);\
+        if (!typedArray->canSetIndexQuickly(i, v))\
+            return false;\
+        typedArray->setIndexQuickly(i, v);\
+        UPDATE_ARRAY_PROFILE(i, arrayProfile);\
+        return true;\
+    }
+    FOR_EACH_TYPED_ARRAY_TYPE_EXCLUDING_DATA_VIEW(CASE_TYPED_ARRAY_TYPE)
+#undef CASE_TYPED_ARRAY_TYPE
+#undef UPDATE_ARRAY_PROFILE
+    default:
+        return false;
+    }
+}
+
 inline void JSObject::validatePutOwnDataProperty(VM& vm, PropertyName propertyName, JSValue value)
 {
 #if ASSERT_ENABLED

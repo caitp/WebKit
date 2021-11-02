@@ -24,7 +24,6 @@ model-element [ Pass ]
 [ arm64 ] platform/mac/plugins [ Skip ]
 [ arm64 ] plugins [ Skip ]
 [ arm64 ] fullscreen/full-screen-plugin.html [ Skip ]
-[ arm64 ] http/tests/contentextensions/plugin-doesnt-crash.html [ Skip ]
 [ arm64 ] http/tests/security/contentSecurityPolicy/1.1/plugintypes-affects-child.html [ Skip ]
 [ arm64 ] http/tests/security/contentSecurityPolicy/1.1/plugintypes-invalid.html [ Skip ]
 [ arm64 ] http/tests/security/contentSecurityPolicy/1.1/plugintypes-url-01.html [ Skip ]
@@ -45,7 +44,6 @@ model-element [ Pass ]
 [ arm64 ] http/tests/security/mixedContent/insecure-plugin-in-iframe.html [ Skip ]
 [ arm64 ] http/tests/security/storage-blocking-loosened-plugin.html [ Skip ]
 [ arm64 ] http/tests/security/storage-blocking-strengthened-plugin.html [ Skip ]
-[ arm64 ] tiled-drawing/scrolling/non-fast-region/wheel-event-plugin.html [ Skip ]
 [ arm64 ] userscripts/user-script-plugin-document.html [ Skip ]
 [ arm64 ] fast/frames/sandboxed-iframe-about-blank.html [ Skip ]
 [ arm64 ] fast/frames/sandboxed-iframe-navigation-allowed.html [ Skip ]
@@ -993,6 +991,8 @@ webkit.org/b/149819 [ Debug ] compositing/video/video-poster.html [ Pass Crash F
 
 webkit.org/b/168953 [ Release ] compositing/video/video-poster.html [ Pass Failure ]
 
+webkit.org/b/232330 [ Debug ] compositing/video/video-reflection.html [ Pass Timeout ]
+
 # Flaky on Mac
 webkit.org/b/148435 storage/domstorage/events/basic-body-attribute.html [ Pass Failure ]
 
@@ -1061,6 +1061,8 @@ webkit.org/b/158649 fast/text/chinese-font-name-aliases-2.html [ ImageOnlyFailur
 fast/css/appearance-apple-pay-button.html [ Pass ]
 fast/css/appearance-apple-pay-button-border-radius.html [ Pass ]
 fast/css/appearance-apple-pay-button-default-corners.html [ Pass ]
+fast/css/webkit-named-image/apple-pay-logo-black [ Pass ]
+fast/css/webkit-named-image/apple-pay-logo-white [ Pass ]
 fast/css/getComputedStyle/computed-style-apple-pay-button.html [ Pass ]
 
 # <rdar://problem/23504749> imported/w3c/web-platform-tests/xhr/response-method.htm failing
@@ -1114,6 +1116,9 @@ webkit.org/b/162647 http/tests/xmlhttprequest/onabort-response-getters.html [ Pa
 webkit.org/b/162830 [ Debug ] fast/events/tabindex-focus-blur-all.html [ Pass Timeout ]
 
 [ Debug ] fast/selectors/slow-style-sharing-with-long-cousin-list.html [ Skip ]
+
+webkit.org/b/197068 [ Debug ] fast/selectors/matches-backtracking.html [ Pass Timeout ]
+webkit.org/b/197068 [ Debug ] fast/selectors/is-backtracking.html [ Pass Timeout ]
 
 webkit.org/b/161720 [ Debug ] storage/indexeddb/key-type-array.html [ Pass Timeout ]
 
@@ -1380,9 +1385,11 @@ webkit.org/b/183258 imported/w3c/web-platform-tests/css/css-text/i18n/css3-text-
 webkit.org/b/183258 imported/w3c/web-platform-tests/css/css-text/i18n/css3-text-line-break-opclns-115.html [ ImageOnlyFailure ]
 webkit.org/b/183258 imported/w3c/web-platform-tests/css/css-text/i18n/css3-text-line-break-opclns-116.html [ ImageOnlyFailure ]
 webkit.org/b/183258 imported/w3c/web-platform-tests/css/css-text/word-break/word-break-break-all-006.html [ ImageOnlyFailure ]
-webkit.org/b/196169 imported/w3c/web-platform-tests/css/css-text/overflow-wrap/overflow-wrap-break-word-003.html [ ImageOnlyFailure ]
 
-webkit.org/b/198543 imported/w3c/web-platform-tests/css/css-text/line-break/line-break-anywhere-001.html [ ImageOnlyFailure ]
+[ Catalina ] imported/w3c/web-platform-tests/css/css-text/line-break/line-break-anywhere-001.html [ ImageOnlyFailure ]
+
+webkit.org/b/232518 imported/w3c/web-platform-tests/css/css-sizing/aspect-ratio/flex-aspect-ratio-021.html [ ImageOnlyFailure ]
+webkit.org/b/232518 imported/w3c/web-platform-tests/css/css-sizing/aspect-ratio/flex-aspect-ratio-022.html [ ImageOnlyFailure ]
 
 http/tests/cookies/same-site [ Pass ]
 
@@ -1545,6 +1552,8 @@ webkit.org/b/212172 [ Catalina ] fast/text/font-collection.html [ ImageOnlyFailu
 
 webkit.org/b/200128 imported/w3c/web-platform-tests/html/semantics/embedded-content/the-video-element/video_timeupdate_on_seek.html [ Timeout Pass ]
 
+webkit.org/b/231084 imported/w3c/web-platform-tests/html/semantics/embedded-content/the-video-element/resize-during-playback.html [ Pass Failure ]
+
 # The test runner is failing in an unrelated, unexplained, invisible to the human eye, 2 pixels difference.
 webkit.org/b/201401 imported/w3c/web-platform-tests/media-source/mediasource-video-is-visible.html [ Skip ]
 
@@ -1617,6 +1626,8 @@ webkit.org/b/207225 imported/w3c/web-platform-tests/service-workers/service-work
 webkit.org/b/207226 http/tests/misc/image-blocked-src-change.html [ Pass Failure ]
 
 webkit.org/b/206908 imported/w3c/web-platform-tests/hr-time/basic.any.html [ Pass Failure ]
+
+webkit.org/b/232316 imported/w3c/web-platform-tests/hr-time/basic.html [ Pass Failure ]
 
 webkit.org/b/207306 inspector/animation/lifecycle-css-animation.html [ Pass Failure ]
 
@@ -1926,9 +1937,6 @@ webkit.org/b/230411 http/tests/media/hls/video-controller-getStartDate.html [ Pa
 
 webkit.org/b/227891 http/tests/appcache/fail-on-update.html [ Pass Timeout DumpJSConsoleLogInStdErr ]
 
-# rdar://66660680 (REGRESSION (20A2327a-20A2348b): media/video-canvas-createPattern.html is failing)
-[ BigSur+ ] media/video-canvas-createPattern.html [ Failure ]
-
 # Remove this once <rdar://problem/66734187> hits the bots
 [ BigSur+ ] fast/text/locale-shaping.html [ Pass ImageOnlyFailure ]
 
@@ -2047,15 +2055,8 @@ webkit.org/b/217669 http/wpt/service-workers/service-worker-spinning-message.htt
 
 webkit.org/b/217994 imported/w3c/web-platform-tests/webaudio/the-audio-api/the-audioworklet-interface/audioworkletnode-output-channel-count.https.html [ Pass Failure ]
 
-# rdar://70550210 REGRESSION (r267531): [ Big Sur iOS 14 ] imported/w3c/web-platform-tests/mathml/relations/html5-tree/dynamic-childlist-001.htm is a constant failure
-[ BigSur+ ] imported/w3c/web-platform-tests/mathml/relations/html5-tree/dynamic-childlist-001.html [ Failure ]
-
 # Mojave doesn't support COLR fonts.
 webkit.org/b/218346 [ Mojave ] fast/text/canvas-color-fonts [ Skip ]
-
-webkit.org/b/219403 imported/w3c/web-platform-tests/webrtc/RTCPeerConnection-candidate-in-sdp.https.html [ Pass Failure ]
-
-webkit.org/b/219460 imported/w3c/web-platform-tests/webrtc/RTCPeerConnection-perfect-negotiation.https.html [ Pass Failure ]
 
 webkit.org/b/219555 inspector/animation/effectChanged.html [ Pass Timeout ]
 
@@ -2068,8 +2069,6 @@ webkit.org/b/219965 [ BigSur ] imported/w3c/web-platform-tests/fetch/content-typ
 webkit.org/b/217621 media/video-buffering-allowed.html [ Pass Timeout ]
 
 webkit.org/b/220484 [ Mojave ] imported/w3c/web-platform-tests/html/semantics/document-metadata/the-meta-element/pragma-directives/attr-meta-http-equiv-refresh/parsing.html [ Pass Failure ]
-
-webkit.org/b/220077 imported/w3c/web-platform-tests/webrtc/protocol/crypto-suite.https.html [ Pass Failure ]
 
 webkit.org/b/220332 [ BigSur+ ] imported/w3c/web-platform-tests/mimesniff/mime-types/charset-parameter.window.html [ Pass Failure ]
 
@@ -2211,6 +2210,8 @@ webkit.org/b/215397 media/modern-media-controls/media-controller/media-controlle
 
 webkit.org/b/224396 webgl/1.0.3/conformance/glsl/constructors/glsl-construct-ivec2.html [ Slow ]
 
+webkit.org/b/229472 [ BigSur Debug ] webgl/1.0.3/conformance/glsl/constructors/glsl-construct-bvec2.html [ Slow ]
+
 webkit.org/b/224631 [ BigSur ] imported/w3c/web-platform-tests/css/css-fonts/font-feature-settings-tibetan.html [ Pass ImageOnlyFailure ]
 
 # Buttons are not focusable on Mac so this test doesn't work as expected.
@@ -2262,14 +2263,8 @@ webkit.org/b/226299 [ BigSur ] http/tests/performance/performance-resource-timin
 [ Monterey ] imported/w3c/web-platform-tests/css/css-text-decor/text-underline-offset-variable.html [ Pass ImageOnlyFailure ]
 [ Monterey ] imported/w3c/web-platform-tests/css/css-text-decor/text-underline-position-from-font-variable.html [ Pass ImageOnlyFailure ]
 
-# rdar://80333758 (REGRESSION: [ Monterey ] crypto/subtle/rsaes-pkcs1-v1_5-import-jwk-public-key-leading-zero.html is a constant timeout)
-[ Monterey ] crypto/subtle/rsaes-pkcs1-v1_5-import-jwk-public-key-leading-zero.html [ Timeout ]
-
 # rdar://80340581 ([ Monterey ] http/tests/preload/onload_event.html is a flaky failure)
 [ Monterey ] http/tests/preload/onload_event.html [ Pass Failure ]
-
-[ BigSur Monterey ] webaudio/Panner/hrtf-database.html [ Pass ]
-[ BigSur Monterey ] webaudio/codec-tests/aac/vbr-128kbps-44khz.html [ Pass ]
 
 # rdar://80347712 ([ Monterey ] media/video-src-blob-replay.html is a flaky timeout)
 [ Monterey ] media/video-src-blob-replay.html [ Timeout ]
@@ -2300,6 +2295,8 @@ webkit.org/b/214574 svg/animations/smil-leak-list-property-instances.svg [ Pass 
 
 webkit.org/b/222385 imported/w3c/web-platform-tests/xhr/event-upload-progress-crossorigin.any.worker.html [ Pass Failure ]
 
+webkit.org/b/223804 imported/w3c/web-platform-tests/xhr/event-upload-progress-crossorigin.any.html [ Pass Failure ]
+
 webkit.org/b/227998 imported/w3c/web-platform-tests/html/semantics/embedded-content/the-embed-element/embed-network-error.sub.html [ Pass Failure ]
 
 webkit.org/b/228311 imported/w3c/web-platform-tests/css/css-scoping/css-scoping-shadow-dynamic-remove-style-detached.html [ Pass Failure Timeout ]
@@ -2312,9 +2309,6 @@ webkit.org/b/228311 imported/w3c/web-platform-tests/css/css-scoping/css-scoping-
 [ Monterey Debug arm64 ] imported/w3c/web-platform-tests/webrtc/RTCPeerConnection-restartIce.https.html [ Pass Failure Crash ]
 
 webkit.org/b/228640 [ Debug ] imported/w3c/web-platform-tests/html/cross-origin-embedder-policy/credentialless/dedicated-worker.tentative.https.html [ Pass Failure ]
-
-#rdar://82003714 ([Star] webaudio/codec-tests/mp3/128kbps-44khz.html)
-webaudio/codec-tests/mp3/128kbps-44khz.html [ Pass Timeout Failure ]
 
 #rdar://82053210 ([Guard-Malloc] imported/w3c/web-platform-tests/mathml/relations/html5-tree/display-2.html is a flaky failure)
 imported/w3c/web-platform-tests/mathml/relations/html5-tree/display-2.html [ Pass ImageOnlyFailure ]
@@ -2345,16 +2339,34 @@ webkit.org/b/229517 imported/w3c/web-platform-tests/webrtc-extensions/RTCRtpSync
 
 webkit.org/b/230116 imported/w3c/web-platform-tests/webrtc-extensions/transfer-datachannel.html [ Pass Failure ]
 
+# accent-color is currently only supported on Cocoa platforms
+fast/css/accent-color/checkbox.html [ Pass ]
+fast/css/accent-color/progress.html [ Pass ]
+fast/css/accent-color/radio.html [ Pass ]
+fast/css/accent-color/select.html [ Pass ]
+fast/css/accent-color/text.html [ Pass ]
+imported/w3c/web-platform-tests/css/css-ui/accent-color-checkbox-checked-001.tentative.html [ Pass ]
+
+# The following controls are not tintable on macOS
+fast/css/accent-color/button.html [ Skip ]
+fast/css/accent-color/date.html [ Skip ]
+fast/css/accent-color/submit.html [ Skip ]
+
+webkit.org/b/199350 fast/css/accent-color/datalist.html [ ImageOnlyFailure ]
+webkit.org/b/231463 fast/css/accent-color/range.html [ ImageOnlyFailure ]
+
 # display-p3 canvas and ImageData are Cocoa only for now.
 [ Monterey+ ] fast/canvas/canvas-color-space-display-p3-ImageData.html [ Pass ]
 [ Monterey+ ] fast/canvas/canvas-color-space-display-p3.html [ Pass ]
-[ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage.html [ Pass ]
+[ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage.https.html [ Pass ]
 [ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-Blob.html [ Pass ]
 [ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-ImageBitmap.html [ Pass ]
 [ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-ImageData.html [ Pass ]
 [ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-canvas.html [ Pass ]
 [ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-cloned.html [ Pass ]
 [ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-image.html [ Pass ]
+[ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-video.html [ Pass ]
+[ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-video.html [ Pass ]
 [ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-pattern-canvas.html [ Pass ]
 [ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-pattern-image.html [ Pass ]
 [ Monterey+ ] imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-settings.html [ Pass ]
@@ -2395,7 +2407,7 @@ webkit.org/b/230327 imported/w3c/web-platform-tests/css/css-transforms/crashtest
 [ Monterey+ ] editing/selection/context-menu-on-text.html [ Crash ]
 [ Monterey+ ] editing/selection/context-menu-text-selection-lookup.html [ Crash ]
 
-rdar://83592102
+# rdar://83592102
 [ Monterey+ ] editing/mac/selection/context-menu-select-editability.html [ Crash ]
 [ Monterey+ ] editing/mac/spelling/advance-to-next-misspelling.html [ Crash ]
 [ Monterey+ ] editing/selection/5354455-1.html [ Crash ]
@@ -2426,3 +2438,11 @@ webkit.org/b/230862 [ Catalina BigSur ] imported/w3c/web-platform-tests/resource
 
 webkit.org/b/230984 [ BigSur Debug arm64 ] streams/readableStream-then.html [ Pass Crash ]
 
+webkit.org/b/231757 [ BigSur ] inspector/canvas/updateShader-webgl.html [ Pass Failure ]
+
+webkit.org/b/231924 inspector/css/modify-css-property.html [ Pass Failure ]
+
+# Plugins
+# FIXME: Remove these tests.
+platform/mac/plugins/testplugin-onnew-onpaint.html [ Skip ]
+platform/mac/plugins/convert-point.html [ Skip ]

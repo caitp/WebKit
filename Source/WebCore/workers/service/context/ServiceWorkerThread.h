@@ -66,6 +66,7 @@ public:
     void queueTaskToPostMessage(MessageWithMessagePorts&&, ServiceWorkerOrClientData&& sourceData);
     void queueTaskToFireInstallEvent();
     void queueTaskToFireActivateEvent();
+    void queueTaskToFirePushEvent(std::optional<Vector<uint8_t>>&&, Function<void(bool)>&&);
 
     ServiceWorkerIdentifier identifier() const { return m_serviceWorkerIdentifier; }
     std::optional<ServiceWorkerJobDataIdentifier> jobDataIdentifier() const { return m_jobDataIdentifier; }
@@ -73,13 +74,15 @@ public:
 
     void startFetchEventMonitoring();
     void stopFetchEventMonitoring() { m_isHandlingFetchEvent = false; }
+    void startPushEventMonitoring();
+    void stopPushEventMonitoring() { m_isHandlingPushEvent = false; }
 
 protected:
     Ref<WorkerGlobalScope> createWorkerGlobalScope(const WorkerParameters&, Ref<SecurityOrigin>&&, Ref<SecurityOrigin>&& topOrigin) final;
     void runEventLoop() override;
 
 private:
-    WEBCORE_EXPORT ServiceWorkerThread(ServiceWorkerContextData&&, ServiceWorkerData&&, String&& userAgent, const Settings::Values&, WorkerLoaderProxy&, WorkerDebuggerProxy&, IDBClient::IDBConnectionProxy*, SocketProvider*);
+    WEBCORE_EXPORT ServiceWorkerThread(ServiceWorkerContextData&&, ServiceWorkerData&&, String&& userAgent, WorkerThreadMode, const Settings::Values&, WorkerLoaderProxy&, WorkerDebuggerProxy&, IDBClient::IDBConnectionProxy*, SocketProvider*);
 
     bool isServiceWorkerThread() const final { return true; }
     void finishedEvaluatingScript() final;
@@ -101,6 +104,7 @@ private:
     bool m_doesHandleFetch { false };
 
     bool m_isHandlingFetchEvent { false };
+    bool m_isHandlingPushEvent { false };
     uint64_t m_messageEventCount { 0 };
     enum class State { Idle, Starting, Installing, Activating };
     State m_state { State::Idle };

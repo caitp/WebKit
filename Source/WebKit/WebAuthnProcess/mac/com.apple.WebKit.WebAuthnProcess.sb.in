@@ -46,7 +46,9 @@
     (subpath "/Library/Apple/System")
     (subpath "/Library/Preferences/Logging")      ; Logging Rethink
     (subpath "/System")
+#if __MAC_OS_X_VERSION_MIN_REQUIRED < 110000
     (subpath "/private/var/db/dyld")
+#endif
     (subpath "/private/var/db/timezone")
     (subpath "/usr/lib")
     (subpath "/usr/share"))))
@@ -117,11 +119,15 @@
 (allow sysctl-read
     (sysctl-name
         "hw.activecpu" ;; <rdar://problem/56795575>
+        "hw.availcpu"
         "hw.byteorder"
+        "hw.busfrequency"
         "hw.busfrequency_max"
         "hw.cacheconfig" ;; <rdar://problem/78213563>
         "hw.cachelinesize" ;; <rdar://problem/56795575>
         "hw.cachesize" ;; <rdar://problem/78213563>
+        "hw.cpufrequency"
+        "hw.cpufrequency_max"
         "hw.cpusubfamily"
         "hw.cputhreadtype"
         "hw.cputype"
@@ -140,6 +146,8 @@
         "hw.pagesize_compat" ;; <rdar://problem/76783596>
         "hw.physicalcpu" ;; <rdar://problem/58416475>
         "hw.physicalcpu_max" ;; <rdar://problem/58416475>
+        "hw.tbfrequency"
+        "hw.tbfrequency_compat"
         "hw.vectorunit"
         "kern.bootargs" ;; <rdar://problem/47738015>
         "kern.hostname"
@@ -147,6 +155,9 @@
         "kern.maxfilesperproc"
         "kern.memorystatus_level"
         "kern.osproductversion" ;; <rdar://problem/51756739>
+        "kern.osrelease"
+        "kern.ostype"
+        "kern.osvariant_status"
         "kern.osversion"
         "kern.safeboot"
         "kern.version"
@@ -155,12 +166,7 @@
         "kern.tcsm_enable"
         "kern.tcsm_available"
         "vm.footprint_suspend")
-    (sysctl-name-regex #"^hw.(active|avail)cpu")
-    (sysctl-name-regex #"^hw.(busfrequency|cachelinesize|cpufrequency(|_max)|pagesize|tbfrequency)(|_compat)")
-    (sysctl-name-regex #"^hw.l.+cachesize")
-    (sysctl-name-regex #"^hw.(logical|physical)cpu_max")
-    (sysctl-name-regex #"^kern.os(release|type|variant_status|version)")
-    (sysctl-name-regex #"^net.routetable")
+    (sysctl-name-prefix "net.routetable")
     (sysctl-name-prefix "hw.optional.") ;; <rdar://problem/71462790>
     (sysctl-name-prefix "hw.perflevel") ;; <rdar://problem/76783596>
 )
@@ -318,7 +324,7 @@
 (allow mach-lookup (extension "com.apple.app-sandbox.mach")) ;; FIXME: Should be removed when <rdar://problem/13066206> is fixed.
 
 (allow mach-lookup
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500
+#if PLATFORM(MAC)
     (with report) (with telemetry)
 #endif
     (global-name "com.apple.audio.AudioComponentRegistrar")
@@ -335,9 +341,6 @@
 
 ;; Various services required by AppKit and other frameworks
 (allow mach-lookup
-#if __MAC_OS_X_VERSION_MIN_REQUIRED < 101400
-       (global-name "com.apple.FontObjectsServer")
-#endif
        (global-name "com.apple.PowerManagement.control")
        (global-name "com.apple.SystemConfiguration.configd")
        (global-name "com.apple.analyticsd")
@@ -357,25 +360,17 @@
        (global-name "com.apple.tccd")
        (global-name "com.apple.tccd.system")
        (global-name "com.apple.trustd.agent")
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101400 || PLATFORM(MACCATALYST)
        (global-name "com.apple.CARenderServer") ; Needed for [CAContext remoteContextWithOptions]
-#else
-       (global-name "com.apple.windowserver.active")
-#endif
 )
 
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101400 || PLATFORM(MACCATALYST)
 ;; <rdar://problem/47268166>
 (allow mach-lookup (xpc-service-name "com.apple.MTLCompilerService"))
-#endif
 
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101400 || PLATFORM(MACCATALYST)
 (deny mach-lookup (with no-log)
     (global-name "com.apple.CoreServices.coreservicesd")
     (global-name "com.apple.DiskArbitration.diskarbitrationd")
     (global-name "com.apple.ViewBridgeAuxiliary")
     (global-name "com.apple.windowserver.active"))
-#endif
 
 ;; Needed to support encrypted media playback <rdar://problem/40038478>
 (allow mach-lookup
@@ -397,7 +392,7 @@
 
 ;; CoreFoundation. We don't import com.apple.corefoundation.sb, because it allows unnecessary access to pasteboard.
 (allow mach-lookup
-    (global-name-regex #"^com.apple.distributed_notifications")
+    (global-name-prefix "com.apple.distributed_notifications")
 #if !HAVE(CSCHECKFIXDISABLE)
     (global-name "com.apple.CoreServices.coreservicesd")
 #endif
@@ -406,7 +401,7 @@
 (allow file-read-data
     (literal "/dev/autofs_nowait")) ; Used by CF to circumvent automount triggers
 (allow ipc-posix-shm
-    (ipc-posix-name-regex #"^CFPBS:")) ; <rdar://problem/13757475>
+    (ipc-posix-name-prefix "CFPBS:")) ; <rdar://problem/13757475>
 (allow system-fsctl (fsctl-command (_IO "h" 47)))
 
 ;; Networking
@@ -425,11 +420,10 @@
        (global-name "com.apple.system.notification_center"))
 #endif
 
-(if (defined? 'vnode-type)
-        (deny file-write-create (vnode-type SYMLINK)))
+(deny file-write-create (vnode-type SYMLINK))
 
 ;; Reserve a namespace for additional protected extended attributes.
-(deny file-read-xattr file-write-xattr (xattr-regex #"^com\.apple\.security\.private\."))
+(deny file-read-xattr file-write-xattr (xattr-prefix "com.apple.security.private."))
 
 (deny file-read* file-write* (with no-log)
        ;; FIXME: Should be removed after <rdar://problem/10463881> is fixed.

@@ -621,8 +621,6 @@ private:
     size_t m_extraMemorySize { 0 };
     size_t m_deprecatedExtraMemorySize { 0 };
 
-    HashSet<const JSCell*> m_copyingRememberedSet;
-
     ProtectCountSet m_protectedValues;
     std::unique_ptr<HashSet<MarkedArgumentBufferBase*>> m_markListSet;
     SentinelLinkedList<MarkedJSValueRefArray, BasicRawSentinelNode<MarkedJSValueRefArray>> m_markedJSValueRefArrays;
@@ -657,7 +655,6 @@ private:
 
     unsigned m_barrierThreshold { Options::forceFencedBarrier() ? tautologicalThreshold : blackThreshold };
 
-    VM& m_vm;
     Seconds m_lastFullGCLength { 10_ms };
     Seconds m_lastEdenGCLength { 10_ms };
 
@@ -712,7 +709,6 @@ private:
     static constexpr unsigned mutatorWaitingBit = 1u << 4u; // Allows the mutator to use this as a condition variable.
     Atomic<unsigned> m_worldState;
     bool m_worldIsStopped { false };
-    Lock m_visitRaceLock;
     Lock m_markingMutex;
     Condition m_markingConditionVariable;
 
@@ -730,7 +726,6 @@ private:
     CollectorPhase m_nextPhase { CollectorPhase::NotRunning };
     bool m_collectorThreadIsRunning { false };
     bool m_threadShouldStop { false };
-    bool m_threadIsStopping { false };
     bool m_mutatorDidRun { true };
     bool m_didDeferGCWork { false };
     bool m_shouldStopCollectingContinuously { false };

@@ -47,10 +47,8 @@ using namespace WebCore;
 InjectedBundlePageLoaderClient::InjectedBundlePageLoaderClient(const WKBundlePageLoaderClientBase* client)
 {
     initialize(client);
-#if !PLATFORM(MAC) || __MAC_OS_X_VERSION_MIN_REQUIRED > 101400
     // Deprecated callbacks.
     ASSERT(!m_client.shouldGoToBackForwardListItem);
-#endif
 }
 
 void InjectedBundlePageLoaderClient::willLoadURLRequest(WebPage& page, const ResourceRequest& request, API::Object* userData)
@@ -296,6 +294,15 @@ void InjectedBundlePageLoaderClient::globalObjectIsAvailableForFrame(WebPage& pa
 
     RefPtr<InjectedBundleScriptWorld> injectedWorld = InjectedBundleScriptWorld::getOrCreate(world);
     m_client.globalObjectIsAvailableForFrame(toAPI(&page), toAPI(&frame), toAPI(injectedWorld.get()), m_client.base.clientInfo);
+}
+
+void InjectedBundlePageLoaderClient::serviceWorkerGlobalObjectIsAvailableForFrame(WebPage& page, WebFrame& frame, DOMWrapperWorld& world)
+{
+    if (!m_client.serviceWorkerGlobalObjectIsAvailableForFrame)
+        return;
+
+    RefPtr<InjectedBundleScriptWorld> injectedWorld = InjectedBundleScriptWorld::getOrCreate(world);
+    m_client.serviceWorkerGlobalObjectIsAvailableForFrame(toAPI(&page), toAPI(&frame), toAPI(injectedWorld.get()), m_client.base.clientInfo);
 }
 
 void InjectedBundlePageLoaderClient::willInjectUserScriptForFrame(WebPage& page, WebFrame& frame, DOMWrapperWorld& world)

@@ -45,6 +45,7 @@
 #include "NodeTraversal.h"
 #include "RenderVTTCue.h"
 #include "ScriptDisallowedScope.h"
+#include "ShadowPseudoIds.h"
 #include "Text.h"
 #include "TextTrack.h"
 #include "TextTrackCueGeneric.h"
@@ -392,12 +393,12 @@ ExceptionOr<void> VTTCue::setLine(const LineAndPositionSetting& position)
 {
     double linePosition = 0;
 
-    if (WTF::holds_alternative<AutoKeyword>(position)) {
+    if (std::holds_alternative<AutoKeyword>(position)) {
         if (std::isnan(m_linePosition))
             return { };
         linePosition = std::numeric_limits<double>::quiet_NaN();
     } else {
-        linePosition = WTF::get<double>(position);
+        linePosition = std::get<double>(position);
 
         if (m_linePosition == linePosition)
             return { };
@@ -464,12 +465,12 @@ ExceptionOr<void> VTTCue::setPosition(const LineAndPositionSetting& position)
     // position must be set to the new value; if the new value is the string
     // "auto", then it must be interpreted as the special value auto.
     double textPosition = 0;
-    if (WTF::holds_alternative<AutoKeyword>(position)) {
+    if (std::holds_alternative<AutoKeyword>(position)) {
         if (textPositionIsAuto())
             return { };
         textPosition = std::numeric_limits<double>::quiet_NaN();
     } else {
-        textPosition = WTF::get<double>(position);
+        textPosition = std::get<double>(position);
         if (!(textPosition >= 0 && textPosition <= 100))
             return Exception { IndexSizeError };
 
@@ -1008,9 +1009,9 @@ RefPtr<TextTrackCueBox> VTTCue::getDisplayTree(const IntSize& videoSize, int fon
     // background box.
 
     // Note: This is contained by default in m_cueHighlightBox.
-    m_cueHighlightBox->setPseudo(cueShadowPseudoId());
+    m_cueHighlightBox->setPseudo(ShadowPseudoIds::cue());
 
-    m_cueBackdropBox->setPseudo(cueBackdropShadowPseudoId());
+    m_cueBackdropBox->setPseudo(ShadowPseudoIds::webkitMediaTextTrackDisplayBackdrop());
     m_cueBackdropBox->appendChild(*m_cueHighlightBox);
     displayTree->appendChild(*m_cueBackdropBox);
 

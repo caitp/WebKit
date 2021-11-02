@@ -26,6 +26,7 @@
 #include "HTMLFormElement.h"
 
 #include "DOMFormData.h"
+#include "DOMTokenList.h"
 #include "DOMWindow.h"
 #include "DiagnosticLoggingClient.h"
 #include "Document.h"
@@ -68,6 +69,26 @@ namespace WebCore {
 WTF_MAKE_ISO_ALLOCATED_IMPL(HTMLFormElement);
 
 using namespace HTMLNames;
+
+struct FormRelAttributes {
+    bool noopener { false };
+    bool noreferrer { false };
+    bool opener { false };
+};
+
+static FormRelAttributes parseFormRelAttributes(StringView string)
+{
+    FormRelAttributes attributes;
+    for (auto token : string.split(' ')) {
+        if (equalIgnoringASCIICase(token, "noopener"))
+            attributes.noopener = true;
+        else if (equalIgnoringASCIICase(token, "noreferrer"))
+            attributes.noreferrer = true;
+        else if (equalIgnoringASCIICase(token, "opener"))
+            attributes.opener = true;
+    }
+    return attributes;
+}
 
 HTMLFormElement::HTMLFormElement(const QualifiedName& tagName, Document& document)
     : HTMLElement(tagName, document)
@@ -174,16 +195,16 @@ HTMLElement* HTMLFormElement::item(unsigned index)
     return elements()->item(index);
 }
 
-std::optional<Variant<RefPtr<RadioNodeList>, RefPtr<Element>>> HTMLFormElement::namedItem(const AtomString& name)
+std::optional<std::variant<RefPtr<RadioNodeList>, RefPtr<Element>>> HTMLFormElement::namedItem(const AtomString& name)
 {
     auto namedItems = namedElements(name);
 
     if (namedItems.isEmpty())
         return std::nullopt;
     if (namedItems.size() == 1)
-        return Variant<RefPtr<RadioNodeList>, RefPtr<Element>> { RefPtr<Element> { WTFMove(namedItems[0]) } };
+        return std::variant<RefPtr<RadioNodeList>, RefPtr<Element>> { RefPtr<Element> { WTFMove(namedItems[0]) } };
 
-    return Variant<RefPtr<RadioNodeList>, RefPtr<Element>> { RefPtr<RadioNodeList> { radioNodeList(name) } };
+    return std::variant<RefPtr<RadioNodeList>, RefPtr<Element>> { RefPtr<RadioNodeList> { radioNodeList(name) } };
 }
 
 Vector<AtomString> HTMLFormElement::supportedPropertyNames() const
@@ -378,6 +399,9 @@ void HTMLFormElement::submit(Event* event, bool activateSubmitButton, bool proce
     if (!isConnected())
         return;
 
+    if (m_isConstructingEntryList)
+        return;
+
     RefPtr<FrameView> view = document().view();
     RefPtr<Frame> frame = document().frame();
     if (!view || !frame)
@@ -399,10 +423,20 @@ void HTMLFormElement::submit(Event* event, bool activateSubmitButton, bool proce
 
     auto shouldLockHistory = processingUserGesture ? LockHistory::No : LockHistory::Yes;
     auto formSubmission = FormSubmission::create(*this, submitter, m_attributes, event, shouldLockHistory, trigger);
+
+    if (!isConnected())
+        return;
+
+    auto relAttributes = parseFormRelAttributes(getAttribute(HTMLNames::relAttr));
+    if (relAttributes.noopener || relAttributes.noreferrer || (!relAttributes.opener && document().settings().blankAnchorTargetImpliesNoOpenerEnabled() && isBlankTargetFrameName(formSubmission->target())))
+        formSubmission->setNewFrameOpenerPolicy(NewFrameOpenerPolicy::Suppress);
+    if (relAttributes.noreferrer)
+        formSubmission->setReferrerPolicy(ReferrerPolicy::NoReferrer);
+
     if (m_plannedFormSubmission)
         m_plannedFormSubmission->cancel();
 
-    m_plannedFormSubmission = makeWeakPtr(formSubmission.get());
+    m_plannedFormSubmission = formSubmission;
     
     if (RuntimeEnabledFeatures::sharedFeatures().dialogElementEnabled() && formSubmission->method() == FormSubmission::Method::Dialog)
         submitDialog(WTFMove(formSubmission));
@@ -507,6 +541,9 @@ void HTMLFormElement::parseAttribute(const QualifiedName& name, const AtomString
             document().registerForDocumentSuspensionCallbacks(*this);
         else
             document().unregisterForDocumentSuspensionCallbacks(*this);
+    } else if (name == relAttr) {
+        if (m_relList)
+            m_relList->associatedAttributeValueChanged(value);
     } else
         HTMLElement::parseAttribute(name, value);
 }
@@ -594,7 +631,7 @@ unsigned HTMLFormElement::formElementIndex(FormAssociatedElement* associatedElem
 
 void HTMLFormElement::registerFormElement(FormAssociatedElement* e)
 {
-    m_associatedElements.insert(formElementIndex(e), makeWeakPtr(e->asHTMLElement()));
+    m_associatedElements.insert(formElementIndex(e), e->asHTMLElement());
 
     if (is<HTMLFormControlElement>(e)) {
         HTMLFormControlElement& control = downcast<HTMLFormControlElement>(*e);
@@ -651,7 +688,7 @@ bool HTMLFormElement::isURLAttribute(const Attribute& attribute) const
 void HTMLFormElement::registerImgElement(HTMLImageElement* e)
 {
     ASSERT(m_imageElements.find(e) == notFound);
-    m_imageElements.append(makeWeakPtr(e));
+    m_imageElements.append(e);
 }
 
 void HTMLFormElement::removeImgElement(HTMLImageElement* e)
@@ -709,6 +746,16 @@ void HTMLFormElement::setMethod(const String& value)
     setAttributeWithoutSynchronization(methodAttr, value);
 }
 
+DOMTokenList& HTMLFormElement::relList()
+{
+    if (!m_relList) {
+        m_relList = makeUnique<DOMTokenList>(*this, HTMLNames::relAttr, [](Document&, StringView token) {
+            return equalIgnoringASCIICase(token, "noreferrer") || equalIgnoringASCIICase(token, "noopener") || equalIgnoringASCIICase(token, "opener");
+        });
+    }
+    return *m_relList;
+}
+
 String HTMLFormElement::target() const
 {
     return attributeWithoutSynchronization(targetAttr);
@@ -752,7 +799,7 @@ HTMLFormControlElement* HTMLFormElement::defaultButton() const
             continue;
         HTMLFormControlElement& control = downcast<HTMLFormControlElement>(*associatedElement);
         if (control.isSuccessfulSubmitButton()) {
-            m_defaultButton = makeWeakPtr(control);
+            m_defaultButton = control;
             return &control;
         }
     }
@@ -852,7 +899,7 @@ void HTMLFormElement::addToPastNamesMap(FormNamedItem* item, const AtomString& p
 #endif
     if (pastName.isEmpty())
         return;
-    m_pastNamesMap.set(pastName.impl(), makeWeakPtr(item->asHTMLElement()));
+    m_pastNamesMap.set(pastName.impl(), item->asHTMLElement());
 }
 
 void HTMLFormElement::removeFromPastNamesMap(FormNamedItem* item)

@@ -29,6 +29,14 @@
 #if ENABLE(GPU_PROCESS) && ENABLE(WEBGL)
 #include "NotImplemented.h"
 
+#if PLATFORM(COCOA)
+#include "IOSurface.h"
+#endif
+
+#if USE(GRAPHICS_LAYER_WC)
+#include "TextureMapperPlatformLayer.h"
+#endif
+
 namespace WebCore {
 
 RemoteGraphicsContextGLProxyBase::RemoteGraphicsContextGLProxyBase(const GraphicsContextGLAttributes& attrs)
@@ -126,7 +134,7 @@ void RemoteGraphicsContextGLProxyBase::initialize(const String& availableExtensi
         m_requestableExtensions.add(extension);
 }
 
-#if !PLATFORM(COCOA)
+#if !PLATFORM(COCOA) && !USE(GRAPHICS_LAYER_WC)
 void RemoteGraphicsContextGLProxyBase::platformInitialize()
 {
 }

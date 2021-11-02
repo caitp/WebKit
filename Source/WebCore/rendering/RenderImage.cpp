@@ -31,6 +31,7 @@
 #include "AXObjectCache.h"
 #include "BitmapImage.h"
 #include "CachedImage.h"
+#include "DocumentInlines.h"
 #include "FocusController.h"
 #include "FontCache.h"
 #include "FontCascade.h"
@@ -44,8 +45,8 @@
 #include "HTMLMapElement.h"
 #include "HTMLNames.h"
 #include "HitTestResult.h"
-#include "LayoutIntegrationLineIterator.h"
-#include "LayoutIntegrationRunIterator.h"
+#include "InlineIteratorInlineBox.h"
+#include "InlineIteratorLine.h"
 #include "Page.h"
 #include "PaintInfo.h"
 #include "RenderChildIterator.h"
@@ -55,6 +56,7 @@
 #include "RenderTheme.h"
 #include "RenderView.h"
 #include "RuntimeEnabledFeatures.h"
+#include "SVGElementTypeHelpers.h"
 #include "SVGImage.h"
 #include "Settings.h"
 #include <wtf/IsoMallocInlines.h>
@@ -91,7 +93,7 @@ void RenderImage::collectSelectionGeometries(Vector<SelectionGeometry>& geometri
     bool isFirstOnLine = false;
     bool isLastOnLine = false;
 
-    auto run = LayoutIntegration::runFor(*this);
+    auto run = InlineIterator::boxFor(*this);
     if (!run) {
         // This is a block image.
         imageRect = IntRect(0, 0, width(), height());
@@ -691,9 +693,9 @@ ImageDrawResult RenderImage::paintIntoRect(PaintInfo& paintInfo, const FloatRect
     return drawResult;
 }
 
-bool RenderImage::boxShadowShouldBeAppliedToBackground(const LayoutPoint& paintOffset, BackgroundBleedAvoidance bleedAvoidance, const LegacyInlineFlowBox*) const
+bool RenderImage::boxShadowShouldBeAppliedToBackground(const LayoutPoint& paintOffset, BackgroundBleedAvoidance bleedAvoidance, const InlineIterator::InlineBoxIterator&) const
 {
-    if (!RenderBoxModelObject::boxShadowShouldBeAppliedToBackground(paintOffset, bleedAvoidance))
+    if (!RenderBoxModelObject::boxShadowShouldBeAppliedToBackground(paintOffset, bleedAvoidance, { }))
         return false;
 
     return !const_cast<RenderImage*>(this)->backgroundIsKnownToBeObscured(paintOffset);

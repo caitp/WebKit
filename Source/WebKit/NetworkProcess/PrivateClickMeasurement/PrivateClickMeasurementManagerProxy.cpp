@@ -26,32 +26,30 @@
 #include "config.h"
 #include "PrivateClickMeasurementManagerProxy.h"
 
+#include "DaemonDecoder.h"
+#include "DaemonEncoder.h"
 #include "PrivateClickMeasurementConnection.h"
-#include "PrivateClickMeasurementDecoder.h"
-#include "PrivateClickMeasurementEncoder.h"
 #include "WebCoreArgumentCoders.h"
 
-namespace WebKit {
-
-namespace PCM {
+namespace WebKit::PCM {
 
 template<MessageType messageType, typename... Args>
 void ManagerProxy::sendMessage(Args&&... args) const
 {
-    Encoder encoder;
+    Daemon::Encoder encoder;
     encoder.encode(std::forward<Args>(args)...);
     m_connection.send(messageType, encoder.takeBuffer());
 }
 
 template<typename... Args> struct ReplyCaller;
 template<> struct ReplyCaller<> {
-    static void callReply(Decoder&& decoder, CompletionHandler<void()>&& completionHandler)
+    static void callReply(Daemon::Decoder&& decoder, CompletionHandler<void()>&& completionHandler)
     {
         completionHandler();
     }
 };
 template<> struct ReplyCaller<String> {
-    static void callReply(Decoder&& decoder, CompletionHandler<void(String&&)>&& completionHandler)
+    static void callReply(Daemon::Decoder&& decoder, CompletionHandler<void(String&&)>&& completionHandler)
     {
         std::optional<String> string;
         decoder >> string;
@@ -64,25 +62,25 @@ template<> struct ReplyCaller<String> {
 template<MessageType messageType, typename... Args, typename... ReplyArgs>
 void ManagerProxy::sendMessageWithReply(CompletionHandler<void(ReplyArgs...)>&& completionHandler, Args&&... args) const
 {
-    Encoder encoder;
+    Daemon::Encoder encoder;
     encoder.encode(std::forward<Args>(args)...);
     m_connection.sendWithReply(messageType, encoder.takeBuffer(), [completionHandler = WTFMove(completionHandler)] (auto replyBuffer) mutable {
-        Decoder decoder(WTFMove(replyBuffer));
+        Daemon::Decoder decoder(WTFMove(replyBuffer));
         ReplyCaller<ReplyArgs...>::callReply(WTFMove(decoder), WTFMove(completionHandler));
     });
 }
 
-ManagerProxy::ManagerProxy(const String& machServiceName)
-    : m_connection(machServiceName.utf8()) { }
+ManagerProxy::ManagerProxy(const String& machServiceName, NetworkSession& networkSession)
+    : m_connection(machServiceName.utf8(), networkSession) { }
 
-void ManagerProxy::storeUnattributed(WebCore::PrivateClickMeasurement&& pcm)
+void ManagerProxy::storeUnattributed(WebCore::PrivateClickMeasurement&& pcm, CompletionHandler<void()>&& completionHandler)
 {
-    sendMessage<MessageType::StoreUnattributed>(pcm);
+    sendMessageWithReply<MessageType::StoreUnattributed>(WTFMove(completionHandler), pcm);
 }
 
-void ManagerProxy::handleAttribution(WebCore::PrivateClickMeasurement::AttributionTriggerData&& triggerData, const URL& requestURL, WebCore::RegistrableDomain&& redirectDomain, const URL& firstPartyURL)
+void ManagerProxy::handleAttribution(WebCore::PrivateClickMeasurement::AttributionTriggerData&& triggerData, const URL& requestURL, WebCore::RegistrableDomain&& redirectDomain, const URL& firstPartyURL, const ApplicationBundleIdentifier& applicationBundleIdentifier)
 {
-    sendMessage<MessageType::HandleAttribution>(triggerData, requestURL, redirectDomain, firstPartyURL);
+    sendMessage<MessageType::HandleAttribution>(triggerData, requestURL, redirectDomain, firstPartyURL, applicationBundleIdentifier);
 }
 
 void ManagerProxy::clear(CompletionHandler<void()>&& completionHandler)
@@ -93,6 +91,11 @@ void ManagerProxy::clear(CompletionHandler<void()>&& completionHandler)
 void ManagerProxy::clearForRegistrableDomain(const WebCore::RegistrableDomain& domain, CompletionHandler<void()>&& completionHandler)
 {
     sendMessageWithReply<MessageType::ClearForRegistrableDomain>(WTFMove(completionHandler), domain);
+}
+
+void ManagerProxy::setDebugModeIsEnabled(bool enabled)
+{
+    sendMessage<MessageType::SetDebugModeIsEnabled>(enabled);
 }
 
 void ManagerProxy::migratePrivateClickMeasurementFromLegacyStorage(WebCore::PrivateClickMeasurement&& pcm, PrivateClickMeasurementAttributionType type)
@@ -135,11 +138,6 @@ void ManagerProxy::markAttributedPrivateClickMeasurementsAsExpiredForTesting(Com
     sendMessageWithReply<MessageType::MarkAttributedPrivateClickMeasurementsAsExpiredForTesting>(WTFMove(completionHandler));
 }
 
-void ManagerProxy::setEphemeralMeasurementForTesting(bool value)
-{
-    sendMessage<MessageType::SetEphemeralMeasurementForTesting>(value);
-}
-
 void ManagerProxy::setPCMFraudPreventionValuesForTesting(String&& unlinkableToken, String&& secretToken, String&& signature, String&& keyID)
 {
     sendMessage<MessageType::SetPCMFraudPreventionValuesForTesting>(unlinkableToken, secretToken, signature, keyID);
@@ -148,6 +146,11 @@ void ManagerProxy::setPCMFraudPreventionValuesForTesting(String&& unlinkableToke
 void ManagerProxy::startTimerImmediatelyForTesting()
 {
     sendMessage<MessageType::StartTimerImmediatelyForTesting>();
+}
+
+void ManagerProxy::setPrivateClickMeasurementAppBundleIDForTesting(ApplicationBundleIdentifier&& appBundleID)
+{
+    sendMessage<MessageType::SetPrivateClickMeasurementAppBundleIDForTesting>(appBundleID);
 }
 
 void ManagerProxy::destroyStoreForTesting(CompletionHandler<void()>&& completionHandler)
@@ -160,6 +163,4 @@ void ManagerProxy::allowTLSCertificateChainForLocalPCMTesting(const WebCore::Cer
     sendMessage<MessageType::AllowTLSCertificateChainForLocalPCMTesting>(certificateInfo);
 }
 
-} // namespace PCM
-
-} // namespace WebKit
+} // namespace WebKit::PCM

@@ -243,9 +243,7 @@ static CalculationValueMap& calculationValues()
 }
 
 Length::Length(Ref<CalculationValue>&& value)
-    : m_hasQuirk(false)
-    , m_type(LengthType::Calculated)
-    , m_isFloat(false)
+    : m_type(LengthType::Calculated)
 {
     m_calculationValueHandle = calculationValues().insert(WTFMove(value));
 }
@@ -304,6 +302,9 @@ static Length blendMixedTypes(const Length& from, const Length& to, const Blendi
     if (!from.isCalculated() && !to.isPercent() && (!context.progress || to.isZero()))
         return blend(from, Length(0, from.type()), context);
 
+    if (from.isIntrinsicOrAuto() || to.isIntrinsicOrAuto() || from.isRelative() || to.isRelative())
+        return { 0, LengthType::Fixed };
+
     auto blend = makeUnique<CalcExpressionBlendLength>(from, to, context.progress);
     return Length(CalculationValue::create(WTFMove(blend), ValueRange::All));
 }
@@ -340,8 +341,12 @@ Length blend(const Length& from, const Length& to, const BlendingContext& contex
 Length blend(const Length& from, const Length& to, const BlendingContext& context, ValueRange valueRange)
 {
     auto blended = blend(from, to, context);
-    if (valueRange == ValueRange::NonNegative && blended.isNegative())
-        return { 0, from.isZero () ? to.type() : from.type() };
+    if (valueRange == ValueRange::NonNegative && blended.isNegative()) {
+        auto type = from.isZero() ? to.type() : from.type();
+        if (type != LengthType::Calculated)
+            return { 0, type };
+        return { 0, LengthType::Fixed };
+    }
     return blended;
 }
 

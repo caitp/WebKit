@@ -26,10 +26,13 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-PYTHON = python
-PERL = perl
-RUBY = ruby
-DELETE = rm -f
+# Workaround for rdar://84212106.
+find_tool = $(realpath $(shell xcrun --sdk $(SDK_NAME) -f $(1)))
+
+PYTHON := $(call find_tool,python3)
+PERL := perl
+RUBY := ruby
+DELETE := rm -f
 
 ifneq ($(SDKROOT),)
     SDK_FLAGS = -isysroot $(SDKROOT)
@@ -117,7 +120,9 @@ JS_BINDING_IDLS := \
     $(WebCore)/Modules/credentialmanagement/CredentialsContainer.idl \
     $(WebCore)/Modules/credentialmanagement/Navigator+Credentials.idl \
     $(WebCore)/Modules/encryptedmedia/MediaKeyEncryptionScheme.idl \
+    $(WebCore)/Modules/encryptedmedia/MediaKeyMessageEventInit.idl \
     $(WebCore)/Modules/encryptedmedia/MediaKeyMessageEvent.idl \
+    $(WebCore)/Modules/encryptedmedia/MediaKeyMessageType.idl \
     $(WebCore)/Modules/encryptedmedia/MediaKeySession.idl \
     $(WebCore)/Modules/encryptedmedia/MediaKeySessionType.idl \
     $(WebCore)/Modules/encryptedmedia/MediaKeyStatusMap.idl \
@@ -155,6 +160,7 @@ JS_BINDING_IDLS := \
     $(WebCore)/Modules/filesystemaccess/FileSystemDirectoryHandle.idl \
     $(WebCore)/Modules/filesystemaccess/FileSystemFileHandle.idl \
     $(WebCore)/Modules/filesystemaccess/FileSystemHandle.idl \
+	$(WebCore)/Modules/filesystemaccess/FileSystemSyncAccessHandle.idl \
     $(WebCore)/Modules/filesystemaccess/StorageManager+FileSystemAccess.idl \
     $(WebCore)/Modules/gamepad/Gamepad.idl \
     $(WebCore)/Modules/gamepad/GamepadButton.idl \
@@ -200,6 +206,7 @@ JS_BINDING_IDLS := \
     $(WebCore)/Modules/mediacapabilities/Navigator+MediaCapabilities.idl \
     $(WebCore)/Modules/mediacapabilities/TransferFunction.idl \
     $(WebCore)/Modules/mediacapabilities/VideoConfiguration.idl \
+    $(WebCore)/Modules/mediacapabilities/WorkerNavigator+MediaCapabilities.idl \
     $(WebCore)/Modules/mediacontrols/MediaControlsHost.idl \
     $(WebCore)/Modules/mediarecorder/BlobEvent.idl \
     $(WebCore)/Modules/mediarecorder/MediaRecorder.idl \
@@ -346,6 +353,18 @@ JS_BINDING_IDLS := \
     $(WebCore)/Modules/pictureinpicture/HTMLVideoElement+PictureInPicture.idl \
     $(WebCore)/Modules/pictureinpicture/PictureInPictureWindow.idl \
     $(WebCore)/Modules/plugins/QuickTimePluginReplacement.idl \
+    $(WebCore)/Modules/push-api/PushEncryptionKeyName.idl \
+    $(WebCore)/Modules/push-api/PushEvent.idl \
+    $(WebCore)/Modules/push-api/PushEventInit.idl \
+    $(WebCore)/Modules/push-api/PushManager.idl \
+    $(WebCore)/Modules/push-api/PushMessageData.idl \
+    $(WebCore)/Modules/push-api/PushPermissionState.idl \
+    $(WebCore)/Modules/push-api/PushSubscription.idl \
+    $(WebCore)/Modules/push-api/PushSubscriptionJSON.idl \
+    $(WebCore)/Modules/push-api/PushSubscriptionOptions.idl \
+    $(WebCore)/Modules/push-api/PushSubscriptionOptionsInit.idl \
+    $(WebCore)/Modules/push-api/ServiceWorkerGlobalScope+PushAPI.idl \
+    $(WebCore)/Modules/push-api/ServiceWorkerRegistration+PushAPI.idl \
     $(WebCore)/Modules/remoteplayback/HTMLMediaElement+RemotePlayback.idl \
     $(WebCore)/Modules/remoteplayback/RemotePlayback.idl \
     $(WebCore)/Modules/remoteplayback/RemotePlaybackAvailabilityCallback.idl \
@@ -378,6 +397,11 @@ JS_BINDING_IDLS := \
     $(WebCore)/Modules/streams/WritableStreamDefaultWriter.idl \
     $(WebCore)/Modules/streams/WritableStreamSink.idl \
     $(WebCore)/Modules/storage/StorageManager.idl \
+    $(WebCore)/Modules/web-locks/NavigatorLocks.idl \
+    $(WebCore)/Modules/web-locks/WebLock.idl \
+    $(WebCore)/Modules/web-locks/WebLockGrantedCallback.idl \
+    $(WebCore)/Modules/web-locks/WebLockManager.idl \
+    $(WebCore)/Modules/web-locks/WebLockMode.idl \
     $(WebCore)/Modules/webaudio/AnalyserNode.idl \
     $(WebCore)/Modules/webaudio/AnalyserOptions.idl \
     $(WebCore)/Modules/webaudio/AudioBuffer.idl \
@@ -484,14 +508,21 @@ JS_BINDING_IDLS := \
     $(WebCore)/Modules/websockets/WebSocket.idl \
     $(WebCore)/Modules/webxr/Navigator+WebXR.idl \
     $(WebCore)/Modules/webxr/WebXRBoundedReferenceSpace.idl \
+    $(WebCore)/Modules/webxr/WebXRFrame+HandInput.idl \
     $(WebCore)/Modules/webxr/WebXRFrame.idl \
-    $(WebCore)/Modules/webxr/WebXRInputSourceArray.idl \
+    $(WebCore)/Modules/webxr/WebXRHand.idl \
+    $(WebCore)/Modules/webxr/WebXRInputSource+Gamepad.idl \
     $(WebCore)/Modules/webxr/WebXRInputSource.idl \
+    $(WebCore)/Modules/webxr/WebXRInputSourceArray.idl \
+    $(WebCore)/Modules/webxr/WebXRInputSource+HandInput.idl \
+    $(WebCore)/Modules/webxr/WebXRJointPose.idl \
+    $(WebCore)/Modules/webxr/WebXRJointSpace.idl \
     $(WebCore)/Modules/webxr/WebXRLayer.idl \
     $(WebCore)/Modules/webxr/WebXRPose.idl \
     $(WebCore)/Modules/webxr/WebXRReferenceSpace.idl \
     $(WebCore)/Modules/webxr/WebXRRenderState.idl \
     $(WebCore)/Modules/webxr/WebXRRigidTransform.idl \
+    $(WebCore)/Modules/webxr/WebXRSession+AR.idl \
     $(WebCore)/Modules/webxr/WebXRSession.idl \
     $(WebCore)/Modules/webxr/WebXRSpace.idl \
     $(WebCore)/Modules/webxr/WebXRSystem.idl \
@@ -502,6 +533,7 @@ JS_BINDING_IDLS := \
     $(WebCore)/Modules/webxr/XREnvironmentBlendMode.idl \
     $(WebCore)/Modules/webxr/XREye.idl \
     $(WebCore)/Modules/webxr/XRFrameRequestCallback.idl \
+    $(WebCore)/Modules/webxr/XRHandJoint.idl \
     $(WebCore)/Modules/webxr/XRHandedness.idl \
     $(WebCore)/Modules/webxr/XRInputSourceEvent.idl \
     $(WebCore)/Modules/webxr/XRInputSourcesChangeEvent.idl \
@@ -879,6 +911,7 @@ JS_BINDING_IDLS := \
     $(WebCore)/html/HTMLUListElement.idl \
     $(WebCore)/html/HTMLUnknownElement.idl \
     $(WebCore)/html/HTMLVideoElement.idl \
+    $(WebCore)/html/HTMLVideoElement+RequestVideoFrameCallback.idl \
     $(WebCore)/html/ImageBitmap.idl \
     $(WebCore)/html/ImageBitmapOptions.idl \
     $(WebCore)/html/ImageData.idl \
@@ -893,6 +926,8 @@ JS_BINDING_IDLS := \
     $(WebCore)/html/TimeRanges.idl \
     $(WebCore)/html/URLSearchParams.idl \
     $(WebCore)/html/ValidityState.idl \
+    $(WebCore)/html/VideoFrameMetadata.idl \
+    $(WebCore)/html/VideoFrameRequestCallback.idl \
     $(WebCore)/html/VoidCallback.idl \
     $(WebCore)/html/WebKitMediaKeyError.idl \
     $(WebCore)/html/canvas/ANGLEInstancedArrays.idl \
@@ -1567,6 +1602,15 @@ ModernMediaControls.css : $(MODERN_MEDIA_CONTROLS_STYLE_SHEETS)
 
 # user agent style sheets
 
+POSSIBLE_ADDITIONAL_USER_AGENT_STYLE_SHEETS = \
+    $(foreach \
+        STYLE_SHEET, \
+        $(ADDITIONAL_USER_AGENT_STYLE_SHEETS), \
+        $(firstword $(realpath $(foreach \
+            ADDITIONS_PATH, \
+            $(ADDITIONS_PATHS), \
+            $(ADDITIONS_PATH)/$(STYLE_SHEET)))))
+
 USER_AGENT_STYLE_SHEETS = \
     $(WebCore)/css/dialog.css \
     $(WebCore)/css/fullscreen.css \
@@ -1581,6 +1625,7 @@ USER_AGENT_STYLE_SHEETS = \
     $(WebCore)/html/shadow/meterElementShadow.css \
     $(WebCore)/Modules/plugins/QuickTimePluginReplacement.css \
     ModernMediaControls.css \
+    $(POSSIBLE_ADDITIONAL_USER_AGENT_STYLE_SHEETS) \
 #
 
 UserAgentStyleSheets.h : $(WebCore)/css/make-css-file-arrays.pl $(WebCore)/bindings/scripts/preprocessor.pm $(USER_AGENT_STYLE_SHEETS) $(FEATURE_AND_PLATFORM_DEFINE_DEPENDENCIES)

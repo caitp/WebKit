@@ -29,7 +29,6 @@
 #include "AuxiliaryProcess.h"
 #include "CacheModel.h"
 #include "IdentifierTypes.h"
-#include "PluginProcessConnectionManager.h"
 #include "SandboxExtension.h"
 #include "StorageAreaIdentifier.h"
 #include "TextCheckerState.h"
@@ -74,6 +73,10 @@
 
 #if HAVE(MEDIA_ACCESSIBILITY_FRAMEWORK)
 #include <WebCore/CaptionUserPreferences.h>
+#endif
+
+#if USE(ATSPI)
+#include <WebCore/AccessibilityAtspi.h>
 #endif
 
 namespace API {
@@ -235,10 +238,6 @@ public:
     
     const TextCheckerState& textCheckerState() const { return m_textCheckerState; }
     void setTextCheckerState(const TextCheckerState&);
-    
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    PluginProcessConnectionManager& pluginProcessConnectionManager();
-#endif
 
     EventDispatcher& eventDispatcher() { return m_eventDispatcher.get(); }
 
@@ -400,6 +399,10 @@ public:
     SpeechRecognitionRealtimeMediaSourceManager& ensureSpeechRecognitionRealtimeMediaSourceManager();
 #endif
 
+#if USE(ATSPI)
+    WebCore::AccessibilityAtspi& accessibilityAtspi() const { return *m_accessibility; }
+#endif
+
 private:
     WebProcess();
     ~WebProcess();
@@ -471,7 +474,7 @@ private:
 #endif
 
 #if ENABLE(SERVICE_WORKER)
-    void establishWorkerContextConnectionToNetworkProcess(PageGroupIdentifier, WebPageProxyIdentifier, WebCore::PageIdentifier, const WebPreferencesStore&, WebCore::RegistrableDomain&&, ServiceWorkerInitializationData&&, CompletionHandler<void()>&&);
+    void establishWorkerContextConnectionToNetworkProcess(PageGroupIdentifier, WebPageProxyIdentifier, WebCore::PageIdentifier, const WebPreferencesStore&, WebCore::RegistrableDomain&&, std::optional<WebCore::ServiceWorkerClientIdentifier> serviceWorkerPageIdentifier, ServiceWorkerInitializationData&&, CompletionHandler<void()>&&);
 #endif
 
     void fetchWebsiteData(OptionSet<WebsiteDataType>, CompletionHandler<void(WebsiteData&&)>&&);
@@ -682,10 +685,6 @@ private:
 
     std::unique_ptr<WebAutomationSessionProxy> m_automationSessionProxy;
 
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    RefPtr<PluginProcessConnectionManager> m_pluginProcessConnectionManager;
-#endif
-
 #if ENABLE(SERVICE_CONTROLS)
     bool m_hasImageServices { false };
     bool m_hasSelectionServices { false };
@@ -773,6 +772,10 @@ private:
 
 #if ENABLE(MEDIA_STREAM)
     std::unique_ptr<SpeechRecognitionRealtimeMediaSourceManager> m_speechRecognitionRealtimeMediaSourceManager;
+#endif
+
+#if USE(ATSPI)
+    std::unique_ptr<WebCore::AccessibilityAtspi> m_accessibility;
 #endif
 };
 

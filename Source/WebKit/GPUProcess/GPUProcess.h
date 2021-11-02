@@ -42,6 +42,10 @@
 #include <CoreGraphics/CGDisplayConfiguration.h>
 #endif
 
+#if USE(GRAPHICS_LAYER_WC)
+#include "WCSharedSceneContextHolder.h"
+#endif
+
 namespace WebCore {
 class NowPlayingManager;
 struct MockMediaDevice;
@@ -92,6 +96,10 @@ public:
     WorkQueue& libWebRTCCodecsQueue();
 #endif
 
+#if USE(GRAPHICS_LAYER_WC)
+    WCSharedSceneContextHolder& sharedSceneContext() { return m_sharedSceneContext; }
+#endif
+
 #if ENABLE(VP9)
     void enableVP9Decoders(bool shouldEnableVP8Decoder, bool shouldEnableVP9Decoder, bool shouldEnableVP9SWDecoder);
 #endif
@@ -99,6 +107,8 @@ public:
     void tryExitIfUnusedAndUnderMemoryPressure();
 
     const String& applicationVisibleName() const { return m_applicationVisibleName; }
+
+    void webProcessConnectionCountForTesting(CompletionHandler<void(uint64_t)>&&);
 
 private:
     void lowMemoryHandler(Critical, Synchronous);
@@ -182,6 +192,10 @@ private:
 #endif
 #if USE(LIBWEBRTC) && PLATFORM(COCOA)
     RefPtr<WorkQueue> m_libWebRTCCodecsQueue;
+#endif
+
+#if USE(GRAPHICS_LAYER_WC)
+    WCSharedSceneContextHolder m_sharedSceneContext;
 #endif
 
     struct GPUSession {

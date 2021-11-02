@@ -142,6 +142,7 @@ private:
 
     void paint(GraphicsContext&, const FloatRect&) override;
     void paintCurrentFrameInContext(GraphicsContext&, const FloatRect&) override;
+    DestinationColorSpace colorSpace() override;
     bool metaDataAvailable() const { return m_mediaStreamPrivate && m_readyState >= MediaPlayer::ReadyState::HaveMetadata; }
 
     void acceleratedRenderingStateChanged() final { updateLayersAsNeeded(); }
@@ -159,6 +160,7 @@ private:
 
     void setBufferingPolicy(MediaPlayer::BufferingPolicy) override;
     void audioOutputDeviceChanged() final;
+    std::optional<VideoFrameMetadata> videoFrameMetadata() final;
 
     MediaPlayer::ReadyState currentReadyState();
     void updateReadyState();
@@ -209,7 +211,7 @@ private:
     void videoSampleAvailable(MediaSample&) final;
 
     RetainPtr<PlatformLayer> createVideoFullscreenLayer() override;
-    void setVideoFullscreenLayer(PlatformLayer*, WTF::Function<void()>&& completionHandler) override;
+    void setVideoFullscreenLayer(PlatformLayer*, Function<void()>&& completionHandler) override;
     void setVideoFullscreenFrame(FloatRect) override;
 
     AudioSourceProvider* audioSourceProvider() final;
@@ -278,6 +280,9 @@ private:
     bool m_isVisibleInViewPort { false };
     bool m_haveSeenMetadata { false };
     bool m_waitingForFirstImage { false };
+
+    uint64_t m_sampleCount { 0 };
+    uint64_t m_lastVideoFrameMetadataSampleCount { 0 };
 };
     
 }

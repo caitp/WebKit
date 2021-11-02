@@ -31,6 +31,7 @@
 #include "CSSFontSelector.h"
 #include "CSSValueList.h"
 #include "CSSValuePool.h"
+#include "CommonVM.h"
 #include "ContentSecurityPolicy.h"
 #include "Crypto.h"
 #include "FontCache.h"
@@ -41,6 +42,7 @@
 #include "InspectorInstrumentation.h"
 #include "JSDOMExceptionHandling.h"
 #include "Performance.h"
+#include "RTCDataChannelRemoteHandlerConnection.h"
 #include "RuntimeEnabledFeatures.h"
 #include "ScheduledAction.h"
 #include "ScriptSourceCode.h"
@@ -48,6 +50,7 @@
 #include "SecurityOriginPolicy.h"
 #include "ServiceWorkerGlobalScope.h"
 #include "SocketProvider.h"
+#include "WorkerFileSystemStorageConnection.h"
 #include "WorkerFontLoadRequest.h"
 #include "WorkerLoaderProxy.h"
 #include "WorkerLocation.h"
@@ -77,7 +80,7 @@ static HashSet<ScriptExecutionContextIdentifier>& allWorkerGlobalScopeIdentifier
 WTF_MAKE_ISO_ALLOCATED_IMPL(WorkerGlobalScope);
 
 WorkerGlobalScope::WorkerGlobalScope(WorkerThreadType type, const WorkerParameters& params, Ref<SecurityOrigin>&& origin, WorkerThread& thread, Ref<SecurityOrigin>&& topOrigin, IDBClient::IDBConnectionProxy* connectionProxy, SocketProvider* socketProvider)
-    : WorkerOrWorkletGlobalScope(type, JSC::VM::create(), &thread)
+    : WorkerOrWorkletGlobalScope(type, isMainThread() ? Ref { commonVM() } : JSC::VM::create(), &thread)
     , m_url(params.scriptURL)
     , m_identifier(params.identifier)
     , m_userAgent(params.userAgent)
@@ -142,6 +145,9 @@ void WorkerGlobalScope::prepareForDestruction()
 
     if (m_storageConnection)
         m_storageConnection->scopeClosed();
+
+    if (m_fileSystemStorageConnection)
+        m_fileSystemStorageConnection->scopeClosed();
 }
 
 void WorkerGlobalScope::removeAllEventListeners()
@@ -226,6 +232,23 @@ WorkerStorageConnection& WorkerGlobalScope::storageConnection()
     return *m_storageConnection;
 }
 
+WorkerFileSystemStorageConnection& WorkerGlobalScope::getFileSystemStorageConnection(Ref<FileSystemStorageConnection>&& mainThreadConnection)
+{
+    if (!m_fileSystemStorageConnection)
+        m_fileSystemStorageConnection = WorkerFileSystemStorageConnection::create(*this, WTFMove(mainThreadConnection));
+    else if (m_fileSystemStorageConnection->mainThreadConnection() != mainThreadConnection.ptr()) {
+        m_fileSystemStorageConnection->connectionClosed();
+        m_fileSystemStorageConnection = WorkerFileSystemStorageConnection::create(*this, WTFMove(mainThreadConnection));
+    }
+
+    return *m_fileSystemStorageConnection;
+}
+
+WorkerFileSystemStorageConnection* WorkerGlobalScope::fileSystemStorageConnection()
+{
+    return m_fileSystemStorageConnection.get();
+}
+
 WorkerLocation& WorkerGlobalScope::location() const
 {
     if (!m_location)
@@ -268,7 +291,7 @@ ExceptionOr<int> WorkerGlobalScope::setTimeout(JSC::JSGlobalObject& state, std::
 {
     // FIXME: Should this check really happen here? Or should it happen when code is about to eval?
     if (action->type() == ScheduledAction::Type::Code) {
-        if (!contentSecurityPolicy()->allowEval(&state))
+        if (!contentSecurityPolicy()->allowEval(&state, LogToConsole::Yes))
             return 0;
     }
 
@@ -286,7 +309,7 @@ ExceptionOr<int> WorkerGlobalScope::setInterval(JSC::JSGlobalObject& state, std:
 {
     // FIXME: Should this check really happen here? Or should it happen when code is about to eval?
     if (action->type() == ScheduledAction::Type::Code) {
-        if (!contentSecurityPolicy()->allowEval(&state))
+        if (!contentSecurityPolicy()->allowEval(&state, LogToConsole::Yes))
             return 0;
     }
 
@@ -349,7 +372,7 @@ ExceptionOr<void> WorkerGlobalScope::importScripts(const Vector<String>& urls)
         {
             NakedPtr<JSC::Exception> exception;
             ScriptSourceCode sourceCode(scriptLoader->script(), URL(scriptLoader->responseURL()));
-            sourceProvider = makeWeakPtr(static_cast<ScriptBufferSourceProvider&>(sourceCode.provider()));
+            sourceProvider = static_cast<ScriptBufferSourceProvider&>(sourceCode.provider());
             script()->evaluate(sourceCode, exception);
             if (exception) {
                 script()->setException(exception);
@@ -573,7 +596,7 @@ void WorkerGlobalScope::releaseMemoryInWorkers(Synchronous synchronous)
 void WorkerGlobalScope::setMainScriptSourceProvider(ScriptBufferSourceProvider& provider)
 {
     ASSERT(!m_mainScriptSourceProvider);
-    m_mainScriptSourceProvider = makeWeakPtr(provider);
+    m_mainScriptSourceProvider = provider;
 }
 
 void WorkerGlobalScope::addImportedScriptSourceProvider(const URL& url, ScriptBufferSourceProvider& provider)

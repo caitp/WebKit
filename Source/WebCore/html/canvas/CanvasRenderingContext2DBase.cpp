@@ -790,7 +790,7 @@ void CanvasRenderingContext2DBase::translate(double tx, double ty)
     if (!state().hasInvertibleTransform)
         return;
 
-    if (!std::isfinite(tx) | !std::isfinite(ty))
+    if (!std::isfinite(tx) || !std::isfinite(ty))
         return;
 
     AffineTransform newTransform = state().transform;
@@ -813,7 +813,7 @@ void CanvasRenderingContext2DBase::transform(double m11, double m12, double m21,
     if (!state().hasInvertibleTransform)
         return;
 
-    if (!std::isfinite(m11) | !std::isfinite(m21) | !std::isfinite(dx) | !std::isfinite(m12) | !std::isfinite(m22) | !std::isfinite(dy))
+    if (!std::isfinite(m11) || !std::isfinite(m21) || !std::isfinite(dx) || !std::isfinite(m12) || !std::isfinite(m22) || !std::isfinite(dy))
         return;
 
     AffineTransform transform(m11, m12, m21, m22, dx, dy);
@@ -843,7 +843,7 @@ void CanvasRenderingContext2DBase::setTransform(double m11, double m12, double m
     if (!c)
         return;
 
-    if (!std::isfinite(m11) | !std::isfinite(m21) | !std::isfinite(dx) | !std::isfinite(m12) | !std::isfinite(m22) | !std::isfinite(dy))
+    if (!std::isfinite(m11) || !std::isfinite(m21) || !std::isfinite(dx) || !std::isfinite(m12) || !std::isfinite(m22) || !std::isfinite(dy))
         return;
 
     resetTransform();
@@ -967,7 +967,7 @@ void CanvasRenderingContext2DBase::beginPath()
 
 static bool validateRectForCanvas(double& x, double& y, double& width, double& height)
 {
-    if (!std::isfinite(x) | !std::isfinite(y) | !std::isfinite(width) | !std::isfinite(height))
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(width) || !std::isfinite(height))
         return false;
 
     if (!width && !height)
@@ -1570,17 +1570,17 @@ ExceptionOr<void> CanvasRenderingContext2DBase::drawImage(Document& document, Ca
 
     bool repaintEntireCanvas = false;
     if (rectContainsCanvas(normalizedDstRect)) {
-        c->drawImage(*image, normalizedDstRect, normalizedSrcRect, options);
+        c->drawImageForCanvas(*image, normalizedDstRect, normalizedSrcRect, options, colorSpace());
         repaintEntireCanvas = true;
     } else if (isFullCanvasCompositeMode(op)) {
         fullCanvasCompositedDrawImage(*image, normalizedDstRect, normalizedSrcRect, op);
         repaintEntireCanvas = true;
     } else if (op == CompositeOperator::Copy) {
         clearCanvas();
-        c->drawImage(*image, normalizedDstRect, normalizedSrcRect, options);
+        c->drawImageForCanvas(*image, normalizedDstRect, normalizedSrcRect, options, colorSpace());
         repaintEntireCanvas = true;
     } else
-        c->drawImage(*image, normalizedDstRect, normalizedSrcRect, options);
+        c->drawImageForCanvas(*image, normalizedDstRect, normalizedSrcRect, options, colorSpace());
 
     if (isEntireBackingStoreDirty())
         didDraw(std::nullopt);
@@ -1842,12 +1842,12 @@ void CanvasRenderingContext2DBase::compositeBuffer(ImageBuffer& buffer, const In
     c->restore();
 }
 
-static void drawImageToContext(Image& image, GraphicsContext& context, const FloatRect& dest, const FloatRect& src, const ImagePaintingOptions& options)
+static void drawImageToContext(Image& image, GraphicsContext& context, const FloatRect& dest, const FloatRect& src, const ImagePaintingOptions& options, DestinationColorSpace colorSpace)
 {
-    context.drawImage(image, dest, src, options);
+    context.drawImageForCanvas(image, dest, src, options, colorSpace);
 }
 
-static void drawImageToContext(ImageBuffer& imageBuffer, GraphicsContext& context, const FloatRect& dest, const FloatRect& src, const ImagePaintingOptions& options)
+static void drawImageToContext(ImageBuffer& imageBuffer, GraphicsContext& context, const FloatRect& dest, const FloatRect& src, const ImagePaintingOptions& options, DestinationColorSpace)
 {
     context.drawImageBuffer(imageBuffer, dest, src, options);
 }
@@ -1878,7 +1878,7 @@ template<class T> void CanvasRenderingContext2DBase::fullCanvasCompositedDrawIma
     buffer->context().translate(-transformedAdjustedRect.location());
     buffer->context().translate(croppedOffset);
     buffer->context().concatCTM(effectiveTransform);
-    drawImageToContext(image, buffer->context(), adjustedDest, src, { CompositeOperator::SourceOver });
+    drawImageToContext(image, buffer->context(), adjustedDest, src, { CompositeOperator::SourceOver }, colorSpace());
 
     compositeBuffer(*buffer, bufferRect, op);
 }
@@ -2246,7 +2246,7 @@ void CanvasRenderingContext2DBase::putImageData(ImageData& data, int dx, int dy,
     IntSize destOffset { dx, dy };
     IntRect destRect = clipRect;
     destRect.move(destOffset);
-    destRect.intersect(IntRect { { }, buffer->logicalSize() });
+    destRect.intersect(IntRect { { }, buffer->truncatedLogicalSize() });
     if (destRect.isEmpty())
         return;
     IntRect sourceRect { destRect };
@@ -2362,7 +2362,7 @@ bool CanvasRenderingContext2DBase::canDrawText(double x, double y, bool fill, st
         return false;
     if (!state().hasInvertibleTransform)
         return false;
-    if (!std::isfinite(x) | !std::isfinite(y))
+    if (!std::isfinite(x) || !std::isfinite(y))
         return false;
     if (maxWidth && (!std::isfinite(maxWidth.value()) || maxWidth.value() <= 0))
         return false;

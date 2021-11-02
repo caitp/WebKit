@@ -21,7 +21,7 @@
 #pragma once
 
 #include "JSObject.h"
-#include <wtf/Variant.h>
+#include <variant>
 
 namespace JSC {
 
@@ -51,6 +51,8 @@ enum class TemporalUnit : uint8_t {
 static constexpr unsigned numberOfTemporalUnits = 0 JSC_TEMPORAL_UNITS(JSC_COUNT_TEMPORAL_UNITS);
 static constexpr unsigned numberOfTemporalPlainTimeUnits = 0 JSC_TEMPORAL_PLAIN_TIME_UNITS(JSC_COUNT_TEMPORAL_UNITS);
 #undef JSC_COUNT_TEMPORAL_UNITS
+
+extern const TemporalUnit temporalUnitsInTableOrder[numberOfTemporalUnits];
 
 class TemporalObject final : public JSNonFinalObject {
 public:
@@ -94,7 +96,8 @@ struct PrecisionData {
 };
 
 WTF::String ellipsizeAt(unsigned maxLength, const WTF::String&);
-PropertyName temporalUnitPropertyName(VM&, TemporalUnit);
+PropertyName temporalUnitPluralPropertyName(VM&, TemporalUnit);
+PropertyName temporalUnitSingularPropertyName(VM&, TemporalUnit);
 std::optional<TemporalUnit> temporalUnitType(StringView);
 std::optional<TemporalUnit> temporalLargestUnit(JSGlobalObject*, JSObject* options, std::initializer_list<TemporalUnit> disallowedUnits, TemporalUnit autoValue);
 std::optional<TemporalUnit> temporalSmallestUnit(JSGlobalObject*, JSObject* options, std::initializer_list<TemporalUnit> disallowedUnits);

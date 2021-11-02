@@ -254,10 +254,33 @@ bool RenderLayerScrollableArea::requestScrollPositionUpdate(const ScrollPosition
     return false;
 }
 
+bool RenderLayerScrollableArea::requestAnimatedScrollToPosition(const ScrollPosition& destinationPosition, ScrollClamping clamping)
+{
+#if ENABLE(ASYNC_SCROLLING)
+    LOG_WITH_STREAM(Scrolling, stream << m_layer << " requestAnimatedScrollToPosition " << destinationPosition);
+
+    if (auto* scrollingCoordinator = m_layer.page().scrollingCoordinator())
+        return scrollingCoordinator->requestAnimatedScrollToPosition(*this, destinationPosition, clamping);
+#endif
+    return false;
+}
+
+void RenderLayerScrollableArea::stopAsyncAnimatedScroll()
+{
+#if ENABLE(ASYNC_SCROLLING)
+    LOG_WITH_STREAM(Scrolling, stream << m_layer << " stopAsyncAnimatedScroll");
+
+    if (auto* scrollingCoordinator = m_layer.page().scrollingCoordinator())
+        return scrollingCoordinator->stopAnimatedScroll(*this);
+#endif
+}
+
 ScrollOffset RenderLayerScrollableArea::scrollToOffset(const ScrollOffset& scrollOffset, const ScrollPositionChangeOptions& options)
 {
-    if (currentScrollBehaviorStatus() == ScrollBehaviorStatus::InNonNativeAnimation)
+    if (scrollAnimationStatus() == ScrollAnimationStatus::Animating) {
         scrollAnimator().cancelAnimations();
+        stopAsyncAnimatedScroll();
+    }
 
     ScrollOffset clampedScrollOffset = options.clamping == ScrollClamping::Clamped ? clampScrollOffset(scrollOffset) : scrollOffset;
     if (clampedScrollOffset == this->scrollOffset())
@@ -268,13 +291,10 @@ ScrollOffset RenderLayerScrollableArea::scrollToOffset(const ScrollOffset& scrol
 
     ScrollOffset snappedOffset = ceiledIntPoint(scrollAnimator().scrollOffsetAdjustedForSnapping(clampedScrollOffset, options.snapPointSelectionMethod));
     auto snappedPosition = scrollPositionFromOffset(snappedOffset);
-    if (options.animated == AnimatedScroll::Yes)
+    if (options.animated == ScrollIsAnimated::Yes)
         ScrollableArea::scrollToPositionWithAnimation(snappedPosition);
-    else {
-        if (!requestScrollPositionUpdate(snappedPosition, options.type, options.clamping))
-            scrollToPositionWithoutAnimation(snappedPosition, options.clamping);
-        setScrollBehaviorStatus(ScrollBehaviorStatus::NotInAnimation);
-    }
+    else if (!requestScrollPositionUpdate(snappedPosition, options.type, options.clamping))
+        scrollToPositionWithoutAnimation(snappedPosition, options.clamping);
 
     setCurrentScrollType(previousScrollType);
     return snappedOffset;
@@ -293,26 +313,9 @@ void RenderLayerScrollableArea::scrollTo(const ScrollPosition& position)
         // Ensure that the dimensions will be computed if they need to be (for overflow:hidden blocks).
         if (m_scrollDimensionsDirty)
             computeScrollDimensions();
-#if PLATFORM(IOS_FAMILY)
-        if (adjustForIOSCaretWhenScrolling()) {
-            // FIXME: It's not clear what this code is trying to do. Behavior seems reasonable with it removed.
-            int maxOffset = scrollWidth() - roundToInt(box->clientWidth());
-            ScrollOffset newOffset = scrollOffsetFromPosition(newPosition);
-            int scrollXOffset = newOffset.x();
-            if (scrollXOffset > maxOffset - caretWidth) {
-                scrollXOffset += caretWidth;
-                if (scrollXOffset <= caretWidth)
-                    scrollXOffset = 0;
-            } else if (scrollXOffset < m_scrollPosition.x() - caretWidth)
-                scrollXOffset -= caretWidth;
-
-            newOffset.setX(scrollXOffset);
-            newPosition = scrollPositionFromOffset(newOffset);
-        }
-#endif
     }
 
-    if (m_scrollPosition == newPosition && currentScrollBehaviorStatus() == ScrollBehaviorStatus::NotInAnimation) {
+    if (m_scrollPosition == newPosition && scrollAnimationStatus() == ScrollAnimationStatus::NotAnimating) {
         // FIXME: Nothing guarantees we get a scrollTo() with an unchanged position at the end of a user gesture.
         // The ScrollingCoordinator probably needs to message the main thread when a gesture ends.
         if (requiresScrollPositionReconciliation()) {
@@ -1230,18 +1233,8 @@ void RenderLayerScrollableArea::updateScrollInfoAfterLayout()
         // Layout may cause us to be at an invalid scroll position. In this case we need
         // to pull our scroll offsets back to the max (or push them up to the min).
         ScrollOffset clampedScrollOffset = clampScrollOffset(scrollOffset());
-#if PLATFORM(IOS_FAMILY)
-        // FIXME: This looks wrong. The caret adjust mode should only be enabled on editing related entry points.
-        // This code was added to fix an issue where the text insertion point would always be drawn on the right edge
-        // of a text field whose content overflowed its bounds. See <rdar://problem/15579797> for more details.
-        setAdjustForIOSCaretWhenScrolling(true);
-#endif
         if (clampedScrollOffset != scrollOffset())
             scrollToOffset(clampedScrollOffset);
-
-#if PLATFORM(IOS_FAMILY)
-        setAdjustForIOSCaretWhenScrolling(false);
-#endif
     }
 
     updateScrollbarsAfterLayout();
@@ -1759,7 +1752,7 @@ std::optional<LayoutRect> RenderLayerScrollableArea::updateScrollPosition(const 
     ASSERT(box);
 
     ScrollOffset clampedScrollOffset = clampScrollOffset(scrollOffset() + toIntSize(roundedIntRect(revealRect).location()));
-    if (clampedScrollOffset != scrollOffset() || currentScrollBehaviorStatus() != ScrollBehaviorStatus::NotInAnimation) {
+    if (clampedScrollOffset != scrollOffset() || scrollAnimationStatus() != ScrollAnimationStatus::NotAnimating) {
         ScrollOffset oldScrollOffset = scrollOffset();
         ScrollOffset realScrollOffset = scrollToOffset(clampedScrollOffset, options);
 

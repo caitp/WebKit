@@ -60,7 +60,7 @@ void WheelEventTestMonitor::clearAllTestDeferrals()
     LOG_WITH_STREAM(WheelEventTestMonitor, stream << "  WheelEventTestMonitor::clearAllTestDeferrals: cleared all test state.");
 }
 
-void WheelEventTestMonitor::setTestCallbackAndStartMonitoring(bool expectWheelEndOrCancel, bool expectMomentumEnd, WTF::Function<void()>&& functionCallback)
+void WheelEventTestMonitor::setTestCallbackAndStartMonitoring(bool expectWheelEndOrCancel, bool expectMomentumEnd, Function<void()>&& functionCallback)
 {
     Locker locker { m_lock };
 
@@ -126,7 +126,7 @@ void WheelEventTestMonitor::receivedWheelEvent(const PlatformWheelEvent& event)
 
 void WheelEventTestMonitor::scheduleCallbackCheck()
 {
-    ensureOnMainThread([weakPage = makeWeakPtr(m_page)] {
+    ensureOnMainThread([weakPage = WeakPtr { m_page }] {
         if (weakPage)
             weakPage->scheduleRenderingUpdate(RenderingUpdateStep::WheelEventMonitorCallbacks);
     });

@@ -55,7 +55,7 @@
 #include "DOMException.h"
 #include "DOMPatchSupport.h"
 #include "DOMWindow.h"
-#include "Document.h"
+#include "DocumentInlines.h"
 #include "DocumentType.h"
 #include "Editing.h"
 #include "Element.h"
@@ -382,7 +382,7 @@ Protocol::DOM::NodeId InspectorDOMAgent::bind(Node& node)
 {
     return m_nodeToId.ensure(node, [&] {
         auto id = m_lastNodeId++;
-        m_idToNode.set(id, makeWeakPtr(node));
+        m_idToNode.set(id, node);
         return id;
     }).iterator->value;
 }

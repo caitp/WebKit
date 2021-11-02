@@ -32,11 +32,11 @@
 #include "IntPoint.h"
 #include "LayoutRect.h"
 #include "Path.h"
+#include <variant>
 #include <wtf/Forward.h>
 #include <wtf/HashMap.h>
 #include <wtf/RefPtr.h>
 #include <wtf/ThreadSafeRefCounted.h>
-#include <wtf/Variant.h>
 #include <wtf/Vector.h>
 #include <wtf/WeakPtr.h>
 
@@ -86,6 +86,7 @@ private:
     double doubleAttributeValue(AXPropertyName) const;
     float floatAttributeValue(AXPropertyName) const;
     AXCoreObject* objectAttributeValue(AXPropertyName) const;
+    PAL::SessionID sessionIDAttributeValue(AXPropertyName) const;
     IntPoint intPointAttributeValue(AXPropertyName) const;
     Color colorAttributeValue(AXPropertyName) const;
     URL urlAttributeValue(AXPropertyName) const;
@@ -211,7 +212,7 @@ private:
     bool isShowingValidationMessage() const override { return boolAttributeValue(AXPropertyName::IsShowingValidationMessage); }
     String validationMessage() const override { return stringAttributeValue(AXPropertyName::ValidationMessage); }
     unsigned blockquoteLevel() const override { return unsignedAttributeValue(AXPropertyName::BlockquoteLevel); }
-    int headingLevel() const override { return intAttributeValue(AXPropertyName::HeadingLevel); }
+    unsigned headingLevel() const override { return intAttributeValue(AXPropertyName::HeadingLevel); }
     AccessibilityButtonState checkboxOrRadioValue() const override { return static_cast<AccessibilityButtonState>(intAttributeValue(AXPropertyName::AccessibilityButtonState)); }
     String valueDescription() const override { return stringAttributeValue(AXPropertyName::ValueDescription); }
     float valueForRange() const override { return floatAttributeValue(AXPropertyName::ValueForRange); }
@@ -274,6 +275,7 @@ private:
     LayoutRect boundingBoxRect() const override { return rectAttributeValue<LayoutRect>(AXPropertyName::BoundingBoxRect); }
     LayoutRect elementRect() const override { return rectAttributeValue<LayoutRect>(AXPropertyName::ElementRect); }
     IntPoint clickPoint() override { return intPointAttributeValue(AXPropertyName::ClickPoint); }
+    AXValue value() override { return { }; }
     void accessibilityText(Vector<AccessibilityText>& texts) const override;
     String brailleLabel() const override { return stringAttributeValue(AXPropertyName::BrailleLabel); }
     String brailleRoleDescription() const override { return stringAttributeValue(AXPropertyName::BrailleRoleDescription); }
@@ -311,7 +313,7 @@ private:
     bool isMathTableCell() const override { return boolAttributeValue(AXPropertyName::IsMathTableCell); }
     bool isMathMultiscript() const override { return boolAttributeValue(AXPropertyName::IsMathMultiscript); }
     bool isMathToken() const override { return boolAttributeValue(AXPropertyName::IsMathToken); }
-    AXCoreObject* mathRadicandObject() override { return objectAttributeValue(AXPropertyName::MathRadicandObject); }
+    std::optional<AccessibilityChildrenVector> mathRadicand() override;
     AXCoreObject* mathRootIndexObject() override { return objectAttributeValue(AXPropertyName::MathRootIndexObject); }
     AXCoreObject* mathUnderObject() override { return objectAttributeValue(AXPropertyName::MathUnderObject); }
     AXCoreObject* mathOverObject() override { return objectAttributeValue(AXPropertyName::MathOverObject); }
@@ -347,6 +349,7 @@ private:
     void setSelectedChildren(const AccessibilityChildrenVector&) override;
     void visibleChildren(AccessibilityChildrenVector& children) override { fillChildrenVectorForProperty(AXPropertyName::VisibleChildren, children); }
     void tabChildren(AccessibilityChildrenVector& children) override { fillChildrenVectorForProperty(AXPropertyName::TabChildren, children); }
+    AccessibilityChildrenVector contents() override;
     bool hasARIAValueNow() const override { return boolAttributeValue(AXPropertyName::HasARIAValueNow); }
     String tagName() const override { return stringAttributeValue(AXPropertyName::TagName); }
     const AccessibilityChildrenVector& children(bool updateChildrenIfNeeded = true) override;
@@ -374,7 +377,7 @@ private:
     void findMatchingObjects(AccessibilitySearchCriteria*, AccessibilityChildrenVector&) override;
 
     // Attributes retrieved from the root node only so that the data isn't duplicated on each node.
-    uint64_t sessionID() const override;
+    PAL::SessionID sessionID() const override;
     String documentURI() const override;
     String documentEncoding() const override;
 #if PLATFORM(COCOA)
@@ -582,15 +585,17 @@ private:
     Path elementPath() const override { return pathAttributeValue(AXPropertyName::Path); };
     bool supportsPath() const override { return boolAttributeValue(AXPropertyName::SupportsPath); }
     TextIteratorBehaviors textIteratorBehaviorForTextRange() const override;
+
+    bool isWidget() const override { return boolAttributeValue(AXPropertyName::IsWidget); }
     Widget* widget() const override;
     PlatformWidget platformWidget() const override;
-    
+    Widget* widgetForAttachmentView() const override;
+
     HashMap<String, AXEditingStyleValueVariant> resolvedEditingStyles() const override;
 #if PLATFORM(COCOA)
     RemoteAXObjectRef remoteParentObject() const override;
     FloatRect convertRectToPlatformSpace(const FloatRect&, AccessibilityConversionSpace) const override;
 #endif
-    Widget* widgetForAttachmentView() const override;
     Page* page() const override;
     Document* document() const override;
     FrameView* documentFrameView() const override;
@@ -599,13 +604,10 @@ private:
     Document* topDocument() const override;
     ScrollView* scrollView() const override;
     ScrollView* scrollViewAncestor() const override;
-    void childrenChanged() override;
-    void updateAccessibilityRole() override;
     void addChildren() override;
-    void addChild(AXCoreObject*) override;
-    void insertChild(AXCoreObject*, unsigned) override;
+    void addChild(AXCoreObject*, DescendIfIgnored = DescendIfIgnored::Yes) override;
+    void insertChild(AXCoreObject*, unsigned, DescendIfIgnored = DescendIfIgnored::Yes) override;
     bool canHaveChildren() const override;
-    bool hasChildren() const override { return boolAttributeValue(AXPropertyName::HasChildren); }
     void setNeedsToUpdateChildren() override;
     void setNeedsToUpdateSubtree() override;
     void clearChildren() override;
@@ -633,9 +635,6 @@ private:
     IntSize scrollContentsSize() const override;
     IntRect scrollVisibleContentRect() const override;
     void scrollToMakeVisible(const ScrollRectToVisibleOptions&) const override;
-    bool lastKnownIsIgnoredValue() override;
-    void setLastKnownIsIgnoredValue(bool) override;
-    void notifyIfIgnoredValueChanged() override;
     bool isMathScriptObject(AccessibilityMathScriptObjectType) const override;
     bool isMathMultiscriptObject(AccessibilityMathMultiscriptObjectType) const override;
     bool isAXHidden() const override;

@@ -45,7 +45,18 @@
 #include "MediaSample.h"
 #endif
 
+#if USE(GSTREAMER) && ENABLE(MEDIA_STREAM)
+#include "MediaSampleGStreamer.h"
+#endif
+
 namespace WebCore {
+
+#if !PLATFORM(COCOA)
+bool GraphicsContextGLOpenGL::isValid() const
+{
+    return true;
+}
+#endif
 
 void GraphicsContextGLOpenGL::resetBuffersToAutoClear()
 {
@@ -74,6 +85,17 @@ GCGLbitfield GraphicsContextGLOpenGL::getBuffersToAutoClear() const
 {
     return m_buffersToAutoClear;
 }
+
+#if !USE(ANGLE)
+bool GraphicsContextGLOpenGL::releaseThreadResources(ReleaseThreadResourceBehavior)
+{
+    return false;
+}
+
+void GraphicsContextGLOpenGL::platformReleaseThreadResources()
+{
+}
+#endif
 
 #if !USE(ANGLE)
 bool GraphicsContextGLOpenGL::texImage2DResourceSafe(GCGLenum target, GCGLint level, GCGLenum internalformat, GCGLsizei width, GCGLsizei height, GCGLint border, GCGLenum format, GCGLenum type, GCGLint unpackAlignment)
@@ -168,6 +190,10 @@ std::optional<PixelBuffer> GraphicsContextGLOpenGL::paintRenderingResultsToPixel
 #if !PLATFORM(COCOA) && ENABLE(MEDIA_STREAM)
 RefPtr<MediaSample> GraphicsContextGLOpenGL::paintCompositedResultsToMediaSample()
 {
+#if USE(GSTREAMER)
+    if (auto pixelBuffer = readCompositedResults())
+        return MediaSampleGStreamer::createImageSample(WTFMove(*pixelBuffer));
+#endif
     return nullptr;
 }
 #endif

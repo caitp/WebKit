@@ -50,6 +50,7 @@ $(PROJECT_DIR)/builtins/RegExpPrototype.js
 $(PROJECT_DIR)/builtins/RegExpStringIteratorPrototype.js
 $(PROJECT_DIR)/builtins/SetIteratorPrototype.js
 $(PROJECT_DIR)/builtins/SetPrototype.js
+$(PROJECT_DIR)/builtins/ShadowRealmPrototype.js
 $(PROJECT_DIR)/builtins/StringConstructor.js
 $(PROJECT_DIR)/builtins/StringIteratorPrototype.js
 $(PROJECT_DIR)/builtins/StringPrototype.js
@@ -165,6 +166,7 @@ $(PROJECT_DIR)/runtime/ObjectConstructor.cpp
 $(PROJECT_DIR)/runtime/ReflectObject.cpp
 $(PROJECT_DIR)/runtime/RegExpConstructor.cpp
 $(PROJECT_DIR)/runtime/SetPrototype.cpp
+$(PROJECT_DIR)/runtime/ShadowRealmPrototype.cpp
 $(PROJECT_DIR)/runtime/StringConstructor.cpp
 $(PROJECT_DIR)/runtime/StringPrototype.cpp
 $(PROJECT_DIR)/runtime/SymbolConstructor.cpp
@@ -197,6 +199,8 @@ $(PROJECT_DIR)/wasm/generateWasmOpsHeader.py
 $(PROJECT_DIR)/wasm/js/JSWebAssembly.cpp
 $(PROJECT_DIR)/wasm/js/WebAssemblyCompileErrorConstructor.cpp
 $(PROJECT_DIR)/wasm/js/WebAssemblyCompileErrorPrototype.cpp
+$(PROJECT_DIR)/wasm/js/WebAssemblyExceptionConstructor.cpp
+$(PROJECT_DIR)/wasm/js/WebAssemblyExceptionPrototype.cpp
 $(PROJECT_DIR)/wasm/js/WebAssemblyGlobalConstructor.cpp
 $(PROJECT_DIR)/wasm/js/WebAssemblyGlobalPrototype.cpp
 $(PROJECT_DIR)/wasm/js/WebAssemblyInstanceConstructor.cpp
@@ -211,6 +215,8 @@ $(PROJECT_DIR)/wasm/js/WebAssemblyRuntimeErrorConstructor.cpp
 $(PROJECT_DIR)/wasm/js/WebAssemblyRuntimeErrorPrototype.cpp
 $(PROJECT_DIR)/wasm/js/WebAssemblyTableConstructor.cpp
 $(PROJECT_DIR)/wasm/js/WebAssemblyTablePrototype.cpp
+$(PROJECT_DIR)/wasm/js/WebAssemblyTagConstructor.cpp
+$(PROJECT_DIR)/wasm/js/WebAssemblyTagPrototype.cpp
 $(PROJECT_DIR)/wasm/wasm.json
 $(PROJECT_DIR)/yarr/create_regex_tables
 $(PROJECT_DIR)/yarr/generateYarrCanonicalizeUnicode

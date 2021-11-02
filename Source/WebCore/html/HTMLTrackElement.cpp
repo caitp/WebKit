@@ -30,6 +30,7 @@
 #if ENABLE(VIDEO)
 
 #include "ContentSecurityPolicy.h"
+#include "ElementInlines.h"
 #include "Event.h"
 #include "EventNames.h"
 #include "HTMLMediaElement.h"
@@ -37,6 +38,7 @@
 #include "LoadableTextTrack.h"
 #include "Logging.h"
 #include <wtf/IsoMallocInlines.h>
+#include <wtf/SetForScope.h>
 #include <wtf/text/CString.h>
 
 namespace WebCore {

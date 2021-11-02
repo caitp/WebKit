@@ -38,7 +38,7 @@
 
 #include "Shared/Sandbox/preferences.sb"
 
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500
+#if PLATFORM(MAC)
 ;;;
 ;;; The following rules were originally contained in 'common.sb'. We are duplicating them here so we can
 ;;; remove unneeded sandbox extensions.
@@ -62,22 +62,27 @@
        (subpath "/usr/appleinternal/lib") ;; <rdar://problem/72317112>
 )
 
+(allow file-read-metadata
+       (literal "/var"))
 (allow file-read-metadata (with telemetry)
        (literal "/etc")
        (literal "/tmp")
-       (literal "/var")
        (literal "/private/etc/localtime"))
 
 (allow file-read-metadata (with telemetry) (path-ancestors "/System/Volumes/Data/private"))
 
-(allow file-read* (with telemetry) (literal "/"))
+(allow file-read* (literal "/"))
+
+(allow file-read*
+       (subpath "/System"))
 
 (allow file-read* (with telemetry)
        (subpath "/Library/Apple/System")
        (subpath "/Library/Filesystems/NetFSPlugins")
        (subpath "/Library/Preferences/Logging")      ; Logging Rethink
-       (subpath "/System")
+#if __MAC_OS_X_VERSION_MIN_REQUIRED < 110000
        (subpath "/private/var/db/dyld")
+#endif
        (subpath "/private/var/db/timezone")
        (subpath "/usr/lib")
        (subpath "/usr/share"))
@@ -213,7 +218,7 @@
         "sysctl.name2oid"
         "vm.footprint_suspend")
     (sysctl-name-prefix "kern.proc.pid.")
-    (sysctl-name-regex #"^net.routetable")
+    (sysctl-name-prefix "net.routetable")
     (sysctl-name-prefix "hw.optional.") ;; <rdar://problem/71462790>
     (sysctl-name-prefix "hw.perflevel") ;; <rdar://problem/76783596>
 )
@@ -336,7 +341,7 @@
 (allow ipc-posix-shm-read-data (with telemetry)
     (ipc-posix-name "FNetwork.defaultStorageSession")
     (ipc-posix-name-regex #"\.PrivateBrowsing-")
-    (ipc-posix-name-regex #"^WebKit Test-")
+    (ipc-posix-name-prefix "^WebKit Test-")
     (ipc-posix-name "/com.apple.AppSSO.version")
 )
 
@@ -363,6 +368,9 @@
 
 (allow mach-lookup (with telemetry) (global-name "com.apple.webkit.adattributiond.service"))
 (allow mach-lookup (with telemetry) (global-name "org.webkit.pcmtestdaemon.service"))
+
+(allow mach-lookup (with telemetry) (global-name "com.apple.webkit.webpushd.service"))
+(allow mach-lookup (with telemetry) (global-name "org.webkit.webpushtestdaemon.service"))
 
 (with-filter (uid 0)
     (allow mach-lookup (with telemetry)
@@ -450,11 +458,10 @@
     (subpath "/Library/KerberosPlugins/GSSAPI")
     (subpath "/Library/KerberosPlugins/KerberosFrameworkPlugins"))
 
-(if (defined? 'vnode-type)
-    (deny file-write-create (vnode-type SYMLINK)))
+(deny file-write-create (vnode-type SYMLINK))
 
 ;; Reserve a namespace for additional protected extended attributes.
-(deny file-read-xattr file-write-xattr (xattr-regex #"^com\.apple\.security\.private\."))
+(deny file-read-xattr file-write-xattr (xattr-prefix "com.apple.security.private."))
 
 (deny file-read* file-write* (with no-log)
     ;; FIXME: Should be removed after <rdar://problem/10463881> is fixed.
@@ -516,3 +523,72 @@
 (allow file-read* (with telemetry)
     (prefix "/private/var/db/com.apple.networkextension.")
 )
+
+(when (defined? 'syscall-unix)
+    (allow syscall-unix (with telemetry))
+    (allow syscall-unix (syscall-number
+        SYS___channel_get_info
+        SYS___channel_sync
+        SYS___disable_threadsignal
+        SYS___mac_syscall
+        SYS_access
+        SYS_bsdthread_create
+        SYS_bsdthread_ctl
+        SYS_bsdthread_terminate
+        SYS_change_fdguard_np
+        SYS_csrctl
+        SYS_fcntl
+        SYS_fcntl_nocancel
+        SYS_fsgetpath
+        SYS_fstat
+        SYS_fstatat
+        SYS_fstatfs
+        SYS_fsync
+        SYS_ftruncate
+        SYS_getattrlist
+        SYS_getaudit_addr
+        SYS_getdirentries
+        SYS_getentropy
+        SYS_geteuid
+        SYS_getfsstat
+        SYS_getrlimit
+        SYS_gettimeofday
+        SYS_getuid
+        SYS_guarded_close_np
+        SYS_guarded_open_np
+        SYS_guarded_pwrite_np
+        SYS_iopolicysys
+        SYS_issetugid
+        SYS_kevent_id
+        SYS_kevent_qos
+        SYS_lseek
+        SYS_lstat
+        SYS_madvise
+        SYS_mkdirat
+        SYS_mmap
+        SYS_mprotect
+        SYS_msync
+        SYS_munmap
+        SYS_necp_client_action
+        SYS_necp_open
+        SYS_pathconf
+        SYS_pread
+        SYS_pread_nocancel
+        SYS_psynch_cvbroad
+        SYS_psynch_cvsignal
+        SYS_psynch_cvwait
+        SYS_psynch_mutexdrop
+        SYS_psynch_mutexwait
+        SYS_psynch_rw_unlock
+        SYS_psynch_rw_wrlock
+        SYS_read
+        SYS_rmdir
+        SYS_select
+        SYS_setattrlistat
+        SYS_setrlimit
+        SYS_stat
+        SYS_statfs
+        SYS_thread_selfid
+        SYS_ulock_wait
+        SYS_ulock_wake
+        SYS_workq_kernreturn)))

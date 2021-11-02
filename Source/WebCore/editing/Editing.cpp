@@ -28,8 +28,9 @@
 
 #include "AXObjectCache.h"
 #include "CachedImage.h"
-#include "Document.h"
+#include "DocumentInlines.h"
 #include "Editor.h"
+#include "ElementInlines.h"
 #include "Frame.h"
 #include "HTMLBodyElement.h"
 #include "HTMLDListElement.h"
@@ -995,6 +996,9 @@ int indexForVisiblePosition(const VisiblePosition& visiblePosition, RefPtr<Conta
 // FIXME: Merge this function with the one above.
 int indexForVisiblePosition(Node& node, const VisiblePosition& visiblePosition, bool forSelectionPreservation)
 {
+    if (visiblePosition.isNull())
+        return 0;
+
     auto range = makeSimpleRange(makeBoundaryPointBeforeNodeContents(node), visiblePosition);
     TextIteratorBehaviors behaviors;
     if (forSelectionPreservation)

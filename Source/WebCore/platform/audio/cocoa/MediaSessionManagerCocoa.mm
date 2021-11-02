@@ -40,6 +40,7 @@
 #import "PlatformStrategies.h"
 #import "SharedBuffer.h"
 #import "VP9UtilitiesCocoa.h"
+#import <pal/SessionID.h>
 #import <wtf/BlockObjCExceptions.h>
 #import <wtf/Function.h>
 
@@ -244,7 +245,7 @@ void MediaSessionManagerCocoa::sessionWillEndPlayback(PlatformMediaSession& sess
 {
     PlatformMediaSessionManager::sessionWillEndPlayback(session, delayCallingUpdateNowPlaying);
 
-    callOnMainThread([weakSession = makeWeakPtr(session)] {
+    callOnMainThread([weakSession = WeakPtr { session }] {
         if (weakSession)
             weakSession->updateMediaUsageIfChanged();
     });

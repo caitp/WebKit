@@ -572,7 +572,7 @@ void BitmapImage::resetAnimation()
     destroyDecodedDataIfNecessary(true);
 }
 
-void BitmapImage::decode(WTF::Function<void()>&& callback)
+void BitmapImage::decode(Function<void()>&& callback)
 {
     if (!m_decodingCallbacks)
         m_decodingCallbacks = makeUnique<Vector<Function<void()>, 1>>();
@@ -659,7 +659,9 @@ void BitmapImage::imageFrameAvailableAtIndex(size_t index)
 
 DestinationColorSpace BitmapImage::colorSpace()
 {
-    return nativeImage()->colorSpace();
+    if (auto nativeImage = this->nativeImage())
+        return nativeImage->colorSpace();
+    return DestinationColorSpace::SRGB();
 }
 
 unsigned BitmapImage::decodeCountForTesting() const

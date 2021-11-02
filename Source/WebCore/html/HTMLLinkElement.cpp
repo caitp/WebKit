@@ -34,8 +34,9 @@
 #include "CrossOriginAccessControl.h"
 #include "DOMTokenList.h"
 #include "DefaultResourceLoadPriority.h"
-#include "Document.h"
+#include "DocumentInlines.h"
 #include "DocumentLoader.h"
+#include "ElementInlines.h"
 #include "Event.h"
 #include "EventNames.h"
 #include "EventSender.h"
@@ -91,7 +92,6 @@ inline HTMLLinkElement::HTMLLinkElement(const QualifiedName& tagName, Document& 
     , m_disabledState(Unset)
     , m_loading(false)
     , m_createdByParser(createdByParser)
-    , m_firedLoad(false)
     , m_loadedResource(false)
     , m_isHandlingBeforeLoad(false)
     , m_allowPrefetchLoadAndErrorForTesting(false)
@@ -563,11 +563,8 @@ DOMTokenList& HTMLLinkElement::relList()
 
 void HTMLLinkElement::notifyLoadedSheetAndAllCriticalSubresources(bool errorOccurred)
 {
-    if (m_firedLoad)
-        return;
     m_loadedResource = !errorOccurred;
     linkLoadEventSender().dispatchEventSoon(*this);
-    m_firedLoad = true;
 }
 
 void HTMLLinkElement::startLoadingDynamicSheet()

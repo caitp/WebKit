@@ -145,9 +145,14 @@ bool ContentSecurityPolicySourceList::matches(const URL& url, bool didReceiveRed
     return false;
 }
 
-bool ContentSecurityPolicySourceList::matches(const ContentSecurityPolicyHash& hash) const
+bool ContentSecurityPolicySourceList::matches(const Vector<ContentSecurityPolicyHash>& hashes) const
 {
-    return m_hashes.contains(hash);
+    for (auto& hash : hashes) {
+        if (m_hashes.contains(hash))
+            return true;
+    }
+
+    return false;
 }
 
 bool ContentSecurityPolicySourceList::matches(const String& nonce) const
@@ -235,6 +240,11 @@ template<typename CharacterType> std::optional<ContentSecurityPolicySourceList::
 
     if (skipExactlyIgnoringASCIICase(buffer, "'unsafe-eval'")) {
         m_allowEval = true;
+        return source;
+    }
+    
+    if (skipExactlyIgnoringASCIICase(buffer, "'unsafe-hashes'")) {
+        m_allowUnsafeHashes = true;
         return source;
     }
 

@@ -298,6 +298,7 @@ CurlHandle::CurlHandle()
     m_handle = curl_easy_init();
     curl_easy_setopt(m_handle, CURLOPT_ERRORBUFFER, m_errorBuffer);
     curl_easy_setopt(m_handle, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(m_handle, CURLOPT_COOKIEFILE, nullptr);
 
     enableShareHandle();
     enableAllowedProtocols();
@@ -351,7 +352,7 @@ void CurlHandle::enableSSLForHost(const String& host)
 #if OS(WINDOWS)
     curl_easy_setopt(m_handle, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
 #else
-    if (auto* path = WTF::get_if<String>(sslHandle.getCACertInfo()))
+    if (auto* path = std::get_if<String>(&sslHandle.getCACertInfo()))
         setCACertPath(path->utf8().data());
 #endif
 }

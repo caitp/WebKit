@@ -36,6 +36,7 @@
 #include "CachedResource.h"
 #include "ContentSecurityPolicy.h"
 #include "DOMTokenList.h"
+#include "ElementInlines.h"
 #include "ElementRareData.h"
 #include "HTMLElement.h"
 #include "HTMLImageElement.h"
@@ -201,11 +202,11 @@ void StyledElement::setInlineStyleFromString(const AtomString& newStyleString)
 
 void StyledElement::styleAttributeChanged(const AtomString& newStyleString, AttributeModificationReason reason)
 {
-    auto startLineNumber = WTF::OrdinalNumber::beforeFirst();
+    auto startLineNumber = OrdinalNumber::beforeFirst();
     if (document().scriptableDocumentParser() && !document().isInDocumentWrite())
         startLineNumber = document().scriptableDocumentParser()->textPosition().m_line;
 
-    if (reason == ModifiedByCloning || document().contentSecurityPolicy()->allowInlineStyle(document().url().string(), startLineNumber, { }, isInUserAgentShadowTree()))
+    if (reason == ModifiedByCloning || document().contentSecurityPolicy()->allowInlineStyle(document().url().string(), startLineNumber, newStyleString.string(), CheckUnsafeHashes::Yes, isInUserAgentShadowTree()))
         setInlineStyleFromString(newStyleString);
 
     elementData()->setStyleAttributeIsDirty(false);

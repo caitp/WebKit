@@ -52,10 +52,10 @@
 #include "RenderElement.h"
 #include "SharedBuffer.h"
 #include "SuspendableTimer.h"
+#include <variant>
 #include <wtf/IsoMallocInlines.h>
 #include <wtf/Scope.h>
 #include <wtf/StdLibExtras.h>
-#include <wtf/Variant.h>
 
 namespace WebCore {
 
@@ -235,13 +235,6 @@ static InterpolationQuality interpolationQualityForResizeQuality(ImageBitmapOpti
     return InterpolationQuality::Default;
 }
 
-static ImageOrientation imageOrientationForOrientation(ImageBitmapOptions::Orientation orientation)
-{
-    if (orientation == ImageBitmapOptions::Orientation::FlipY)
-        return ImageOrientation(ImageOrientation::OriginBottomLeft);
-    return ImageOrientation();
-}
-
 static AlphaPremultiplication alphaPremultiplicationForPremultiplyAlpha(ImageBitmapOptions::PremultiplyAlpha premultiplyAlpha)
 {
     // The default is to premultiply - this is the least surprising behavior.
@@ -373,21 +366,25 @@ void ImageBitmap::createPromise(ScriptExecutionContext& scriptExecutionContext, 
         return;
     }
 
-    auto imageForRender = cachedImage->imageForRenderer(imageElement->renderer());
-    if (!imageForRender) {
+    auto imageForRenderer = cachedImage->imageForRenderer(imageElement->renderer());
+    if (!imageForRenderer) {
         promise.reject(InvalidStateError, "Cannot create ImageBitmap from image that can't be rendered");
         return;
     }
 
     auto outputSize = outputSizeForSourceRectangle(sourceRectangle.returnValue(), options);
-    auto bitmapData = createImageBuffer(scriptExecutionContext, outputSize, bufferRenderingMode, imageForRender->colorSpace());
+    auto bitmapData = createImageBuffer(scriptExecutionContext, outputSize, bufferRenderingMode, imageForRenderer->colorSpace());
     if (!bitmapData) {
         resolveWithBlankImageBuffer(scriptExecutionContext, !taintsOrigin(*cachedImage), WTFMove(promise));
         return;
     }
 
+    auto orientation = imageForRenderer->orientation();
+    if (orientation == ImageOrientation::FromImage)
+        orientation = ImageOrientation::None;
+
     FloatRect destRect(FloatPoint(), outputSize);
-    bitmapData->context().drawImage(*imageForRender, destRect, sourceRectangle.releaseReturnValue(), { interpolationQualityForResizeQuality(options.resizeQuality), imageOrientationForOrientation(options.imageOrientation) });
+    bitmapData->context().drawImage(*imageForRenderer, destRect, sourceRectangle.releaseReturnValue(), { interpolationQualityForResizeQuality(options.resizeQuality), options.resolvedImageOrientation(orientation) });
 
     // 9. If the origin of image's image is not the same origin as the origin specified by the
     //    entry settings object, then set the origin-clean flag of the ImageBitmap object's
@@ -455,7 +452,7 @@ void ImageBitmap::createPromise(ScriptExecutionContext& scriptExecutionContext, 
     }
 
     FloatRect destRect(FloatPoint(), outputSize);
-    bitmapData->context().drawImage(*imageForRender, destRect, sourceRectangle.releaseReturnValue(), { interpolationQualityForResizeQuality(options.resizeQuality), imageOrientationForOrientation(options.imageOrientation) });
+    bitmapData->context().drawImage(*imageForRender, destRect, sourceRectangle.releaseReturnValue(), { interpolationQualityForResizeQuality(options.resizeQuality), options.resolvedImageOrientation(ImageOrientation::None) });
 
     // 5. Set the origin-clean flag of the ImageBitmap object's bitmap to the same value as
     //    the origin-clean flag of the canvas element's bitmap.
@@ -512,8 +509,12 @@ void ImageBitmap::createPromise(ScriptExecutionContext& scriptExecutionContext, 
 
     auto outputSize = outputSizeForSourceRectangle(sourceRectangle, options);
 
-    // FIXME: Add support for color spaces / pixel formats to ImageBitmap.
-    auto bitmapData = video->createBufferForPainting(outputSize, bufferRenderingMode, DestinationColorSpace::SRGB(), PixelFormat::BGRA8);
+    auto colorSpace = video->colorSpace();
+    if (!colorSpace)
+        colorSpace = DestinationColorSpace::SRGB();
+
+    // FIXME: Add support for pixel formats to ImageBitmap.
+    auto bitmapData = video->createBufferForPainting(outputSize, bufferRenderingMode, *colorSpace, PixelFormat::BGRA8);
     if (!bitmapData) {
         resolveWithBlankImageBuffer(scriptExecutionContext, !taintsOrigin(scriptExecutionContext.securityOrigin(), *video), WTFMove(promise));
         return;
@@ -525,7 +526,7 @@ void ImageBitmap::createPromise(ScriptExecutionContext& scriptExecutionContext, 
         c.clip(FloatRect(FloatPoint(), outputSize));
         auto scaleX = float(outputSize.width()) / float(sourceRectangle.width());
         auto scaleY = float(outputSize.height()) / float(sourceRectangle.height());
-        if (options.imageOrientation == ImageBitmapOptions::Orientation::FlipY) {
+        if (options.orientation == ImageBitmapOptions::Orientation::FlipY) {
             c.scale(FloatSize(scaleX, -scaleY));
             c.translate(IntPoint(-sourceRectangle.location().x(), sourceRectangle.location().y() - outputSize.height()));
         } else {
@@ -571,7 +572,7 @@ void ImageBitmap::createPromise(ScriptExecutionContext& scriptExecutionContext, 
 
     // 4. Let the ImageBitmap object's bitmap data be a copy of the image argument's
     //    bitmap data, cropped to the source rectangle with formatting.
-    auto sourceRectangle = croppedSourceRectangleWithFormatting(existingImageBitmap->buffer()->logicalSize(), options, WTFMove(rect));
+    auto sourceRectangle = croppedSourceRectangleWithFormatting(existingImageBitmap->buffer()->truncatedLogicalSize(), options, WTFMove(rect));
     if (sourceRectangle.hasException()) {
         promise.reject(sourceRectangle.releaseException());
         return;
@@ -588,7 +589,7 @@ void ImageBitmap::createPromise(ScriptExecutionContext& scriptExecutionContext, 
     auto imageForRender = existingImageBitmap->buffer()->copyImage();
 
     FloatRect destRect(FloatPoint(), outputSize);
-    bitmapData->context().drawImage(*imageForRender, destRect, sourceRectangle.releaseReturnValue(), { interpolationQualityForResizeQuality(options.resizeQuality), imageOrientationForOrientation(options.imageOrientation) });
+    bitmapData->context().drawImage(*imageForRender, destRect, sourceRectangle.releaseReturnValue(), { interpolationQualityForResizeQuality(options.resizeQuality), options.resolvedImageOrientation(ImageOrientation::None) });
 
     // 5. Set the origin-clean flag of the ImageBitmap object's bitmap to the same
     //    value as the origin-clean flag of the bitmap of the image argument.
@@ -749,7 +750,7 @@ void ImageBitmap::createFromBuffer(ScriptExecutionContext& scriptExecutionContex
     auto observer = ImageBitmapImageObserver::create(mimeType, expectedContentLength, sourceURL);
     auto image = BitmapImage::create(observer.ptr());
     auto result = image->setData(sharedBuffer.copyRef(), true);
-    if (result != EncodedDataStatus::Complete) {
+    if (result != EncodedDataStatus::Complete || image->isNull()) {
         promise.reject(InvalidStateError, "Cannot decode the data in the argument to createImageBitmap");
         return;
     }
@@ -768,7 +769,7 @@ void ImageBitmap::createFromBuffer(ScriptExecutionContext& scriptExecutionContex
     }
 
     FloatRect destRect(FloatPoint(), outputSize);
-    bitmapData->context().drawImage(image, destRect, sourceRectangle.releaseReturnValue(), { interpolationQualityForResizeQuality(options.resizeQuality), imageOrientationForOrientation(options.imageOrientation) });
+    bitmapData->context().drawImage(image, destRect, sourceRectangle.releaseReturnValue(), { interpolationQualityForResizeQuality(options.resizeQuality), options.resolvedImageOrientation(ImageOrientation::None) });
 
     OptionSet<SerializationState> serializationState = SerializationState::OriginClean;
     if (alphaPremultiplicationForPremultiplyAlpha(options.premultiplyAlpha) == AlphaPremultiplication::Premultiplied)
@@ -815,7 +816,7 @@ void ImageBitmap::createPromise(ScriptExecutionContext& scriptExecutionContext, 
     // If no cropping, resizing, flipping, etc. are needed, then simply use the
     // resulting ImageBuffer directly.
     auto alphaPremultiplication = alphaPremultiplicationForPremultiplyAlpha(options.premultiplyAlpha);
-    if (sourceRectangle.returnValue().location().isZero() && sourceRectangle.returnValue().size() == imageData->size() && sourceRectangle.returnValue().size() == outputSize && options.imageOrientation == ImageBitmapOptions::Orientation::None) {
+    if (sourceRectangle.returnValue().location().isZero() && sourceRectangle.returnValue().size() == imageData->size() && sourceRectangle.returnValue().size() == outputSize && options.orientation == ImageBitmapOptions::Orientation::None) {
         bitmapData->putPixelBuffer(imageData->pixelBuffer(), sourceRectangle.releaseReturnValue(), { }, alphaPremultiplication);
         
         auto imageBitmap = create(ImageBitmapBacking(WTFMove(bitmapData)));
@@ -833,7 +834,7 @@ void ImageBitmap::createPromise(ScriptExecutionContext& scriptExecutionContext, 
     }
     tempBitmapData->putPixelBuffer(imageData->pixelBuffer(), IntRect(0, 0, imageData->width(), imageData->height()), { }, alphaPremultiplication);
     FloatRect destRect(FloatPoint(), outputSize);
-    bitmapData->context().drawImageBuffer(*tempBitmapData, destRect, sourceRectangle.releaseReturnValue(), { interpolationQualityForResizeQuality(options.resizeQuality), imageOrientationForOrientation(options.imageOrientation) });
+    bitmapData->context().drawImageBuffer(*tempBitmapData, destRect, sourceRectangle.releaseReturnValue(), { interpolationQualityForResizeQuality(options.resizeQuality), options.resolvedImageOrientation(ImageOrientation::None) });
 
     // 6.4.1. Resolve p with ImageBitmap.
     auto imageBitmap = create({ WTFMove(bitmapData) });
@@ -845,6 +846,7 @@ ImageBitmap::ImageBitmap(std::optional<ImageBitmapBacking>&& backingStore)
     : m_backingStore(WTFMove(backingStore))
 {
     ASSERT_IMPLIES(m_backingStore, m_backingStore->buffer());
+    updateMemoryCost();
 }
 
 ImageBitmap::~ImageBitmap()
@@ -857,7 +859,10 @@ ImageBitmap::~ImageBitmap()
 
 std::optional<ImageBitmapBacking> ImageBitmap::takeImageBitmapBacking()
 {
-    return std::exchange(m_backingStore, std::nullopt);
+    auto result = std::exchange(m_backingStore, std::nullopt);
+    if (result)
+        updateMemoryCost();
+    return result;
 }
 
 RefPtr<ImageBuffer> ImageBitmap::takeImageBuffer()
@@ -866,6 +871,22 @@ RefPtr<ImageBuffer> ImageBitmap::takeImageBuffer()
         return backingStore->takeImageBuffer();
     ASSERT(isDetached());
     return nullptr;
+}
+
+void ImageBitmap::updateMemoryCost()
+{
+    if (m_backingStore) {
+        if (auto imageBuffer = m_backingStore->buffer()) {
+            m_memoryCost = imageBuffer->memoryCost();
+            return;
+        }
+    }
+    m_memoryCost = 0;
+}
+
+size_t ImageBitmap::memoryCost() const
+{
+    return m_memoryCost;
 }
 
 } // namespace WebCore

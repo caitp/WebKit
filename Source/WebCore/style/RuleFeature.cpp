@@ -84,7 +84,11 @@ MatchElement RuleFeatureSet::computeNextMatchElement(MatchElement matchElement, 
                 return MatchElement::AnySibling;
             return matchElement == MatchElement::Subject ? MatchElement::DirectSibling : MatchElement::IndirectSibling;
         case CSSSelector::ShadowDescendant:
+        case CSSSelector::ShadowPartDescendant:
             return MatchElement::Host;
+        case CSSSelector::ShadowSlotted:
+            // FIXME: Implement accurate invalidation.
+            return matchElement;
         };
     }
     switch (relation) {
@@ -97,7 +101,11 @@ MatchElement RuleFeatureSet::computeNextMatchElement(MatchElement matchElement, 
     case CSSSelector::DirectAdjacent:
         return matchElement == MatchElement::Parent ? MatchElement::ParentSibling : MatchElement::AncestorSibling;
     case CSSSelector::ShadowDescendant:
+    case CSSSelector::ShadowPartDescendant:
         return MatchElement::Host;
+    case CSSSelector::ShadowSlotted:
+        // FIXME: Implement accurate invalidation.
+        return matchElement;
     };
     ASSERT_NOT_REACHED();
     return matchElement;

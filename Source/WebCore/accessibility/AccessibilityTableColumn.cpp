@@ -181,9 +181,9 @@ bool AccessibilityTableColumn::computeAccessibilityIsIgnored() const
     
 void AccessibilityTableColumn::addChildren()
 {
-    ASSERT(!m_haveChildren); 
+    ASSERT(!m_childrenInitialized); 
     
-    m_haveChildren = true;
+    m_childrenInitialized = true;
     if (!is<AccessibilityTable>(m_parent))
         return;
 
@@ -202,7 +202,7 @@ void AccessibilityTableColumn::addChildren()
         if (m_children.size() > 0 && m_children.last() == cell)
             continue;
             
-        m_children.append(cell);
+        addChild(cell);
     }
 }
     

@@ -945,10 +945,10 @@ inline void BuilderCustom::applyTextOrBoxShadowValue(BuilderState& builderState,
     for (auto& item : downcast<CSSValueList>(value)) {
         auto& shadowValue = downcast<CSSShadowValue>(item.get());
         auto conversionData = builderState.cssToLengthConversionData();
-        auto x = shadowValue.x->computeLength<LayoutUnit>(conversionData);
-        auto y = shadowValue.y->computeLength<LayoutUnit>(conversionData);
-        int blur = shadowValue.blur ? shadowValue.blur->computeLength<int>(conversionData) : 0;
-        auto spread = shadowValue.spread ? shadowValue.spread->computeLength<LayoutUnit>(conversionData) : LayoutUnit(0);
+        auto x = shadowValue.x->computeLength<Length>(conversionData);
+        auto y = shadowValue.y->computeLength<Length>(conversionData);
+        auto blur = shadowValue.blur ? shadowValue.blur->computeLength<Length>(conversionData) : Length(0, LengthType::Fixed);
+        auto spread = shadowValue.spread ? shadowValue.spread->computeLength<Length>(conversionData) : Length(0, LengthType::Fixed);
         ShadowStyle shadowStyle = shadowValue.style && shadowValue.style->valueID() == CSSValueInset ? ShadowStyle::Inset : ShadowStyle::Normal;
         Color color;
         if (shadowValue.color)
@@ -956,7 +956,7 @@ inline void BuilderCustom::applyTextOrBoxShadowValue(BuilderState& builderState,
         else
             color = builderState.style().color();
 
-        auto shadowData = makeUnique<ShadowData>(LayoutPoint(x, y), blur, spread, shadowStyle, property == CSSPropertyWebkitBoxShadow, color.isValid() ? color : Color::transparentBlack);
+        auto shadowData = makeUnique<ShadowData>(LengthPoint(x, y), blur, spread, shadowStyle, property == CSSPropertyWebkitBoxShadow, color.isValid() ? color : Color::transparentBlack);
         if (property == CSSPropertyTextShadow)
             builderState.style().setTextShadow(WTFMove(shadowData), !isFirstEntry); // add to the list if this is not the first entry
         else
@@ -1277,6 +1277,9 @@ inline void BuilderCustom::applyValueContain(BuilderState& builderState, CSSValu
         case CSSValuePaint:
             containment.add(Containment::Paint);
             break;
+        case CSSValueStyle:
+            containment.add(Containment::Style);
+            break;
         default:
             break;
         };
@@ -1517,6 +1520,7 @@ inline void BuilderCustom::applyValueStroke(BuilderState& builderState, CSSValue
 inline void BuilderCustom::applyInitialContent(BuilderState& builderState)
 {
     builderState.style().clearContent();
+    builderState.style().setHasExplicitlyClearedContent(true);
 }
 
 inline void BuilderCustom::applyInheritContent(BuilderState&)
@@ -1531,6 +1535,7 @@ inline void BuilderCustom::applyValueContent(BuilderState& builderState, CSSValu
         const auto& primitiveValue = downcast<CSSPrimitiveValue>(value);
         ASSERT_UNUSED(primitiveValue, primitiveValue.valueID() == CSSValueNormal || primitiveValue.valueID() == CSSValueNone);
         builderState.style().clearContent();
+        builderState.style().setHasExplicitlyClearedContent(true);
         return;
     }
 

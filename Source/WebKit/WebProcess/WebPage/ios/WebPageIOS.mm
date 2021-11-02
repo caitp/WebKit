@@ -161,6 +161,8 @@
 
 namespace WebKit {
 
+enum class SelectionWasFlipped : bool { No, Yes };
+
 // FIXME: Unclear if callers in this file are correctly choosing which of these two functions to use.
 
 static String plainTextForContext(const SimpleRange& range)
@@ -328,7 +330,7 @@ void WebPage::getPlatformEditorState(Frame& frame, EditorState& result) const
     if (selectedRange) {
         auto markers = frame.document()->markers().markersInRange(*selectedRange, DocumentMarker::MarkerType::DictationAlternatives);
         postLayoutData.dictationContextsForSelection = WTF::map(markers, [] (auto* marker) {
-            return WTF::get<DocumentMarker::DictationData>(marker->data()).context;
+            return std::get<DocumentMarker::DictationData>(marker->data()).context;
         });
     }
 #endif
@@ -810,7 +812,7 @@ void WebPage::didFinishContentChangeObserving(WKContentChange observedContentCha
     LOG_WITH_STREAM(ContentObservation, stream << "didFinishContentChangeObserving: pending target node(" << m_pendingSyntheticClickNode << ")");
     if (!m_pendingSyntheticClickNode)
         return;
-    callOnMainRunLoop([protectedThis = Ref { *this }, targetNode = Ref<Node>(*m_pendingSyntheticClickNode), originalDocument = makeWeakPtr(m_pendingSyntheticClickNode->document()), observedContentChange, location = m_pendingSyntheticClickLocation, modifiers = m_pendingSyntheticClickModifiers, pointerId = m_pendingSyntheticClickPointerId] {
+    callOnMainRunLoop([protectedThis = Ref { *this }, targetNode = Ref<Node>(*m_pendingSyntheticClickNode), originalDocument = WeakPtr { m_pendingSyntheticClickNode->document() }, observedContentChange, location = m_pendingSyntheticClickLocation, modifiers = m_pendingSyntheticClickModifiers, pointerId = m_pendingSyntheticClickPointerId] {
         if (protectedThis->m_isClosed || !protectedThis->corePage())
             return;
         if (!originalDocument || &targetNode->document() != originalDocument)
@@ -1503,7 +1505,7 @@ void WebPage::selectWithGesture(const IntPoint& point, GestureType gestureType, 
     completionHandler(point, gestureType, gestureState, flags);
 }
 
-static std::optional<SimpleRange> rangeForPointInRootViewCoordinates(Frame& frame, const IntPoint& pointInRootViewCoordinates, bool baseIsStart)
+static std::pair<std::optional<SimpleRange>, SelectionWasFlipped> rangeForPointInRootViewCoordinates(Frame& frame, const IntPoint& pointInRootViewCoordinates, bool baseIsStart, bool selectionFlippingEnabled)
 {
     VisibleSelection existingSelection = frame.selection().selection();
     VisiblePosition selectionStart = existingSelection.visibleStart();
@@ -1511,26 +1513,28 @@ static std::optional<SimpleRange> rangeForPointInRootViewCoordinates(Frame& fram
 
     auto pointInDocument = frame.view()->rootViewToContents(pointInRootViewCoordinates);
 
-    auto node = selectionStart.deepEquivalent().containerNode();
-    if (node && node->renderStyle() && node->renderStyle()->isVerticalWritingMode()) {
-        if (baseIsStart) {
-            int startX = selectionStart.absoluteCaretBounds().center().x();
-            if (pointInDocument.x() > startX)
-                pointInDocument.setX(startX);
+    if (!selectionFlippingEnabled) {
+        auto node = selectionStart.deepEquivalent().containerNode();
+        if (node && node->renderStyle() && node->renderStyle()->isVerticalWritingMode()) {
+            if (baseIsStart) {
+                int startX = selectionStart.absoluteCaretBounds().center().x();
+                if (pointInDocument.x() > startX)
+                    pointInDocument.setX(startX);
+            } else {
+                int endX = selectionEnd.absoluteCaretBounds().center().x();
+                if (pointInDocument.x() < endX)
+                    pointInDocument.setX(endX);
+            }
         } else {
-            int endX = selectionEnd.absoluteCaretBounds().center().x();
-            if (pointInDocument.x() < endX)
-                pointInDocument.setX(endX);
-        }
-    } else {
-        if (baseIsStart) {
-            int startY = selectionStart.absoluteCaretBounds().center().y();
-            if (pointInDocument.y() < startY)
-                pointInDocument.setY(startY);
-        } else {
-            int endY = selectionEnd.absoluteCaretBounds().center().y();
-            if (pointInDocument.y() > endY)
-                pointInDocument.setY(endY);
+            if (baseIsStart) {
+                int startY = selectionStart.absoluteCaretBounds().center().y();
+                if (pointInDocument.y() < startY)
+                    pointInDocument.setY(startY);
+            } else {
+                int endY = selectionEnd.absoluteCaretBounds().center().y();
+                if (pointInDocument.y() > endY)
+                    pointInDocument.setY(endY);
+            }
         }
     }
 
@@ -1542,10 +1546,11 @@ static std::optional<SimpleRange> rangeForPointInRootViewCoordinates(Frame& fram
 
     RefPtr targetNode = hitTest.targetNode();
     if (targetNode && !HTMLElement::shouldExtendSelectionToTargetNode(*targetNode, existingSelection))
-        return std::nullopt;
+        return { std::nullopt, SelectionWasFlipped::No };
 
-    std::optional<SimpleRange> range;
     VisiblePosition result;
+    std::optional<SimpleRange> range;
+    SelectionWasFlipped selectionFlipped = SelectionWasFlipped::No;
 
     if (targetNode)
         result = frame.eventHandler().selectionExtentRespectingEditingBoundary(frame.selection().selection(), hitTest.localPoint(), targetNode.get()).deepEquivalent();
@@ -1553,25 +1558,37 @@ static std::optional<SimpleRange> rangeForPointInRootViewCoordinates(Frame& fram
         result = frame.visiblePositionForPoint(pointInDocument).deepEquivalent();
     
     if (baseIsStart) {
-        if (result <= selectionStart)
+        bool flipSelection = result < selectionStart;
+
+        if ((flipSelection && !selectionFlippingEnabled) || result == selectionStart)
             result = selectionStart.next();
         else if (RefPtr containerNode = selectionStart.deepEquivalent().containerNode(); containerNode && targetNode && &containerNode->treeScope() != &targetNode->treeScope())
             result = VisibleSelection::adjustPositionForEnd(result.deepEquivalent(), containerNode.get());
-
-        range = makeSimpleRange(selectionStart, result);
+        
+        if (selectionFlippingEnabled && flipSelection) {
+            range = makeSimpleRange(result, selectionStart);
+            selectionFlipped = SelectionWasFlipped::Yes;
+        } else
+            range = makeSimpleRange(selectionStart, result);
     } else {
-        if (selectionEnd <= result)
+        bool flipSelection = selectionEnd < result;
+        
+        if ((flipSelection && !selectionFlippingEnabled) || result == selectionEnd)
             result = selectionEnd.previous();
         else if (RefPtr containerNode = selectionEnd.deepEquivalent().containerNode(); containerNode && targetNode && &containerNode->treeScope() != &targetNode->treeScope())
             result = VisibleSelection::adjustPositionForStart(result.deepEquivalent(), containerNode.get());
 
-        range = makeSimpleRange(result, selectionEnd);
+        if (selectionFlippingEnabled && flipSelection) {
+            range = makeSimpleRange(selectionEnd, result);
+            selectionFlipped = SelectionWasFlipped::Yes;
+        } else
+            range = makeSimpleRange(result, selectionEnd);
     }
     
     if (range && HTMLElement::isInsideImageOverlay(*range))
-        return expandForImageOverlay(*range);
+        return { expandForImageOverlay(*range), SelectionWasFlipped::No };
 
-    return range;
+    return { range, selectionFlipped };
 }
 
 static std::optional<SimpleRange> rangeAtWordBoundaryForPosition(Frame* frame, const VisiblePosition& position, bool baseIsStart)
@@ -1743,6 +1760,7 @@ void WebPage::updateSelectionWithTouches(const IntPoint& point, SelectionTouch s
 
     std::optional<SimpleRange> range;
     OptionSet<SelectionFlags> flags;
+    SelectionWasFlipped selectionFlipped = SelectionWasFlipped::No;
 
     switch (selectionTouch) {
     case SelectionTouch::Started:
@@ -1753,7 +1771,7 @@ void WebPage::updateSelectionWithTouches(const IntPoint& point, SelectionTouch s
         if (frame->selection().selection().isContentEditable())
             range = makeSimpleRange(closestWordBoundaryForPosition(position));
         else
-            range = rangeForPointInRootViewCoordinates(frame, point, baseIsStart);
+            std::tie(range, selectionFlipped) = rangeForPointInRootViewCoordinates(frame, point, baseIsStart, selectionFlippingEnabled());
         break;
 
     case SelectionTouch::EndedMovingForward:
@@ -1762,12 +1780,15 @@ void WebPage::updateSelectionWithTouches(const IntPoint& point, SelectionTouch s
         break;
 
     case SelectionTouch::Moved:
-        range = rangeForPointInRootViewCoordinates(frame, point, baseIsStart);
+        std::tie(range, selectionFlipped) = rangeForPointInRootViewCoordinates(frame, point, baseIsStart, selectionFlippingEnabled());
         break;
     }
 
     if (range)
         frame->selection().setSelectedRange(range, position.affinity(), WebCore::FrameSelection::ShouldCloseTyping::Yes, UserTriggered);
+    
+    if (selectionFlipped == SelectionWasFlipped::Yes)
+        flags = SelectionFlipped;
 
     completionHandler(point, selectionTouch, flags);
 }
@@ -2181,7 +2202,7 @@ void WebPage::selectTextWithGranularityAtPoint(const WebCore::IntPoint& point, W
     if (auto selectionChangedHandler = std::exchange(m_selectionChangedHandler, {}))
         selectionChangedHandler();
 
-    m_selectionChangedHandler = [point, granularity, isInteractingWithFocusedElement, completionHandler = WTFMove(completionHandler), webPage = makeWeakPtr(*this), this]() mutable {
+    m_selectionChangedHandler = [point, granularity, isInteractingWithFocusedElement, completionHandler = WTFMove(completionHandler), webPage = WeakPtr { *this }, this]() mutable {
         RefPtr<WebPage> strongPage = webPage.get();
         if (!strongPage) {
             completionHandler();
@@ -2867,10 +2888,31 @@ static void selectionPositionInformation(WebPage& page, const InteractionInforma
     if (!hitNode || !hitNode->renderer())
         return;
 
-    RenderObject* renderer = hitNode->renderer();
-    boundsPositionInformation(*renderer, info);
+    auto* renderer = hitNode->renderer();
 
+    info.selectability = ([&] {
+        if (renderer->style().userSelectIncludingInert() == UserSelect::None)
+            return InteractionInformationAtPosition::Selectability::UnselectableDueToUserSelectNone;
+
+        if (is<Element>(*hitNode)) {
+            if (isAssistableElement(downcast<Element>(*hitNode)))
+                return InteractionInformationAtPosition::Selectability::UnselectableDueToFocusableElement;
+
+            if (rectIsTooBigForSelection(info.bounds, *result.innerNodeFrame())) {
+                // We don't want to select blocks that are larger than 97% of the visible area of the document.
+                // FIXME: Is this heuristic still needed, now that block selection has been removed?
+                return InteractionInformationAtPosition::Selectability::UnselectableDueToLargeElementBounds;
+            }
+        }
+
+        return InteractionInformationAtPosition::Selectability::Selectable;
+    })();
     info.isSelected = result.isSelected();
+
+    if (info.isLink || info.isImage)
+        return;
+
+    boundsPositionInformation(*renderer, info);
     
     if (is<Element>(*hitNode)) {
         Element& element = downcast<Element>(*hitNode);
@@ -2884,20 +2926,15 @@ static void selectionPositionInformation(WebPage& page, const InteractionInforma
         linkIndicatorPositionInformation(page, attachment, request, info);
         if (attachment.file())
             info.url = URL::fileURLWithFileSystemPath(downcast<HTMLAttachmentElement>(*hitNode).file()->path());
-    } else {
-        info.isSelectable = renderer->style().userSelect() != UserSelect::None && !renderer->style().effectiveInert();
-        // We don't want to select blocks that are larger than 97% of the visible area of the document.
-        // FIXME: Is this heuristic still needed, now that block selection has been removed?
-        if (info.isSelectable && !hitNode->isTextNode())
-            info.isSelectable = !isAssistableElement(*downcast<Element>(hitNode)) && !rectIsTooBigForSelection(info.bounds, *result.innerNodeFrame());
     }
+
     for (RefPtr currentNode = hitNode; currentNode; currentNode = currentNode->parentOrShadowHostNode()) {
         auto* renderer = currentNode->renderer();
         if (!renderer)
             continue;
 
         auto& style = renderer->style();
-        if (style.userSelect() == UserSelect::None && style.userDrag() == UserDrag::Element) {
+        if (style.userSelectIncludingInert() == UserSelect::None && style.userDrag() == UserDrag::Element) {
             info.prefersDraggingOverTextSelection = true;
             break;
         }
@@ -3066,8 +3103,7 @@ InteractionInformationAtPosition WebPage::positionInformation(const InteractionI
     if (!info.isImage && request.includeImageData && is<HTMLImageElement>(hitTestNode))
         imagePositionInformation(*this, downcast<HTMLImageElement>(*hitTestNode), request, info);
 
-    if (!(info.isLink || info.isImage))
-        selectionPositionInformation(*this, request, info);
+    selectionPositionInformation(*this, request, info);
 
     // Prevent the callout bar from showing when tapping on the datalist button.
 #if ENABLE(DATALIST_ELEMENT)
@@ -3413,6 +3449,12 @@ void WebPage::setViewportConfigurationViewLayoutSize(const FloatSize& size, doub
     viewportConfigurationChanged(zoomToInitialScale);
 }
 
+void WebPage::setMinimumUnobscuredSize(const FloatSize& minimumUnobscuredSize)
+{
+    m_minimumUnobscuredSize = minimumUnobscuredSize;
+    updateViewportSizeForCSSViewportUnits();
+}
+
 void WebPage::setMaximumUnobscuredSize(const FloatSize& maximumUnobscuredSize)
 {
     m_maximumUnobscuredSize = maximumUnobscuredSize;
@@ -3432,7 +3474,7 @@ void WebPage::setOverrideViewportArguments(const std::optional<WebCore::Viewport
     m_page->setOverrideViewportArguments(arguments);
 }
 
-void WebPage::dynamicViewportSizeUpdate(const FloatSize& viewLayoutSize, const WebCore::FloatSize& maximumUnobscuredSize, const FloatRect& targetExposedContentRect, const FloatRect& targetUnobscuredRect, const WebCore::FloatRect& targetUnobscuredRectInScrollViewCoordinates, const WebCore::FloatBoxExtent& targetUnobscuredSafeAreaInsets, double targetScale, int32_t deviceOrientation, double minimumEffectiveDeviceWidth, DynamicViewportSizeUpdateID dynamicViewportSizeUpdateID)
+void WebPage::dynamicViewportSizeUpdate(const FloatSize& viewLayoutSize, const WebCore::FloatSize& minimumUnobscuredSize, const WebCore::FloatSize& maximumUnobscuredSize, const FloatRect& targetExposedContentRect, const FloatRect& targetUnobscuredRect, const WebCore::FloatRect& targetUnobscuredRectInScrollViewCoordinates, const WebCore::FloatBoxExtent& targetUnobscuredSafeAreaInsets, double targetScale, int32_t deviceOrientation, double minimumEffectiveDeviceWidth, DynamicViewportSizeUpdateID dynamicViewportSizeUpdateID)
 {
     SetForScope<bool> dynamicSizeUpdateGuard(m_inDynamicSizeUpdate, true);
     // FIXME: this does not handle the cases where the content would change the content size or scroll position from JavaScript.
@@ -3480,6 +3522,7 @@ void WebPage::dynamicViewportSizeUpdate(const FloatSize& viewLayoutSize, const W
     if (setFixedLayoutSize(newLayoutSize))
         resetTextAutosizing();
 
+    setMinimumUnobscuredSize(minimumUnobscuredSize);
     setMaximumUnobscuredSize(maximumUnobscuredSize);
     m_page->setUnobscuredSafeAreaInsets(targetUnobscuredSafeAreaInsets);
 
@@ -3826,13 +3869,19 @@ void WebPage::viewportConfigurationChanged(ZoomToInitialScale zoomToInitialScale
 
 void WebPage::updateViewportSizeForCSSViewportUnits()
 {
+    FloatSize smallestUnobscuredSize = m_minimumUnobscuredSize;
+    if (smallestUnobscuredSize.isEmpty())
+        smallestUnobscuredSize = m_viewportConfiguration.viewLayoutSize();
+
     FloatSize largestUnobscuredSize = m_maximumUnobscuredSize;
     if (largestUnobscuredSize.isEmpty())
         largestUnobscuredSize = m_viewportConfiguration.viewLayoutSize();
 
     FrameView& frameView = *mainFrameView();
+    smallestUnobscuredSize.scale(1 / m_viewportConfiguration.initialScaleIgnoringContentSize());
     largestUnobscuredSize.scale(1 / m_viewportConfiguration.initialScaleIgnoringContentSize());
-    frameView.setViewportSizeForCSSViewportUnits(roundedIntSize(largestUnobscuredSize));
+    frameView.setSizeForCSSSmallViewportUnits(roundedIntSize(smallestUnobscuredSize));
+    frameView.setSizeForCSSLargeViewportUnits(roundedIntSize(largestUnobscuredSize));
 }
 
 void WebPage::applicationWillResignActive()

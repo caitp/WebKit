@@ -49,13 +49,10 @@
 #include "MediaKeySystemPermissionRequestManager.h"
 #include "MediaPlaybackState.h"
 #include "MediaRecorderProvider.h"
-#include "NetscapePlugin.h"
 #include "NetworkConnectionToWebProcessMessages.h"
 #include "NetworkProcessConnection.h"
 #include "NotificationPermissionRequestManager.h"
 #include "PageBanner.h"
-#include "PluginProcessAttributes.h"
-#include "PluginProxy.h"
 #include "PluginView.h"
 #include "PrintInfo.h"
 #include "RemoteRenderingBackendProxy.h"
@@ -726,6 +723,9 @@ WebPage::WebPage(PageIdentifier pageID, WebPageCreationParameters&& parameters)
     if (parameters.mediaPlaybackIsSuspended)
         m_page->suspendAllMediaPlayback();
 
+    if (parameters.openedByDOM)
+        m_page->setOpenedByDOM();
+
     m_page->setGroupName(m_pageGroup->identifier());
     m_page->setDeviceScaleFactor(parameters.deviceScaleFactor);
     m_page->setUserInterfaceLayoutDirection(m_userInterfaceLayoutDirection);
@@ -868,6 +868,7 @@ WebPage::WebPage(PageIdentifier pageID, WebPageCreationParameters&& parameters)
 
 #if PLATFORM(IOS_FAMILY)
     setViewportConfigurationViewLayoutSize(parameters.viewportConfigurationViewLayoutSize, parameters.viewportConfigurationLayoutSizeScaleFactor, parameters.viewportConfigurationMinimumEffectiveDeviceWidth);
+    setMinimumUnobscuredSize(parameters.minimumUnobscuredSize);
     setMaximumUnobscuredSize(parameters.maximumUnobscuredSize);
 #endif
 
@@ -1150,49 +1151,14 @@ void WebPage::initializeInjectedBundleFullScreenClient(WKBundlePageFullScreenCli
 }
 #endif
 
-#if ENABLE(NETSCAPE_PLUGIN_API)
-
+#if ENABLE(PDFKIT_PLUGIN)
 RefPtr<Plugin> WebPage::createPlugin(WebFrame* frame, HTMLPlugInElement* pluginElement, const Plugin::Parameters& parameters, String& newMIMEType)
 {
-    String frameURLString = frame->coreFrame()->loader().documentLoader()->responseURL().string();
-    String pageURLString = m_page->mainFrame().loader().documentLoader()->responseURL().string();
-
-    bool allowOnlyApplicationPlugins = !frame->coreFrame()->arePluginsEnabled();
-
-    uint64_t pluginProcessToken;
-    uint32_t pluginLoadPolicy;
-    String unavailabilityDescription;
-    bool isUnsupported;
-    if (!sendSync(Messages::WebPageProxy::FindPlugin(parameters.mimeType, parameters.url.string(), frameURLString, pageURLString, allowOnlyApplicationPlugins), Messages::WebPageProxy::FindPlugin::Reply(pluginProcessToken, newMIMEType, pluginLoadPolicy, unavailabilityDescription, isUnsupported)))
-        return nullptr;
-
-    PluginModuleLoadPolicy loadPolicy = static_cast<PluginModuleLoadPolicy>(pluginLoadPolicy);
-    bool isBlockedPlugin = (loadPolicy == PluginModuleBlockedForSecurity) || (loadPolicy == PluginModuleBlockedForCompatibility);
-
-    if (isUnsupported || isBlockedPlugin || !pluginProcessToken) {
-#if ENABLE(PDFKIT_PLUGIN)
-        if (shouldUsePDFPlugin(parameters.mimeType, parameters.url.path()))
-            return PDFPlugin::create(*frame, pluginElement);
-#endif
-    }
-
-    if (isUnsupported) {
-        pluginElement->setReplacement(RenderEmbeddedObject::UnsupportedPlugin, unavailabilityDescription);
-        return nullptr;
-    }
-
-    if (isBlockedPlugin) {
-        bool isReplacementObscured = pluginElement->setReplacement(RenderEmbeddedObject::InsecurePluginVersion, unavailabilityDescription);
-        send(Messages::WebPageProxy::DidBlockInsecurePluginVersion(parameters.mimeType, parameters.url.string(), frameURLString, pageURLString, isReplacementObscured));
-        return nullptr;
-    }
-
-    if (!pluginProcessToken)
-        return nullptr;
-
-    return PluginProxy::create(pluginProcessToken);
+    if (shouldUsePDFPlugin(parameters.mimeType, parameters.url.path()))
+        return PDFPlugin::create(*frame, pluginElement);
+    return nullptr;
 }
-#endif // ENABLE(NETSCAPE_PLUGIN_API)
+#endif // ENABLE(PDFKIT_PLUGIN)
 
 #if ENABLE(WEBGL) && !PLATFORM(MAC)
 WebCore::WebGLLoadPolicy WebPage::webGLPolicyForURL(WebFrame*, const URL&)
@@ -1733,6 +1699,9 @@ void WebPage::loadRequest(LoadParameters&& loadParameters)
     frameLoadRequest.setClientRedirectSourceForHistory(loadParameters.clientRedirectSourceForHistory);
     frameLoadRequest.setIsRequestFromClientOrUserInput();
 
+    if (loadParameters.effectiveSandboxFlags)
+        corePage()->mainFrame().loader().forceSandboxFlags(loadParameters.effectiveSandboxFlags);
+
     corePage()->userInputBridge().loadRequest(WTFMove(frameLoadRequest));
 
     ASSERT(!m_pendingNavigationID);
@@ -1784,6 +1753,9 @@ void WebPage::loadData(LoadParameters&& loadParameters)
         if (baseURL.isValid() && !baseURL.protocolIsInHTTPFamily())
             LegacySchemeRegistry::registerURLSchemeAsHandledBySchemeHandler(baseURL.protocol().toString());
     }
+
+    if (loadParameters.isServiceWorkerLoad && corePage())
+        corePage()->markAsServiceWorkerPage();
 
     ResourceResponse response(URL(), loadParameters.MIMEType, sharedBuffer->size(), loadParameters.encodingName);
     loadDataImpl(loadParameters.navigationID, loadParameters.shouldTreatAsContinuingLoad, WTFMove(loadParameters.websitePolicies), WTFMove(sharedBuffer), ResourceRequest(baseURL), WTFMove(response), URL(), loadParameters.userData, loadParameters.isNavigatingToAppBoundDomain, loadParameters.sessionHistoryVisibility, loadParameters.shouldOpenExternalURLsPolicy);
@@ -1846,7 +1818,10 @@ void WebPage::stopLoading()
         return;
 
     SendStopResponsivenessTimer stopper;
-    m_page->userInputBridge().stopLoadingFrame(*m_mainFrame->coreFrame());
+
+    Ref coreFrame = *m_mainFrame->coreFrame();
+    m_page->userInputBridge().stopLoadingFrame(coreFrame.get());
+    coreFrame->loader().completePageTransitionIfNeeded();
 }
 
 bool WebPage::defersLoading() const
@@ -1884,6 +1859,8 @@ void WebPage::goToBackForwardItem(uint64_t navigationID, const BackForwardItemId
     SendStopResponsivenessTimer stopper;
 
     m_lastNavigationWasAppInitiated = lastNavigationWasAppInitiated;
+    if (auto* documentLoader = corePage()->mainFrame().loader().documentLoader())
+        documentLoader->setLastNavigationWasAppInitiated(lastNavigationWasAppInitiated);
 
     ASSERT(isBackForwardLoadType(backForwardType));
 
@@ -2724,6 +2701,11 @@ void WebPage::pageStoppedScrolling()
     // Maintain the current history item's scroll position up-to-date.
     if (Frame* frame = m_mainFrame->coreFrame())
         frame->loader().history().saveScrollPositionAndViewStateToItem(frame->loader().history().currentItem());
+}
+
+void WebPage::setHasActiveAnimatedScrolls(bool hasActiveAnimatedScrolls)
+{
+    send(Messages::WebPageProxy::SetHasActiveAnimatedScrolls(hasActiveAnimatedScrolls));
 }
 
 #if ENABLE(CONTEXT_MENUS)
@@ -3978,6 +3960,8 @@ void WebPage::updatePreferences(const WebPreferencesStore& store)
 
 #if PLATFORM(COCOA)
     m_pdfPluginEnabled = store.getBoolValueForKey(WebPreferencesKey::pdfPluginEnabledKey());
+    
+    m_selectionFlippingEnabled = store.getBoolValueForKey(WebPreferencesKey::selectionFlippingEnabledKey());
 #endif
 #if ENABLE(PAYMENT_REQUEST)
     settings.setPaymentRequestEnabled(store.getBoolValueForKey(WebPreferencesKey::applePayEnabledKey()));
@@ -4011,12 +3995,6 @@ void WebPage::updatePreferences(const WebPreferencesStore& store)
 
     if (m_drawingArea)
         m_drawingArea->updatePreferences(store);
-
-#if USE(LIBWEBRTC)
-    m_page->libWebRTCProvider().setH265Support(RuntimeEnabledFeatures::sharedFeatures().webRTCH265CodecEnabled());
-    m_page->libWebRTCProvider().setVP9Support(RuntimeEnabledFeatures::sharedFeatures().webRTCVP9Profile0CodecEnabled(), RuntimeEnabledFeatures::sharedFeatures().webRTCVP9Profile2CodecEnabled());
-    LibWebRTCProvider::setH264HardwareEncoderAllowed(store.getBoolValueForKey(WebPreferencesKey::webRTCH264HardwareEncoderEnabledKey()));
-#endif
 
 #if ENABLE(GPU_PROCESS)
     // FIXME: useGPUProcessForMediaEnabled should be a RuntimeEnabledFeature since it's global.
@@ -4058,6 +4036,8 @@ void WebPage::updatePreferences(const WebPreferencesStore& store)
 #if ENABLE(OPUS)
     PlatformMediaSessionManager::setOpusDecoderEnabled(RuntimeEnabledFeatures::sharedFeatures().opusDecoderEnabled());
 #endif
+
+    m_page->settingsDidChange();
 }
 
 #if ENABLE(DATA_DETECTION)
@@ -4372,7 +4352,7 @@ void WebPage::sendViolationReportWhenNavigatingAwayFromCOOPResponse(FrameIdentif
         WebCore::sendViolationReportWhenNavigatingAwayFromCOOPResponse(*frame->coreFrame(), coop, disposition, coopURL, nextResponseURL, coopOrigin.securityOrigin(), nextResponseOrigin.securityOrigin(), isCOOPResponseNavigationSource, userAgent);
 }
 
-void WebPage::enqueueSecurityPolicyViolationEvent(FrameIdentifier frameID, SecurityPolicyViolationEvent::Init&& eventInit)
+void WebPage::enqueueSecurityPolicyViolationEvent(FrameIdentifier frameID, SecurityPolicyViolationEventInit&& eventInit)
 {
     auto* frame = WebProcess::singleton().webFrame(frameID);
     if (!frame)
@@ -4590,7 +4570,7 @@ void WebPage::didChooseColor(const WebCore::Color& color)
 
 void WebPage::setActiveDataListSuggestionPicker(WebDataListSuggestionPicker& dataListSuggestionPicker)
 {
-    m_activeDataListSuggestionPicker = makeWeakPtr(&dataListSuggestionPicker);
+    m_activeDataListSuggestionPicker = dataListSuggestionPicker;
 }
 
 void WebPage::didSelectDataListOption(const String& selectedOption)
@@ -4611,7 +4591,7 @@ void WebPage::didCloseSuggestions()
 
 void WebPage::setActiveDateTimeChooser(WebDateTimeChooser& dateTimeChooser)
 {
-    m_activeDateTimeChooser = makeWeakPtr(&dateTimeChooser);
+    m_activeDateTimeChooser = dateTimeChooser;
 }
 
 void WebPage::didChooseDate(const String& date)
@@ -4802,7 +4782,16 @@ void WebPage::captureDevicesChanged()
     m_userMediaPermissionRequestManager->captureDevicesChanged();
 }
 
-#endif
+#if USE(GSTREAMER)
+void WebPage::setOrientationForMediaCapture(uint64_t rotation)
+{
+    m_page->forEachDocument([&](auto& document) {
+        document.orientationChanged(rotation);
+    });
+}
+#endif // USE(GSTREAMER)
+
+#endif // ENABLE(MEDIA_STREAM)
 
 #if ENABLE(ENCRYPTED_MEDIA)
 void WebPage::mediaKeySystemWasGranted(MediaKeySystemRequestIdentifier mediaKeySystemID, CompletionHandler<void()>&& completionHandler)
@@ -4943,23 +4932,14 @@ void WebPage::addMIMETypeWithCustomContentProvider(const String& mimeType)
 
 void WebPage::updateMainFrameScrollOffsetPinning()
 {
-    Frame& frame = m_page->mainFrame();
-    ScrollPosition scrollPosition = frame.view()->scrollPosition();
-    ScrollPosition maximumScrollPosition = frame.view()->maximumScrollPosition();
-    ScrollPosition minimumScrollPosition = frame.view()->minimumScrollPosition();
+    auto* frameView = mainFrameView();
+    if (!frameView)
+        return;
 
-    bool isPinnedToLeftSide = (scrollPosition.x() <= minimumScrollPosition.x());
-    bool isPinnedToRightSide = (scrollPosition.x() >= maximumScrollPosition.x());
-    bool isPinnedToTopSide = (scrollPosition.y() <= minimumScrollPosition.y());
-    bool isPinnedToBottomSide = (scrollPosition.y() >= maximumScrollPosition.y());
-
-    if (isPinnedToLeftSide != m_cachedMainFrameIsPinnedToLeftSide || isPinnedToRightSide != m_cachedMainFrameIsPinnedToRightSide || isPinnedToTopSide != m_cachedMainFrameIsPinnedToTopSide || isPinnedToBottomSide != m_cachedMainFrameIsPinnedToBottomSide) {
-        send(Messages::WebPageProxy::DidChangeScrollOffsetPinningForMainFrame(isPinnedToLeftSide, isPinnedToRightSide, isPinnedToTopSide, isPinnedToBottomSide));
-        
-        m_cachedMainFrameIsPinnedToLeftSide = isPinnedToLeftSide;
-        m_cachedMainFrameIsPinnedToRightSide = isPinnedToRightSide;
-        m_cachedMainFrameIsPinnedToTopSide = isPinnedToTopSide;
-        m_cachedMainFrameIsPinnedToBottomSide = isPinnedToBottomSide;
+    auto pinnedState = frameView->edgePinnedState();
+    if (pinnedState != m_cachedMainFramePinnedState) {
+        send(Messages::WebPageProxy::DidChangeScrollOffsetPinningForMainFrame(pinnedState));
+        m_cachedMainFramePinnedState = pinnedState;
     }
 }
 
@@ -5581,13 +5561,13 @@ void WebPage::setMediaVolume(float volume)
     m_page->setMediaVolume(volume);
 }
 
-void WebPage::setMuted(MediaProducer::MutedStateFlags state, CompletionHandler<void()>&& completionHandler)
+void WebPage::setMuted(MediaProducerMutedStateFlags state, CompletionHandler<void()>&& completionHandler)
 {
     m_page->setMuted(state);
     completionHandler();
 }
 
-void WebPage::stopMediaCapture(MediaProducer::MediaCaptureKind kind, CompletionHandler<void()>&& completionHandler)
+void WebPage::stopMediaCapture(MediaProducerMediaCaptureKind kind, CompletionHandler<void()>&& completionHandler)
 {
 #if ENABLE(MEDIA_STREAM)
     m_page->stopMediaCapture(kind);
@@ -5765,24 +5745,8 @@ FrameView* WebPage::mainFrameView() const
 
 bool WebPage::canPluginHandleResponse(const ResourceResponse& response)
 {
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    uint32_t pluginLoadPolicy;
-    bool allowOnlyApplicationPlugins = !m_mainFrame->coreFrame()->arePluginsEnabled();
-
-    uint64_t pluginProcessToken;
-    String newMIMEType;
-    String unavailabilityDescription;
-    bool isUnsupported = false;
-    if (!sendSync(Messages::WebPageProxy::FindPlugin(response.mimeType(), response.url().string(), response.url().string(), response.url().string(), allowOnlyApplicationPlugins), Messages::WebPageProxy::FindPlugin::Reply(pluginProcessToken, newMIMEType, pluginLoadPolicy, unavailabilityDescription, isUnsupported)))
-        return false;
-
-    ASSERT(!isUnsupported);
-    bool isBlockedPlugin = (pluginLoadPolicy == PluginModuleBlockedForSecurity) || (pluginLoadPolicy == PluginModuleBlockedForCompatibility);
-    return !isUnsupported && !isBlockedPlugin && pluginProcessToken;
-#else
     UNUSED_PARAM(response);
     return false;
-#endif
 }
 
 bool WebPage::shouldUseCustomContentProviderForResponse(const ResourceResponse& response)
@@ -6250,7 +6214,7 @@ void WebPage::setViewportSizeForCSSViewportUnits(std::optional<WebCore::IntSize>
 
     m_viewportSizeForCSSViewportUnits = viewportSize;
     if (m_viewportSizeForCSSViewportUnits)
-        corePage()->mainFrame().view()->setViewportSizeForCSSViewportUnits(*m_viewportSizeForCSSViewportUnits);
+        corePage()->mainFrame().view()->setSizeForCSSLargeViewportUnits(*m_viewportSizeForCSSViewportUnits);
 }
 
 bool WebPage::isSmartInsertDeleteEnabled()
@@ -7325,7 +7289,7 @@ void WebPage::startTextManipulations(Vector<WebCore::TextManipulationController:
     if (!mainDocument)
         return;
 
-    mainDocument->textManipulationController().startObservingParagraphs([webPage = makeWeakPtr(*this)] (Document& document, const Vector<WebCore::TextManipulationController::ManipulationItem>& items) {
+    mainDocument->textManipulationController().startObservingParagraphs([webPage = WeakPtr { *this }] (Document& document, const Vector<WebCore::TextManipulationController::ManipulationItem>& items) {
         auto* frame = document.frame();
         if (!webPage || !frame || webPage->mainFrame() != frame)
             return;
@@ -7457,7 +7421,7 @@ void WebPage::synchronizeCORSDisablingPatternsWithNetworkProcess()
     WebProcess::singleton().ensureNetworkProcessConnection().connection().send(Messages::NetworkConnectionToWebProcess::SetCORSDisablingPatterns(m_identifier, m_corsDisablingPatterns), 0);
 }
 
-void WebPage::isPlayingMediaDidChange(WebCore::MediaProducer::MediaStateFlags state)
+void WebPage::isPlayingMediaDidChange(WebCore::MediaProducerMediaStateFlags state)
 {
     send(Messages::WebPageProxy::IsPlayingMediaDidChange(state));
 }
@@ -7536,11 +7500,11 @@ void WebPage::requestTextRecognition(WebCore::Element& element, CompletionHandle
     Vector<CompletionHandler<void(RefPtr<Element>&&)>> completionHandlers;
     if (completion)
         completionHandlers.append(WTFMove(completion));
-    m_elementsPendingTextRecognition.append({ makeWeakPtr(element), WTFMove(completionHandlers) });
+    m_elementsPendingTextRecognition.append({ WeakPtr { element }, WTFMove(completionHandlers) });
 
     auto cachedImage = renderImage.cachedImage();
     auto imageURL = cachedImage ? element.document().completeURL(cachedImage->url().string()) : URL { };
-    sendWithAsyncReply(Messages::WebPageProxy::RequestTextRecognition(WTFMove(imageURL), WTFMove(bitmapHandle)), [webPage = makeWeakPtr(*this), weakElement = makeWeakPtr(element)] (auto&& result) {
+    sendWithAsyncReply(Messages::WebPageProxy::RequestTextRecognition(WTFMove(imageURL), WTFMove(bitmapHandle)), [webPage = WeakPtr { *this }, weakElement = WeakPtr { element }] (auto&& result) {
         RefPtr protectedPage { webPage.get() };
         if (!protectedPage)
             return;

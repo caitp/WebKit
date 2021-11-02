@@ -46,117 +46,200 @@ struct UnlinkedStructureStubInfo;
 enum class AccessType : int8_t;
 enum class JITType : uint8_t;
 
+namespace BaselineDelByValRegisters {
 #if USE(JSVALUE64)
-struct BaselineDelByValRegisters {
-    static constexpr GPRReg base = GPRInfo::regT1;
-    static constexpr GPRReg property = GPRInfo::regT0;
-    static constexpr GPRReg result = GPRInfo::regT0;
-    static constexpr GPRReg stubInfo = GPRInfo::regT3;
-    static constexpr GPRReg scratch = GPRInfo::regT2;
-};
-
-struct BaselineDelByIdRegisters {
-    static constexpr GPRReg base = GPRInfo::regT1;
-    static constexpr GPRReg result = GPRInfo::regT0;
-    static constexpr GPRReg stubInfo = GPRInfo::regT3;
-    static constexpr GPRReg scratch = GPRInfo::regT2;
-};
-
-struct BaselineGetByValRegisters {
-    static constexpr GPRReg base = GPRInfo::regT0;
-    static constexpr GPRReg property = GPRInfo::regT1;
-    static constexpr GPRReg result = GPRInfo::regT0;
-    static constexpr GPRReg stubInfo = GPRInfo::regT2;
-    static constexpr GPRReg scratch = GPRInfo::regT3;
-};
-
-struct BaselineEnumeratorGetByValRegisters {
-    static constexpr GPRReg base = GPRInfo::regT0;
-    static constexpr GPRReg property = GPRInfo::regT1;
-    static constexpr GPRReg result = GPRInfo::regT0;
-    static constexpr GPRReg stubInfo = GPRInfo::regT2;
-    // We rely on this when linking a CodeBlock and initializing registers for a GetByVal StubInfo.
-    static_assert(base == BaselineGetByValRegisters::base);
-    static_assert(property == BaselineGetByValRegisters::property);
-    static_assert(result == BaselineGetByValRegisters::result);
-    static_assert(stubInfo == BaselineGetByValRegisters::stubInfo);
-
-    static constexpr GPRReg scratch1 = GPRInfo::regT3;
-    static constexpr GPRReg scratch2 = GPRInfo::regT4;
-    static constexpr GPRReg scratch3 = GPRInfo::regT5;
-};
-
-struct BaselineInstanceofRegisters {
-    static constexpr GPRReg result = GPRInfo::regT0;
-    static constexpr GPRReg value = GPRInfo::argumentGPR2;
-    static constexpr GPRReg proto = GPRInfo::argumentGPR3;
-    static constexpr GPRReg stubInfo = GPRInfo::argumentGPR1;
-    static constexpr GPRReg scratch1 = GPRInfo::nonArgGPR0;
-    static constexpr GPRReg scratch2 = GPRInfo::nonArgGPR1;
-};
-
-struct BaselineInByValRegisters {
-    static constexpr GPRReg result = GPRInfo::regT0;
-    static constexpr GPRReg base = GPRInfo::regT0;
-    static constexpr GPRReg property = GPRInfo::regT1;
-    static_assert(base == BaselineGetByValRegisters::base);
-    static_assert(property == BaselineGetByValRegisters::property);
-    static constexpr GPRReg stubInfo = GPRInfo::regT2;
-    static constexpr GPRReg scratch = GPRInfo::regT3;
-};
-
-struct BaselineGetByIdRegisters {
-    static constexpr GPRReg result = GPRInfo::regT0;
-    static constexpr GPRReg base = GPRInfo::regT0;
-    static constexpr GPRReg stubInfo = GPRInfo::regT1;
-    static constexpr GPRReg scratch = GPRInfo::regT2;
-    static constexpr GPRReg dontClobberRegister = GPRInfo::regT3;
-};
-
-struct BaselineGetByIdWithThisRegisters {
-    static constexpr GPRReg result = GPRInfo::regT0;
-    static constexpr GPRReg base = GPRInfo::regT0;
-    static constexpr GPRReg thisValue = GPRInfo::regT1;
-    static constexpr GPRReg stubInfo = GPRInfo::regT2;
-    static constexpr GPRReg scratch = GPRInfo::regT3;
-};
-
-struct BaselineInByIdRegisters {
-    static constexpr GPRReg result = BaselineGetByIdRegisters::result;
-    static constexpr GPRReg base = BaselineGetByIdRegisters::base;
-    static constexpr GPRReg stubInfo = BaselineGetByIdRegisters::stubInfo;
-    static constexpr GPRReg scratch = BaselineGetByIdRegisters::scratch;
-};
-
-struct BaselinePutByIdRegisters {
-    static constexpr GPRReg base = GPRInfo::regT0;
-    static constexpr GPRReg value = GPRInfo::regT1;
-    static constexpr GPRReg stubInfo = GPRInfo::regT3;
-    static constexpr GPRReg scratch = GPRInfo::regT2;
-    static constexpr GPRReg scratch2 = GPRInfo::regT4;
-};
-
-struct BaselinePutByValRegisters {
-    static constexpr GPRReg base = GPRInfo::regT0;
-    static constexpr GPRReg property = GPRInfo::regT1;
-    static constexpr GPRReg value = GPRInfo::regT2;
-    static constexpr GPRReg profile = GPRInfo::regT3;
-    static constexpr GPRReg stubInfo = GPRInfo::regT4;
-};
-
-struct BaselinePrivateBrandRegisters {
-    static constexpr GPRReg base = GPRInfo::regT0;
-    static constexpr GPRReg brand = GPRInfo::regT1;
-    static_assert(base == BaselineGetByValRegisters::base);
-    static_assert(brand == BaselineGetByValRegisters::property);
-    static constexpr GPRReg stubInfo = GPRInfo::regT2;
-};
+constexpr JSValueRegs baseJSR { GPRInfo::regT1 };
+constexpr JSValueRegs propertyJSR { GPRInfo::regT0 };
+constexpr JSValueRegs resultJSR { propertyJSR };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT3 };
+constexpr GPRReg scratchGPR { GPRInfo::regT2 };
+#elif USE(JSVALUE32_64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT3, GPRInfo::regT2 };
+constexpr JSValueRegs propertyJSR { GPRInfo::regT1, GPRInfo::regT0 };
+constexpr JSValueRegs resultJSR { propertyJSR };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT7 };
+constexpr GPRReg scratchGPR { GPRInfo::regT6 };
 #endif
+}
+
+namespace BaselineDelByIdRegisters {
+#if USE(JSVALUE64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT1 };
+constexpr JSValueRegs resultJSR { GPRInfo::regT0 };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT3 };
+constexpr GPRReg scratchGPR { GPRInfo::regT2 };
+#elif USE(JSVALUE32_64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT3, GPRInfo::regT2 };
+constexpr JSValueRegs resultJSR { GPRInfo::regT1, GPRInfo::regT0 };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT7 };
+constexpr GPRReg scratchGPR { GPRInfo::regT6 };
+#endif
+}
+
+namespace BaselineGetByValRegisters {
+#if USE(JSVALUE64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT0 };
+constexpr JSValueRegs propertyJSR { GPRInfo::regT1 };
+constexpr JSValueRegs resultJSR { baseJSR };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT2 };
+constexpr GPRReg scratchGPR { GPRInfo::regT3 };
+#elif USE(JSVALUE32_64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT1, GPRInfo::regT0 };
+constexpr JSValueRegs propertyJSR { GPRInfo::regT3, GPRInfo::regT2 };
+constexpr JSValueRegs resultJSR { baseJSR };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT7 };
+constexpr GPRReg scratchGPR { GPRInfo::regT6 };
+#endif
+}
+
+#if USE(JSVALUE64)
+namespace BaselineEnumeratorGetByValRegisters {
+static constexpr JSValueRegs baseJSR { GPRInfo::regT0 };
+static constexpr JSValueRegs propertyJSR { GPRInfo::regT1 };
+static constexpr JSValueRegs resultJSR { GPRInfo::regT0 };
+static constexpr GPRReg stubInfoGPR = GPRInfo::regT2;
+// We rely on this when linking a CodeBlock and initializing registers for a GetByVal StubInfo.
+static_assert(baseJSR == BaselineGetByValRegisters::baseJSR);
+static_assert(propertyJSR == BaselineGetByValRegisters::propertyJSR);
+static_assert(resultJSR == BaselineGetByValRegisters::resultJSR);
+static_assert(stubInfoGPR == BaselineGetByValRegisters::stubInfoGPR);
+
+static constexpr GPRReg scratch1 = GPRInfo::regT3;
+static constexpr GPRReg scratch2 = GPRInfo::regT4;
+static constexpr GPRReg scratch3 = GPRInfo::regT5;
+}
+#endif
+
+namespace BaselineInstanceofRegisters {
+#if USE(JSVALUE64)
+constexpr GPRReg result { GPRInfo::regT0 };
+constexpr GPRReg value { GPRInfo::argumentGPR2 };
+constexpr GPRReg proto { GPRInfo::argumentGPR3 };
+constexpr GPRReg stubInfo { GPRInfo::argumentGPR1 };
+constexpr GPRReg scratch1 { GPRInfo::nonArgGPR0 };
+constexpr GPRReg scratch2 { GPRInfo::nonArgGPR1 };
+#elif USE(JSVALUE32_64)
+constexpr GPRReg resultGPR { GPRInfo::regT0 };
+constexpr JSValueRegs valueJSR  { GPRInfo::argumentGPR3, GPRInfo::argumentGPR2 };
+constexpr JSValueRegs protoJSR  { GPRInfo::regT5, GPRInfo::regT4 };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT1 };
+constexpr GPRReg scratch1GPR { GPRInfo::regT6 };
+constexpr GPRReg scratch2GPR { GPRInfo::regT7 };
+static_assert(!valueJSR.uses(resultGPR));
+static_assert(!valueJSR.overlaps(protoJSR));
+static_assert(!valueJSR.uses(stubInfoGPR));
+static_assert(!valueJSR.uses(scratch1GPR));
+static_assert(!valueJSR.uses(scratch2GPR));
+#endif
+}
+
+namespace BaselineInByValRegisters {
+#if USE(JSVALUE64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT0 };
+constexpr JSValueRegs propertyJSR { GPRInfo::regT1 };
+constexpr JSValueRegs resultJSR { baseJSR };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT2 };
+constexpr GPRReg scratchGPR { GPRInfo::regT3 };
+#elif USE(JSVALUE32_64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT1, GPRInfo::regT0 };
+constexpr JSValueRegs propertyJSR  { GPRInfo::regT3, GPRInfo::regT2 };
+constexpr JSValueRegs resultJSR { baseJSR };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT7 };
+constexpr GPRReg scratchGPR { GPRInfo::regT6 };
+#endif
+static_assert(baseJSR == BaselineGetByValRegisters::baseJSR);
+static_assert(propertyJSR == BaselineGetByValRegisters::propertyJSR);
+}
+
+namespace BaselineGetByIdRegisters {
+#if USE(JSVALUE64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT0 };
+constexpr JSValueRegs resultJSR { baseJSR };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT1 };
+constexpr GPRReg scratchGPR { GPRInfo::regT2 };
+constexpr JSValueRegs dontClobberJSR { GPRInfo::regT3 };
+#elif USE(JSVALUE32_64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT1, GPRInfo::regT0 };
+constexpr JSValueRegs resultJSR { baseJSR };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT2 };
+constexpr GPRReg scratchGPR { GPRInfo::regT3 };
+constexpr JSValueRegs dontClobberJSR { GPRInfo::regT6, GPRInfo::regT7 };
+#endif
+}
+
+namespace BaselineGetByIdWithThisRegisters {
+#if USE(JSVALUE64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT0 };
+constexpr JSValueRegs resultJSR { baseJSR };
+constexpr JSValueRegs thisJSR { GPRInfo::regT1 };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT2 };
+constexpr GPRReg scratchGPR { GPRInfo::regT3 };
+#elif USE(JSVALUE32_64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT1, GPRInfo::regT0 };
+constexpr JSValueRegs resultJSR { baseJSR };
+constexpr JSValueRegs thisJSR { GPRInfo::regT3, GPRInfo::regT2 };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT7 };
+constexpr GPRReg scratchGPR { GPRInfo::regT6 };
+#endif
+}
+
+namespace BaselineInByIdRegisters {
+constexpr JSValueRegs baseJSR { BaselineGetByIdRegisters::baseJSR };
+constexpr JSValueRegs resultJSR { BaselineGetByIdRegisters::resultJSR };
+constexpr GPRReg stubInfoGPR { BaselineGetByIdRegisters::stubInfoGPR };
+constexpr GPRReg scratchGPR { BaselineGetByIdRegisters::scratchGPR };
+}
+
+namespace BaselinePutByIdRegisters {
+#if USE(JSVALUE64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT0 };
+constexpr JSValueRegs valueJSR { GPRInfo::regT1 };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT3 };
+constexpr GPRReg scratchGPR { GPRInfo::regT2 };
+constexpr GPRReg scratch2GPR { GPRInfo::regT4 };
+#elif USE(JSVALUE32_64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT1, GPRInfo::regT0 };
+constexpr JSValueRegs valueJSR { GPRInfo::regT3, GPRInfo::regT2 };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT7 };
+constexpr GPRReg scratchGPR { GPRInfo::regT6 };
+constexpr GPRReg scratch2GPR { GPRInfo::regT4 };
+#endif
+}
+
+namespace BaselinePutByValRegisters {
+#if USE(JSVALUE64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT0 };
+constexpr JSValueRegs propertyJSR { GPRInfo::regT1 };
+constexpr JSValueRegs valueJSR { GPRInfo::regT2 };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT4 };
+constexpr GPRReg profileGPR { GPRInfo::regT3 };
+#elif USE(JSVALUE32_64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT1, GPRInfo::regT0 };
+constexpr JSValueRegs propertyJSR { GPRInfo::regT3, GPRInfo::regT2 };
+constexpr JSValueRegs valueJSR { GPRInfo::regT6, GPRInfo::regT7 };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT4 };
+constexpr GPRReg profileGPR { GPRInfo::regT5 };
+#endif
+}
+
+namespace BaselinePrivateBrandRegisters {
+#if USE(JSVALUE64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT0 };
+constexpr JSValueRegs brandJSR { GPRInfo::regT1 };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT2 };
+#elif USE(JSVALUE32_64)
+constexpr JSValueRegs baseJSR { GPRInfo::regT1, GPRInfo::regT0 };
+constexpr JSValueRegs brandJSR { GPRInfo::regT3, GPRInfo::regT2 };
+constexpr GPRReg stubInfoGPR { GPRInfo::regT7 };
+#endif
+static_assert(baseJSR == BaselineGetByValRegisters::baseJSR);
+static_assert(brandJSR == BaselineGetByValRegisters::propertyJSR);
+}
 
 class JITInlineCacheGenerator {
 protected:
     JITInlineCacheGenerator() { }
-    JITInlineCacheGenerator(CodeBlock*, JITType, CodeOrigin, CallSiteIndex, AccessType, const RegisterSet& usedRegisters);
+    JITInlineCacheGenerator(CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, AccessType, const RegisterSet& usedRegisters);
     
 public:
     StructureStubInfo* stubInfo() const { return m_stubInfo; }
@@ -180,7 +263,7 @@ public:
 
 protected:
     JITType m_jitType;
-    StructureStubInfo* m_stubInfo;
+    StructureStubInfo* m_stubInfo { nullptr };
 
 public:
     MacroAssembler::Label m_start;
@@ -194,7 +277,7 @@ protected:
     JITByIdGenerator() { }
 
     JITByIdGenerator(
-        CodeBlock*, JITType, CodeOrigin, CallSiteIndex, AccessType, const RegisterSet& usedRegisters,
+        CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, AccessType, const RegisterSet& usedRegisters,
         JSValueRegs base, JSValueRegs value, GPRReg stubInfoGPR);
 
 public:
@@ -223,7 +306,7 @@ public:
     JITGetByIdGenerator() { }
 
     JITGetByIdGenerator(
-        CodeBlock*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters, CacheableIdentifier,
+        CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters, CacheableIdentifier,
         JSValueRegs base, JSValueRegs value, GPRReg stubInfoGPR, AccessType);
     
     void generateFastPath(MacroAssembler&);
@@ -238,7 +321,7 @@ public:
     JITGetByIdWithThisGenerator() { }
 
     JITGetByIdWithThisGenerator(
-        CodeBlock*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters, CacheableIdentifier,
+        CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters, CacheableIdentifier,
         JSValueRegs value, JSValueRegs base, JSValueRegs thisRegs, GPRReg stubInfoGPR);
 
     void generateBaselineDataICFastPath(JIT&, unsigned stubInfoConstant, GPRReg stubInfoGPR);
@@ -250,7 +333,7 @@ public:
     JITPutByIdGenerator() = default;
 
     JITPutByIdGenerator(
-        CodeBlock*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters, CacheableIdentifier,
+        CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters, CacheableIdentifier,
         JSValueRegs base, JSValueRegs value, GPRReg stubInfoGPR, GPRReg scratch, ECMAMode, PutKind);
     
     void generateFastPath(MacroAssembler&);
@@ -269,7 +352,7 @@ public:
     JITPutByValGenerator() = default;
 
     JITPutByValGenerator(
-        CodeBlock*, JITType, CodeOrigin, CallSiteIndex, AccessType, const RegisterSet& usedRegisters,
+        CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, AccessType, const RegisterSet& usedRegisters,
         JSValueRegs base, JSValueRegs property, JSValueRegs result, GPRReg arrayProfileGPR, GPRReg stubInfoGPR);
 
     MacroAssembler::Jump slowPathJump() const
@@ -294,7 +377,7 @@ public:
     JITDelByValGenerator() { }
 
     JITDelByValGenerator(
-        CodeBlock*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters,
+        CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters,
         JSValueRegs base, JSValueRegs property, JSValueRegs result, GPRReg stubInfoGPR, GPRReg scratch);
 
     MacroAssembler::Jump slowPathJump() const
@@ -317,7 +400,7 @@ public:
     JITDelByIdGenerator() { }
 
     JITDelByIdGenerator(
-        CodeBlock*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters, CacheableIdentifier,
+        CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters, CacheableIdentifier,
         JSValueRegs base, JSValueRegs result, GPRReg stubInfoGPR, GPRReg scratch);
 
     MacroAssembler::Jump slowPathJump() const
@@ -340,7 +423,7 @@ public:
     JITInByValGenerator() { }
 
     JITInByValGenerator(
-        CodeBlock*, JITType, CodeOrigin, CallSiteIndex, AccessType, const RegisterSet& usedRegisters,
+        CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, AccessType, const RegisterSet& usedRegisters,
         JSValueRegs base, JSValueRegs property, JSValueRegs result, GPRReg stubInfoGPR);
 
     MacroAssembler::Jump slowPathJump() const
@@ -362,7 +445,7 @@ public:
     JITInByIdGenerator() { }
 
     JITInByIdGenerator(
-        CodeBlock*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters, CacheableIdentifier,
+        CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters, CacheableIdentifier,
         JSValueRegs base, JSValueRegs value, GPRReg stubInfoGPR);
 
     void generateFastPath(MacroAssembler&);
@@ -375,7 +458,7 @@ public:
     JITInstanceOfGenerator() { }
     
     JITInstanceOfGenerator(
-        CodeBlock*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters, GPRReg result,
+        CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, const RegisterSet& usedRegisters, GPRReg result,
         GPRReg value, GPRReg prototype, GPRReg stubInfoGPR, GPRReg scratch1, GPRReg scratch2,
         bool prototypeIsKnownObject = false);
     
@@ -398,7 +481,7 @@ public:
     JITGetByValGenerator() { }
 
     JITGetByValGenerator(
-        CodeBlock*, JITType, CodeOrigin, CallSiteIndex, AccessType, const RegisterSet& usedRegisters,
+        CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, AccessType, const RegisterSet& usedRegisters,
         JSValueRegs base, JSValueRegs property, JSValueRegs result, GPRReg stubInfoGPR);
 
     MacroAssembler::Jump slowPathJump() const
@@ -424,7 +507,7 @@ public:
     JITPrivateBrandAccessGenerator() { }
 
     JITPrivateBrandAccessGenerator(
-        CodeBlock*, JITType, CodeOrigin, CallSiteIndex, AccessType, const RegisterSet& usedRegisters,
+        CodeBlock*, Bag<StructureStubInfo>*, JITType, CodeOrigin, CallSiteIndex, AccessType, const RegisterSet& usedRegisters,
         JSValueRegs base, JSValueRegs brand, GPRReg stubInfoGPR);
 
     MacroAssembler::Jump slowPathJump() const

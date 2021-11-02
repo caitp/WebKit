@@ -42,6 +42,7 @@ struct ServiceWorkerClientData;
 struct ServiceWorkerClientIdentifier;
 struct ServiceWorkerContextData;
 struct ServiceWorkerJobDataIdentifier;
+enum class WorkerThreadMode : bool;
 
 class SWServerToContextConnection {
     WTF_MAKE_FAST_ALLOCATED;
@@ -51,7 +52,7 @@ public:
     SWServerToContextConnectionIdentifier identifier() const { return m_identifier; }
 
     // Messages to the SW host process
-    virtual void installServiceWorkerContext(const ServiceWorkerContextData&, const ServiceWorkerData&, const String& userAgent) = 0;
+    virtual void installServiceWorkerContext(const ServiceWorkerContextData&, const ServiceWorkerData&, const String& userAgent, WorkerThreadMode) = 0;
     virtual void updateAppInitiatedValue(ServiceWorkerIdentifier, LastNavigationWasAppInitiated) = 0;
     virtual void fireInstallEvent(ServiceWorkerIdentifier) = 0;
     virtual void fireActivateEvent(ServiceWorkerIdentifier) = 0;
@@ -59,6 +60,7 @@ public:
     virtual void didSaveScriptsToDisk(ServiceWorkerIdentifier, const ScriptBuffer&, const HashMap<URL, ScriptBuffer>& importedScripts) = 0;
     virtual void findClientByIdentifierCompleted(uint64_t requestIdentifier, const std::optional<ServiceWorkerClientData>&, bool hasSecurityError) = 0;
     virtual void matchAllCompleted(uint64_t requestIdentifier, const Vector<ServiceWorkerClientData>&) = 0;
+    virtual void firePushEvent(ServiceWorkerIdentifier, const std::optional<Vector<uint8_t>>&, CompletionHandler<void(bool)>&& callback) = 0;
 
     // Messages back from the SW host process
     WEBCORE_EXPORT void scriptContextFailedToStart(const std::optional<ServiceWorkerJobDataIdentifier>&, ServiceWorkerIdentifier, const String& message);
@@ -75,16 +77,18 @@ public:
     WEBCORE_EXPORT void didFailHeartBeatCheck(ServiceWorkerIdentifier);
 
     const RegistrableDomain& registrableDomain() const { return m_registrableDomain; }
+    std::optional<ServiceWorkerClientIdentifier> serviceWorkerPageIdentifier() const { return m_serviceWorkerPageIdentifier; }
 
     virtual void connectionIsNoLongerNeeded() = 0;
     virtual void terminateDueToUnresponsiveness() = 0;
 
 protected:
-    WEBCORE_EXPORT explicit SWServerToContextConnection(RegistrableDomain&&);
+    WEBCORE_EXPORT SWServerToContextConnection(RegistrableDomain&&, std::optional<ServiceWorkerClientIdentifier> serviceWorkerPageIdentifier);
 
 private:
     SWServerToContextConnectionIdentifier m_identifier;
     RegistrableDomain m_registrableDomain;
+    std::optional<ServiceWorkerClientIdentifier> m_serviceWorkerPageIdentifier;
 };
 
 } // namespace WebCore

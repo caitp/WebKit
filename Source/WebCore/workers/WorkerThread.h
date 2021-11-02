@@ -72,6 +72,7 @@ public:
     WorkerType workerType;
     FetchRequestCredentials credentials;
     Settings::Values settingsValues;
+    WorkerThreadMode workerThreadMode { WorkerThreadMode::CreateNewThread };
 
     WorkerParameters isolatedCopy() const;
 };
@@ -111,7 +112,7 @@ private:
     virtual void finishedEvaluatingScript() { }
 
     // WorkerOrWorkletThread.
-    Ref<WTF::Thread> createThread() final;
+    Ref<Thread> createThread() final;
     RefPtr<WorkerOrWorkletGlobalScope> createGlobalScope() final;
     void evaluateScriptIfNecessary(String& exceptionMessage) final;
     bool shouldWaitForWebInspectorOnStartup() const final;

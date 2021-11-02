@@ -94,6 +94,7 @@ public:
     void updatePreferences();
 
     void terminateForTesting();
+    void webProcessConnectionCountForTesting(CompletionHandler<void(uint64_t)>&&);
 
 private:
     explicit GPUProcessProxy();
@@ -146,6 +147,7 @@ private:
     bool m_hasSentTCCDSandboxExtension { false };
     bool m_hasSentCameraSandboxExtension { false };
     bool m_hasSentMicrophoneSandboxExtension { false };
+    bool m_hasSentNetworkProcessXPCEndpoint { false };
 #endif
     HashSet<PAL::SessionID> m_sessionIDs;
 };

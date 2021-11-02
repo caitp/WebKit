@@ -27,6 +27,7 @@
 
 #include "EditorClient.h"
 #include "ElementAncestorIterator.h"
+#include "ElementInlines.h"
 #include "FormController.h"
 #include "Frame.h"
 #include "HTMLFormControlElement.h"
@@ -52,7 +53,7 @@ private:
 
 FormAssociatedElement::FormAssociatedElement(HTMLFormElement* form)
     : m_form(nullptr)
-    , m_formSetByParser(makeWeakPtr(form))
+    , m_formSetByParser(form)
 {
 }
 
@@ -154,7 +155,7 @@ void FormAssociatedElement::setForm(HTMLFormElement* newForm)
     willChangeForm();
     if (m_form)
         m_form->removeFormElement(this);
-    m_form = makeWeakPtr(newForm);
+    m_form = newForm;
     if (newForm)
         newForm->registerFormElement(this);
     didChangeForm();

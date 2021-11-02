@@ -83,41 +83,58 @@ void RemoteMediaPlayerProxy::setVideoInlineSizeFenced(const WebCore::FloatSize& 
     setVideoInlineSizeIfPossible(*m_inlineLayerHostingContext, size);
 }
 
-void RemoteMediaPlayerProxy::nativeImageForCurrentTime(CompletionHandler<void(std::optional<WTF::MachSendRight>&&)>&& completionHandler)
+void RemoteMediaPlayerProxy::nativeImageForCurrentTime(CompletionHandler<void(std::optional<WTF::MachSendRight>&&, WebCore::DestinationColorSpace)>&& completionHandler)
 {
     if (!m_player) {
-        completionHandler(std::nullopt);
+        completionHandler(std::nullopt, DestinationColorSpace::SRGB());
         return;
     }
 
     auto nativeImage = m_player->nativeImageForCurrentTime();
     if (!nativeImage) {
-        completionHandler(std::nullopt);
+        completionHandler(std::nullopt, DestinationColorSpace::SRGB());
         return;
     }
 
     auto platformImage = nativeImage->platformImage();
     if (!platformImage) {
-        completionHandler(std::nullopt);
+        completionHandler(std::nullopt, DestinationColorSpace::SRGB());
         return;
     }
 
     auto surface = WebCore::IOSurface::createFromImage(platformImage.get());
     if (!surface) {
-        completionHandler(std::nullopt);
+        completionHandler(std::nullopt, DestinationColorSpace::SRGB());
         return;
     }
 
-    completionHandler(surface->createSendRight());
+    completionHandler(surface->createSendRight(), nativeImage->colorSpace());
 }
 
-void RemoteMediaPlayerProxy::pixelBufferForCurrentTime(CompletionHandler<void(RetainPtr<CVPixelBufferRef>&&)>&& completionHandler)
+void RemoteMediaPlayerProxy::colorSpace(CompletionHandler<void(WebCore::DestinationColorSpace)>&& completionHandler)
 {
-    RetainPtr<CVPixelBufferRef> result;
+    if (!m_player) {
+        completionHandler(DestinationColorSpace::SRGB());
+        return;
+    }
+
+    completionHandler(m_player->colorSpace());
+}
+
+#if USE(AVFOUNDATION)
+void RemoteMediaPlayerProxy::pixelBufferForCurrentTimeIfChanged(CompletionHandler<void(std::optional<RetainPtr<CVPixelBufferRef>>&&)>&& completionHandler)
+{
+    std::optional<RetainPtr<CVPixelBufferRef>> result;
+    RetainPtr<CVPixelBufferRef> pixelBuffer;
     if (m_player)
-        result = m_player->pixelBufferForCurrentTime();
+        pixelBuffer = m_player->pixelBufferForCurrentTime();
+    if (m_pixelBufferForCurrentTime != pixelBuffer) {
+        result = pixelBuffer;
+        m_pixelBufferForCurrentTime = WTFMove(pixelBuffer);
+    }
     completionHandler(WTFMove(result));
 }
+#endif
 
 } // namespace WebKit
 

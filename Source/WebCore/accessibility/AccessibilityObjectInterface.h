@@ -34,9 +34,9 @@
 #include "TextIteratorBehavior.h"
 #include "VisibleSelection.h"
 #include "Widget.h"
+#include <variant>
 #include <wtf/HashSet.h>
 #include <wtf/RefCounted.h>
-#include <wtf/Variant.h>
 
 #if PLATFORM(WIN)
 #include "AccessibilityObjectWrapperWin.h"
@@ -66,6 +66,10 @@ typedef struct _WebKitAccessible AccessibilityObjectWrapper;
 class AccessibilityObjectWrapper;
 #endif
 
+namespace PAL {
+class SessionID;
+}
+
 namespace WTF {
 class TextStream;
 }
@@ -85,7 +89,6 @@ class Path;
 class QualifiedName;
 class RenderObject;
 class ScrollView;
-class Widget;
 
 struct AccessibilityText;
 struct ScrollRectToVisibleOptions;
@@ -247,7 +250,7 @@ enum class AccessibilityRole {
     Window,
 };
 
-using AccessibilityRoleSet = WTF::HashSet<AccessibilityRole, WTF::IntHash<AccessibilityRole>, WTF::StrongEnumHashTraits<AccessibilityRole>>;
+using AccessibilityRoleSet = HashSet<AccessibilityRole, IntHash<AccessibilityRole>, WTF::StrongEnumHashTraits<AccessibilityRole>>;
 
 ALWAYS_INLINE String accessibilityRoleToString(AccessibilityRole role)
 {
@@ -626,7 +629,7 @@ enum class AccessibilitySearchKey {
     VisitedLink,
 };
 
-using AXEditingStyleValueVariant = Variant<String, bool, int>;
+using AXEditingStyleValueVariant = std::variant<String, bool, int>;
 
 struct AccessibilitySearchCriteria {
     AXCoreObject* anchorObject { nullptr };
@@ -815,6 +818,7 @@ public:
     virtual bool isLink() const = 0;
     bool isImage() const { return roleValue() == AccessibilityRole::Image; }
     bool isImageMap() const { return roleValue() == AccessibilityRole::ImageMap; }
+    bool isVideo() const { return roleValue() == AccessibilityRole::Video; }
     virtual bool isNativeImage() const = 0;
     virtual bool isImageButton() const = 0;
     virtual bool isPasswordField() const = 0;
@@ -1010,7 +1014,7 @@ public:
     virtual String validationMessage() const = 0;
 
     virtual unsigned blockquoteLevel() const = 0;
-    virtual int headingLevel() const = 0;
+    virtual unsigned headingLevel() const = 0;
     virtual AccessibilityButtonState checkboxOrRadioValue() const = 0;
     virtual String valueDescription() const = 0;
     virtual float valueForRange() const = 0;
@@ -1119,6 +1123,9 @@ public:
     virtual bool ariaRoleHasPresentationalChildren() const = 0;
     virtual bool inheritsPresentationalRole() const = 0;
 
+    using AXValue = std::variant<bool, unsigned, float, String, AccessibilityButtonState, AXCoreObject*>;
+    virtual AXValue value() = 0;
+
     // Accessibility Text
     virtual void accessibilityText(Vector<AccessibilityText>&) const = 0;
     // A single method for getting a computed label for an AXObject. It condenses the nuances of accessibilityText. Used by Inspector.
@@ -1183,13 +1190,17 @@ public:
     virtual String selectedText() const = 0;
     virtual String accessKey() const = 0;
     virtual String actionVerb() const = 0;
+
+    // Widget support.
+    virtual bool isWidget() const = 0;
     virtual Widget* widget() const = 0;
     virtual PlatformWidget platformWidget() const = 0;
+    virtual Widget* widgetForAttachmentView() const = 0;
+
 #if PLATFORM(COCOA)
     virtual RemoteAXObjectRef remoteParentObject() const = 0;
     virtual FloatRect convertRectToPlatformSpace(const FloatRect&, AccessibilityConversionSpace) const = 0;
 #endif
-    virtual Widget* widgetForAttachmentView() const = 0;
     virtual Page* page() const = 0;
     virtual Document* document() const = 0;
     virtual FrameView* documentFrameView() const = 0;
@@ -1223,17 +1234,18 @@ public:
     virtual void increment() = 0;
     virtual void decrement() = 0;
 
-    virtual void childrenChanged() = 0;
-    virtual void updateAccessibilityRole() = 0;
-
     virtual const AccessibilityChildrenVector& children(bool updateChildrenIfNeeded = true) = 0;
+
+    enum class DescendIfIgnored : uint8_t {
+        No,
+        Yes
+    };
     virtual void addChildren() = 0;
-    virtual void addChild(AXCoreObject*) = 0;
-    virtual void insertChild(AXCoreObject*, unsigned) = 0;
+    virtual void addChild(AXCoreObject*, DescendIfIgnored = DescendIfIgnored::Yes) = 0;
+    virtual void insertChild(AXCoreObject*, unsigned, DescendIfIgnored = DescendIfIgnored::Yes) = 0;
     Vector<AXID> childrenIDs();
 
     virtual bool canHaveChildren() const = 0;
-    virtual bool hasChildren() const = 0;
     virtual void updateChildrenIfNecessary() = 0;
     virtual void setNeedsToUpdateChildren() = 0;
     virtual void setNeedsToUpdateSubtree() = 0;
@@ -1371,15 +1383,10 @@ public:
     enum class ScrollByPageDirection { Up, Down, Left, Right };
     virtual bool scrollByPage(ScrollByPageDirection) const = 0;
     virtual IntPoint scrollPosition() const = 0;
+    virtual AccessibilityChildrenVector contents() = 0;
     virtual IntSize scrollContentsSize() const = 0;
     virtual IntRect scrollVisibleContentRect() const = 0;
     virtual void scrollToMakeVisible(const ScrollRectToVisibleOptions&) const = 0;
-
-    virtual bool lastKnownIsIgnoredValue() = 0;
-    virtual void setLastKnownIsIgnoredValue(bool) = 0;
-
-    // Fires a children changed notification on the parent if the isIgnored value changed.
-    virtual void notifyIfIgnoredValueChanged() = 0;
 
     // All math elements return true for isMathElement().
     virtual bool isMathElement() const = 0;
@@ -1405,7 +1412,7 @@ public:
     virtual bool isMathMultiscriptObject(AccessibilityMathMultiscriptObjectType) const = 0;
 
     // Root components.
-    virtual AXCoreObject* mathRadicandObject() = 0;
+    virtual std::optional<AccessibilityChildrenVector> mathRadicand() = 0;
     virtual AXCoreObject* mathRootIndexObject() = 0;
 
     // Under over components.
@@ -1495,7 +1502,7 @@ public:
     virtual void clearIsIgnoredFromParentData() = 0;
     virtual void setIsIgnoredFromParentDataForChild(AXCoreObject*) = 0;
     
-    virtual uint64_t sessionID() const = 0;
+    virtual PAL::SessionID sessionID() const = 0;
     virtual String documentURI() const = 0;
     virtual String documentEncoding() const = 0;
     virtual AccessibilityChildrenVector documentLinks() = 0;
@@ -1608,8 +1615,7 @@ template<typename T, typename U> inline T retrieveAutoreleasedValueFromMainThrea
 
 inline bool AXCoreObject::isDescendantOfObject(const AXCoreObject* axObject) const
 {
-    return axObject && axObject->hasChildren()
-        && Accessibility::findAncestor<AXCoreObject>(*this, false, [axObject] (const AXCoreObject& object) {
+    return axObject && Accessibility::findAncestor<AXCoreObject>(*this, false, [axObject] (const AXCoreObject& object) {
             return &object == axObject;
         }) != nullptr;
 }

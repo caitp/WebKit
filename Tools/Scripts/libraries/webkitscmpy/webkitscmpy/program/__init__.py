@@ -42,7 +42,10 @@ from webkitcorepy import arguments, log as webkitcorepy_log
 from webkitscmpy import local, log, remote
 
 
-def main(args=None, path=None, loggers=None, contributors=None, identifier_template=None, subversion=None):
+def main(
+    args=None, path=None, loggers=None, contributors=None,
+    identifier_template=None, subversion=None, additional_setup=None, hooks=None,
+):
     logging.basicConfig(level=logging.WARNING)
 
     loggers = [logging.getLogger(), webkitcorepy_log,  log] + (loggers or [])
@@ -104,11 +107,20 @@ def main(args=None, path=None, loggers=None, contributors=None, identifier_templ
         repository = local.Scm.from_path(path=parsed.repository, contributors=None if callable(contributors) else contributors)
 
     if callable(contributors):
-        repository.contributors = contributors(repository)
+        repository.contributors = contributors(repository) or repository.contributors
     if callable(identifier_template):
         identifier_template = identifier_template(repository)
     if callable(subversion):
         subversion = subversion(repository)
+    if callable(hooks):
+        hooks = hooks(repository)
+
+    if sys.version_info > (3, 0):
+        import inspect
+    else:
+        import inspect2 as inspect
+    if callable(additional_setup) and list(inspect.signature(additional_setup).parameters.keys()) == ['repository']:
+        additional_setup = additional_setup(repository)
 
     if not getattr(parsed, 'main', None):
         parser.print_help()
@@ -119,4 +131,6 @@ def main(args=None, path=None, loggers=None, contributors=None, identifier_templ
         repository=repository,
         identifier_template=identifier_template,
         subversion=subversion,
+        additional_setup=additional_setup,
+        hooks=hooks,
     )

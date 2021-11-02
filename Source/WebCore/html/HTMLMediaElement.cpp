@@ -85,8 +85,8 @@
 #include "NavigatorMediaDevices.h"
 #include "NetworkingContext.h"
 #include "PODIntervalTree.h"
-#include "Page.h"
 #include "PageGroup.h"
+#include "PageInlines.h"
 #include "PictureInPictureSupport.h"
 #include "PlatformMediaSessionManager.h"
 #include "PlatformTextTrack.h"
@@ -1725,7 +1725,7 @@ void HTMLMediaElement::updateActiveTextTrackCues(const MediaTime& movieTime)
     INFO_LOG(LOGIDENTIFIER, "nextInterestingTime:", nextInterestingTime);
 
     if (nextInterestingTime.isValid() && m_player) {
-        m_player->performTaskAtMediaTime([this, weakThis = makeWeakPtr(this)] {
+        m_player->performTaskAtMediaTime([this, weakThis = WeakPtr { *this }] {
             if (!weakThis)
                 return;
 
@@ -2941,7 +2941,7 @@ void HTMLMediaElement::progressEventTimerFired()
     if (!m_player->supportsProgressMonitoring())
         return;
 
-    m_player->didLoadingProgress([this, weakThis = makeWeakPtr(this)](bool progress) {
+    m_player->didLoadingProgress([this, weakThis = WeakPtr { *this }](bool progress) {
         if (!weakThis)
             return;
         MonotonicTime time = MonotonicTime::now();
@@ -5212,12 +5212,14 @@ void HTMLMediaElement::mediaPlayerSizeChanged()
 
 bool HTMLMediaElement::mediaPlayerRenderingCanBeAccelerated()
 {
+#if ENABLE(VIDEO_PRESENTATION_MODE)
     // This function must return "true" when the video is playing in the
-    // picture-in-picture window. Otherwise, the MediaPlayerPrivate* may
-    // destroy the video layer.
-    if (m_videoFullscreenMode == VideoFullscreenModePictureInPicture)
+    // picture-in-picture window or if it is in fullscreen.
+    // Otherwise, the MediaPlayerPrivate* may destroy the video layer if
+    // the no longer in the DOM.
+    if (m_videoFullscreenLayer)
         return true;
-
+#endif
     auto* renderer = this->renderer();
     return is<RenderVideo>(renderer)
         && downcast<RenderVideo>(*renderer).view().compositor().canAccelerateVideoRendering(downcast<RenderVideo>(*renderer));
@@ -6477,7 +6479,7 @@ void HTMLMediaElement::setPreparedToReturnVideoLayerToInline(bool value)
     }
 }
 
-void HTMLMediaElement::waitForPreparedForInlineThen(WTF::Function<void()>&& completionHandler)
+void HTMLMediaElement::waitForPreparedForInlineThen(Function<void()>&& completionHandler)
 {
     INFO_LOG(LOGIDENTIFIER);
     ASSERT(!m_preparedForInlineCompletionHandler);
@@ -6509,7 +6511,7 @@ RetainPtr<PlatformLayer> HTMLMediaElement::createVideoFullscreenLayer()
     return nullptr;
 }
 
-void HTMLMediaElement::setVideoFullscreenLayer(PlatformLayer* platformLayer, WTF::Function<void()>&& completionHandler)
+void HTMLMediaElement::setVideoFullscreenLayer(PlatformLayer* platformLayer, Function<void()>&& completionHandler)
 {
     INFO_LOG(LOGIDENTIFIER);
     m_videoFullscreenLayer = platformLayer;
@@ -7279,7 +7281,7 @@ RefPtr<PlatformMediaResourceLoader> HTMLMediaElement::mediaPlayerCreateResourceL
     auto destination = isVideo() ? FetchOptions::Destination::Video : FetchOptions::Destination::Audio;
     auto mediaResourceLoader = adoptRef(*new MediaResourceLoader(document(), *this, crossOrigin(), destination));
 
-    m_lastMediaResourceLoaderForTesting = makeWeakPtr(mediaResourceLoader.get());
+    m_lastMediaResourceLoaderForTesting = mediaResourceLoader.get();
 
     return mediaResourceLoader;
 }
@@ -7973,7 +7975,7 @@ bool HTMLMediaElement::shouldOverrideBackgroundPlaybackRestriction(PlatformMedia
             return true;
 #endif
 #if ENABLE(MEDIA_STREAM)
-        if (hasMediaStreamSrcObject() && mediaState().containsAny(MediaProducer::MediaState::IsPlayingAudio) && document().mediaState().containsAny(MediaProducer::MediaState::HasActiveAudioCaptureDevice)) {
+        if (hasMediaStreamSrcObject() && mediaState().containsAny(MediaProducerMediaState::IsPlayingAudio) && document().mediaState().containsAny(MediaProducerMediaState::HasActiveAudioCaptureDevice)) {
             INFO_LOG(LOGIDENTIFIER, "returning true because playing an audio MediaStreamTrack");
             return true;
         }
@@ -7988,7 +7990,7 @@ bool HTMLMediaElement::shouldOverrideBackgroundPlaybackRestriction(PlatformMedia
             return true;
         }
 #if ENABLE(MEDIA_STREAM)
-        if (hasMediaStreamSrcObject() && mediaState().containsAny(MediaProducer::MediaState::IsPlayingAudio) && document().mediaState().containsAny(MediaProducer::MediaState::HasActiveAudioCaptureDevice)) {
+        if (hasMediaStreamSrcObject() && mediaState().containsAny(MediaProducerMediaState::IsPlayingAudio) && document().mediaState().containsAny(MediaProducerMediaState::HasActiveAudioCaptureDevice)) {
             INFO_LOG(LOGIDENTIFIER, "returning true because playing an audio MediaStreamTrack");
             return true;
         }
@@ -8035,7 +8037,7 @@ void HTMLMediaElement::scheduleUpdateMediaState()
 
 void HTMLMediaElement::updateMediaState()
 {
-    MediaProducer::MediaStateFlags state = mediaState();
+    MediaProducerMediaStateFlags state = mediaState();
     if (m_mediaState == state)
         return;
 
@@ -8046,31 +8048,31 @@ void HTMLMediaElement::updateMediaState()
 }
 #endif
 
-MediaProducer::MediaStateFlags HTMLMediaElement::mediaState() const
+MediaProducerMediaStateFlags HTMLMediaElement::mediaState() const
 {
     MediaStateFlags state;
 
     bool hasActiveVideo = isVideo() && hasVideo();
     bool hasAudio = this->hasAudio();
     if (isPlayingToExternalTarget())
-        state.add(MediaProducer::MediaState::IsPlayingToExternalDevice);
+        state.add(MediaProducerMediaState::IsPlayingToExternalDevice);
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
     if (m_hasPlaybackTargetAvailabilityListeners) {
-        state.add(MediaProducer::MediaState::HasPlaybackTargetAvailabilityListener);
+        state.add(MediaProducerMediaState::HasPlaybackTargetAvailabilityListener);
         if (!mediaSession().wirelessVideoPlaybackDisabled())
-            state.add(MediaProducer::MediaState::RequiresPlaybackTargetMonitoring);
+            state.add(MediaProducerMediaState::RequiresPlaybackTargetMonitoring);
     }
 
     bool requireUserGesture = m_mediaSession && mediaSession().hasBehaviorRestriction(MediaElementSession::RequireUserGestureToAutoplayToExternalDevice);
     if (m_readyState >= HAVE_METADATA && !requireUserGesture && !m_failedToPlayToWirelessTarget)
-        state.add(MediaProducer::MediaState::ExternalDeviceAutoPlayCandidate);
+        state.add(MediaProducerMediaState::ExternalDeviceAutoPlayCandidate);
 
     if (hasActiveVideo || hasAudio)
-        state.add(MediaProducer::MediaState::HasAudioOrVideo);
+        state.add(MediaProducerMediaState::HasAudioOrVideo);
 
     if (hasActiveVideo && endedPlayback())
-        state.add(MediaProducer::MediaState::DidPlayToEnd);
+        state.add(MediaProducerMediaState::DidPlayToEnd);
 #endif
 
     if (!isPlaying())
@@ -8084,10 +8086,10 @@ MediaProducer::MediaStateFlags HTMLMediaElement::mediaState() const
     isPlayingAudio = isPlayingAudio && !muted();
 #endif
     if (isPlayingAudio)
-        state.add(MediaProducer::MediaState::IsPlayingAudio);
+        state.add(MediaProducerMediaState::IsPlayingAudio);
 
     if (hasActiveVideo)
-        state.add(MediaProducer::MediaState::IsPlayingVideo);
+        state.add(MediaProducerMediaState::IsPlayingVideo);
 
     return state;
 }

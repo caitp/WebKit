@@ -157,9 +157,9 @@ void TextCheckingControllerProxy::removeAnnotationRelativeToSelection(const Stri
     auto types = removeCoreSpellingMarkers ? relevantMarkerTypes() : WebCore::DocumentMarker::PlatformTextChecking;
     RefPtr document = CheckedRef(m_page.corePage()->focusController())->focusedOrMainFrame().document();
     document->markers().filterMarkers(rangeAndOffset->range, [&] (const DocumentMarker& marker) {
-        if (!WTF::holds_alternative<WebCore::DocumentMarker::PlatformTextCheckingData>(marker.data()))
+        if (!std::holds_alternative<WebCore::DocumentMarker::PlatformTextCheckingData>(marker.data()))
             return false;
-        return WTF::get<WebCore::DocumentMarker::PlatformTextCheckingData>(marker.data()).key != annotation;
+        return std::get<WebCore::DocumentMarker::PlatformTextCheckingData>(marker.data()).key != annotation;
     }, types);
 }
 
@@ -177,7 +177,7 @@ WebCore::AttributedString TextCheckingControllerProxy::annotatedSubstringBetween
         [string appendAttributedString:adoptNS([[NSAttributedString alloc] initWithString:it.text().createNSStringWithoutCopying().get()]).get()];
         auto range = it.range();
         for (auto* marker : range.start.document().markers().markersInRange(range, DocumentMarker::PlatformTextChecking)) {
-            auto& data = WTF::get<DocumentMarker::PlatformTextCheckingData>(marker->data());
+            auto& data = std::get<DocumentMarker::PlatformTextCheckingData>(marker->data());
             auto subrange = resolveCharacterRange(range, { marker->startOffset(), marker->endOffset() - marker->startOffset() });
             [string addAttribute:data.key value:data.value range:characterRange(*entireRange, subrange)];
         }

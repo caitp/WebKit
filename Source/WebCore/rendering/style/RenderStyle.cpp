@@ -33,6 +33,7 @@
 #include "FloatRoundedRect.h"
 #include "FontCascade.h"
 #include "FontSelector.h"
+#include "InlineIteratorTextBox.h"
 #include "InlineTextBoxStyle.h"
 #include "Pagination.h"
 #include "QuotesData.h"
@@ -192,6 +193,7 @@ RenderStyle::RenderStyle(CreateDefaultStyleTag)
     m_nonInheritedFlags.firstChildState = false;
     m_nonInheritedFlags.lastChildState = false;
     m_nonInheritedFlags.isLink = false;
+    m_nonInheritedFlags.hasExplicitlyClearedContent = false;
     m_nonInheritedFlags.styleType = static_cast<unsigned>(PseudoId::None);
     m_nonInheritedFlags.pseudoBits = static_cast<unsigned>(PseudoId::None);
 
@@ -1066,6 +1068,7 @@ static bool rareInheritedDataChangeRequiresRepaint(const StyleRareInheritedData&
         || first.userSelect != second.userSelect
         || first.appleColorFilter != second.appleColorFilter
         || first.imageRendering != second.imageRendering
+        || first.accentColor != second.accentColor
 #if ENABLE(DARK_MODE_CSS)
         || first.colorScheme != second.colorScheme
 #endif
@@ -1457,7 +1460,7 @@ void RenderStyle::setPageScaleTransform(float scale)
 
 void RenderStyle::setTextShadow(std::unique_ptr<ShadowData> shadowData, bool add)
 {
-    ASSERT(!shadowData || (!shadowData->spread() && shadowData->style() == ShadowStyle::Normal));
+    ASSERT(!shadowData || (shadowData->spread().isZero() && shadowData->style() == ShadowStyle::Normal));
 
     auto& rareData = m_rareInheritedData.access();
     if (!add) {
@@ -1965,11 +1968,11 @@ LayoutBoxExtent RenderStyle::shadowExtent(const ShadowData* shadow)
         if (shadow->style() == ShadowStyle::Inset)
             continue;
 
-        auto extentAndSpread = shadow->paintingExtent() + shadow->spread();
-        top = std::min<LayoutUnit>(top, shadow->y() - extentAndSpread);
-        right = std::max<LayoutUnit>(right, shadow->x() + extentAndSpread);
-        bottom = std::max<LayoutUnit>(bottom, shadow->y() + extentAndSpread);
-        left = std::min<LayoutUnit>(left, shadow->x() - extentAndSpread);
+        auto extentAndSpread = shadow->paintingExtent() + LayoutUnit(shadow->spread().value());
+        top = std::min<LayoutUnit>(top, LayoutUnit(shadow->y().value()) - extentAndSpread);
+        right = std::max<LayoutUnit>(right, LayoutUnit(shadow->x().value()) + extentAndSpread);
+        bottom = std::max<LayoutUnit>(bottom, LayoutUnit(shadow->y().value()) + extentAndSpread);
+        left = std::min<LayoutUnit>(left, LayoutUnit(shadow->x().value()) - extentAndSpread);
     }
     
     return { top, right, bottom, left };
@@ -1986,11 +1989,11 @@ LayoutBoxExtent RenderStyle::shadowInsetExtent(const ShadowData* shadow)
         if (shadow->style() == ShadowStyle::Normal)
             continue;
 
-        auto extentAndSpread = shadow->paintingExtent() + shadow->spread();
-        top = std::max<LayoutUnit>(top, shadow->y() + extentAndSpread);
-        right = std::min<LayoutUnit>(right, shadow->x() - extentAndSpread);
-        bottom = std::min<LayoutUnit>(bottom, shadow->y() - extentAndSpread);
-        left = std::max<LayoutUnit>(left, shadow->x() + extentAndSpread);
+        auto extentAndSpread = shadow->paintingExtent() + LayoutUnit(shadow->spread().value());
+        top = std::max<LayoutUnit>(top, LayoutUnit(shadow->y().value()) + extentAndSpread);
+        right = std::min<LayoutUnit>(right, LayoutUnit(shadow->x().value()) - extentAndSpread);
+        bottom = std::min<LayoutUnit>(bottom, LayoutUnit(shadow->y().value()) - extentAndSpread);
+        left = std::max<LayoutUnit>(left, LayoutUnit(shadow->x().value()) + extentAndSpread);
     }
 
     return { top, right, bottom, left };
@@ -2005,9 +2008,9 @@ void RenderStyle::getShadowHorizontalExtent(const ShadowData* shadow, LayoutUnit
         if (shadow->style() == ShadowStyle::Inset)
             continue;
 
-        auto extentAndSpread = shadow->paintingExtent() + shadow->spread();
-        left = std::min<LayoutUnit>(left, shadow->x() - extentAndSpread);
-        right = std::max<LayoutUnit>(right, shadow->x() + extentAndSpread);
+        auto extentAndSpread = shadow->paintingExtent() + LayoutUnit(shadow->spread().value());
+        left = std::min<LayoutUnit>(left, LayoutUnit(shadow->x().value()) - extentAndSpread);
+        right = std::max<LayoutUnit>(right, LayoutUnit(shadow->x().value()) + extentAndSpread);
     }
 }
 
@@ -2020,15 +2023,17 @@ void RenderStyle::getShadowVerticalExtent(const ShadowData* shadow, LayoutUnit &
         if (shadow->style() == ShadowStyle::Inset)
             continue;
 
-        auto extentAndSpread = shadow->paintingExtent() + shadow->spread();
-        top = std::min<LayoutUnit>(top, shadow->y() - extentAndSpread);
-        bottom = std::max<LayoutUnit>(bottom, shadow->y() + extentAndSpread);
+        auto extentAndSpread = shadow->paintingExtent() + LayoutUnit(shadow->spread().value());
+        top = std::min<LayoutUnit>(top, LayoutUnit(shadow->y().intValue()) - extentAndSpread);
+        bottom = std::max<LayoutUnit>(bottom, LayoutUnit(shadow->y().intValue()) + extentAndSpread);
     }
 }
 
 Color RenderStyle::unresolvedColorForProperty(CSSPropertyID colorProperty, bool visitedLink) const
 {
     switch (colorProperty) {
+    case CSSPropertyAccentColor:
+        return accentColor();
     case CSSPropertyColor:
         return visitedLink ? visitedLinkColor() : color();
     case CSSPropertyBackgroundColor:
@@ -2167,6 +2172,17 @@ Color RenderStyle::colorByApplyingColorFilter(const Color& color) const
     Color transformedColor = color;
     appleColorFilter().transformColor(transformedColor);
     return transformedColor;
+}
+
+Color RenderStyle::effectiveAccentColor() const
+{
+    if (hasAutoAccentColor())
+        return { };
+
+    if (hasAppleColorFilter())
+        return colorByApplyingColorFilter(colorResolvingCurrentColor(accentColor()));
+
+    return colorResolvingCurrentColor(accentColor());
 }
 
 const BorderValue& RenderStyle::borderBefore() const

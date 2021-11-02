@@ -38,6 +38,7 @@ import re
 import requests
 import socket
 import sys
+import time
 
 if sys.version_info < (3, 5):
     print('ERROR: Please use Python 3. This code is not compatible with Python 2.')
@@ -394,82 +395,84 @@ class CheckPatchRelevance(AnalyzePatch):
     name = 'check-patch-relevance'
     description = ['check-patch-relevance running']
     descriptionDone = ['Patch contains relevant changes']
+    MAX_LINE_SIZE = 250
 
-    bindings_paths = [
-        'Source/WebCore',
-        'Tools',
+    bindings_path_regexes = [
+        re.compile(rb'Source/WebCore', re.IGNORECASE),
+        re.compile(rb'Tools', re.IGNORECASE),
     ]
 
-    services_paths = [
-        'Tools/CISupport/build-webkit-org',
-        'Tools/CISupport/ews-build',
-        'Tools/CISupport/Shared',
-        'Tools/Scripts/libraries/resultsdbpy',
-        'Tools/Scripts/libraries/webkitcorepy',
-        'Tools/Scripts/libraries/webkitscmpy',
+    services_path_regexes = [
+        re.compile(rb'Tools/CISupport/build-webkit-org', re.IGNORECASE),
+        re.compile(rb'Tools/CISupport/ews-build', re.IGNORECASE),
+        re.compile(rb'Tools/CISupport/Shared', re.IGNORECASE),
+        re.compile(rb'Tools/Scripts/libraries/resultsdbpy', re.IGNORECASE),
+        re.compile(rb'Tools/Scripts/libraries/webkitcorepy', re.IGNORECASE),
+        re.compile(rb'Tools/Scripts/libraries/webkitscmpy', re.IGNORECASE),
     ]
 
-    jsc_paths = [
-        '.*jsc.*',
-        '.*javascriptcore.*',
-        'JSTests/',
-        'Source/WTF/',
-        'Source/bmalloc/',
-        '.*Makefile.*',
-        'Tools/Scripts/build-webkit',
-        'Tools/Scripts/webkitdirs.pm',
+    jsc_path_regexes = [
+        re.compile(rb'.*jsc.*', re.IGNORECASE),
+        re.compile(rb'.*javascriptcore.*', re.IGNORECASE),
+        re.compile(rb'JSTests/', re.IGNORECASE),
+        re.compile(rb'Source/WTF/', re.IGNORECASE),
+        re.compile(rb'Source/bmalloc/', re.IGNORECASE),
+        re.compile(rb'.*Makefile.*', re.IGNORECASE),
+        re.compile(rb'Tools/Scripts/build-webkit', re.IGNORECASE),
+        re.compile(rb'Tools/Scripts/webkitdirs.pm', re.IGNORECASE),
     ]
 
-    wk1_paths = [
-        'Source/WebKitLegacy',
-        'Source/WebCore',
-        'Source/WebInspectorUI',
-        'Source/WebDriver',
-        'Source/WTF',
-        'Source/bmalloc',
-        'Source/JavaScriptCore',
-        'Source/ThirdParty',
-        'LayoutTests',
-        'Tools',
+    wk1_path_regexes = [
+        re.compile(rb'Source/WebKitLegacy', re.IGNORECASE),
+        re.compile(rb'Source/WebCore', re.IGNORECASE),
+        re.compile(rb'Source/WebInspectorUI', re.IGNORECASE),
+        re.compile(rb'Source/WebDriver', re.IGNORECASE),
+        re.compile(rb'Source/WTF', re.IGNORECASE),
+        re.compile(rb'Source/bmalloc', re.IGNORECASE),
+        re.compile(rb'Source/JavaScriptCore', re.IGNORECASE),
+        re.compile(rb'Source/ThirdParty', re.IGNORECASE),
+        re.compile(rb'LayoutTests', re.IGNORECASE),
+        re.compile(rb'Tools', re.IGNORECASE),
     ]
 
-    big_sur_builder_paths = [
-        'Source/',
-        'Tools/',
+    big_sur_builder_path_regexes = [
+        re.compile(rb'Source/', re.IGNORECASE),
+        re.compile(rb'Tools/', re.IGNORECASE),
     ]
-    webkitpy_paths = [
-        'Tools/Scripts/webkitpy',
-        'Tools/Scripts/libraries',
-        'Tools/Scripts/commit-log-editor',
-        'Source/WebKit/Scripts',
+    webkitpy_path_regexes = [
+        re.compile(rb'Tools/Scripts/webkitpy', re.IGNORECASE),
+        re.compile(rb'Tools/Scripts/libraries', re.IGNORECASE),
+        re.compile(rb'Tools/Scripts/commit-log-editor', re.IGNORECASE),
+        re.compile(rb'Source/WebKit/Scripts', re.IGNORECASE),
     ]
 
     group_to_paths_mapping = {
-        'bindings': bindings_paths,
-        'bigsur-release-build': big_sur_builder_paths,
-        'services-ews': services_paths,
-        'jsc': jsc_paths,
-        'webkitpy': webkitpy_paths,
-        'wk1-tests': wk1_paths,
-        'windows': wk1_paths,
+        'bindings': bindings_path_regexes,
+        'bigsur-release-build': big_sur_builder_path_regexes,
+        'services-ews': services_path_regexes,
+        'jsc': jsc_path_regexes,
+        'webkitpy': webkitpy_path_regexes,
+        'wk1-tests': wk1_path_regexes,
+        'windows': wk1_path_regexes,
     }
 
-    def _patch_is_relevant(self, patch, builderName):
+    def _patch_is_relevant(self, patch, builderName, timeout=30):
         group = [group for group in self.group_to_paths_mapping.keys() if group.lower() in builderName.lower()]
         if not group:
             # This builder doesn't have paths defined, all patches are relevant.
             return True
 
-        relevant_paths = self.group_to_paths_mapping[group[0]]
+        relevant_path_regexes = self.group_to_paths_mapping.get(group[0], [])
+        start = time.time()
 
         for change in patch.splitlines():
-            for path in relevant_paths:
-                if type(path) == str:
-                    path = path.encode(encoding='utf-8', errors='replace')
+            for regex in relevant_path_regexes:
                 if type(change) == str:
                     change = change.encode(encoding='utf-8', errors='replace')
-                if re.search(path, change, re.IGNORECASE):
+                if regex.search(change[:self.MAX_LINE_SIZE]):
                     return True
+            if time.time() > start + timeout:
+                return False
         return False
 
     def start(self):
@@ -1772,7 +1775,7 @@ class AnalyzeCompileWebKitResults(buildstep.BuildStep, BugzillaMixin):
             if logs:
                 logs = logs.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
                 email_text += '\n\nError lines:\n\n<code>{}</code>'.format(logs)
-            email_text += '\n\nTo unsubscrible from these notifications or to provide any feedback please email aakash_jain@apple.com'
+            email_text += '\n\nTo unsubscribe from these notifications or to provide any feedback please email aakash_jain@apple.com'
             self._addToLog('stdio', 'Sending email notification to {}'.format(patch_author))
             send_email_to_patch_author(patch_author, email_subject, email_text, patch_id)
         except Exception as e:
@@ -1835,7 +1838,7 @@ class RunJavaScriptCoreTests(shell.Test):
     NUM_FAILURES_TO_DISPLAY_IN_STATUS = 5
 
     def __init__(self, **kwargs):
-        shell.Test.__init__(self, logEnviron=False, **kwargs)
+        shell.Test.__init__(self, logEnviron=False, sigtermTime=10, **kwargs)
         self.binaryFailures = []
         self.stressTestFailures = []
 
@@ -2619,7 +2622,7 @@ class AnalyzeLayoutTestsResults(buildstep.BuildStep, BugzillaMixin):
             email_text += ' for <a href="{}">Bug {}</a>.'.format(Bugzilla.bug_url(bug_id), bug_id)
             email_text += '\n\nFull details are available at: {}\n\nPatch author: {}'.format(build_url, patch_author)
             email_text += '\n\nLayout test failure{}:\n{}'.format(pluralSuffix, test_names_string)
-            email_text += '\n\nTo unsubscrible from these notifications or to provide any feedback please email aakash_jain@apple.com'
+            email_text += '\n\nTo unsubscribe from these notifications or to provide any feedback please email aakash_jain@apple.com'
             self._addToLog('stdio', 'Sending email notification to {}'.format(patch_author))
             send_email_to_patch_author(patch_author, email_subject, email_text, patch_id)
         except Exception as e:

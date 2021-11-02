@@ -23,7 +23,7 @@
 #if ENABLE(GPU_PROCESS)
 
 messages -> GPUConnectionToWebProcess WantsDispatchMessage {
-    void CreateRenderingBackend(struct WebKit::RemoteRenderingBackendCreationParameters creationParameters)
+    void CreateRenderingBackend(struct WebKit::RemoteRenderingBackendCreationParameters creationParameters, IPC::StreamConnectionBuffer streamBuffer)
     void ReleaseRenderingBackend(WebKit::RenderingBackendIdentifier renderingBackendIdentifier)
 #if ENABLE(WEBGL)
     void CreateGraphicsContextGL(struct WebCore::GraphicsContextGLAttributes attributes, WebKit::GraphicsContextGLIdentifier graphicsContextGLIdentifier, WebKit::RenderingBackendIdentifier renderingBackendIdentifier, IPC::StreamConnectionBuffer stream)
@@ -51,6 +51,10 @@ messages -> GPUConnectionToWebProcess WantsDispatchMessage {
     ReleaseRemoteCommandListener(WebKit::RemoteRemoteCommandListenerIdentifier identifier)
     SetUserPreferredLanguages(Vector<String> languages)
     ConfigureLoggingChannel(String channelName, enum:uint8_t WTFLogChannelState state, enum:uint8_t WTFLogLevel level)
+#if USE(GRAPHICS_LAYER_WC)
+    CreateWCLayerTreeHost(WebKit::WCLayerTreeHostIdentifier identifier, uint64_t nativeWindow)
+    ReleaseWCLayerTreeHost(WebKit::WCLayerTreeHostIdentifier identifier)
+#endif
 }
 
 #endif // ENABLE(GPU_PROCESS)

@@ -159,7 +159,7 @@ struct ElementAttribute {
     QualifiedName attributeName;
 };
 
-void removeSubresourceURLAttributes(Ref<DocumentFragment>&& fragment, WTF::Function<bool(const URL&)> shouldRemoveURL)
+void removeSubresourceURLAttributes(Ref<DocumentFragment>&& fragment, Function<bool(const URL&)> shouldRemoveURL)
 {
     Vector<ElementAttribute> attributesToRemove;
     for (auto& element : descendantsOfType<Element>(fragment)) {
@@ -208,7 +208,7 @@ std::unique_ptr<Page> createPageForSanitizingWebContent()
     return page;
 }
 
-String sanitizeMarkup(const String& rawHTML, MSOListQuirks msoListQuirks, std::optional<WTF::Function<void(DocumentFragment&)>> fragmentSanitizer)
+String sanitizeMarkup(const String& rawHTML, MSOListQuirks msoListQuirks, std::optional<Function<void(DocumentFragment&)>> fragmentSanitizer)
 {
     auto page = createPageForSanitizingWebContent();
     Document* stagingDocument = page->mainFrame().document();
@@ -318,7 +318,7 @@ private:
     }
 
     enum class NodeTraversalMode { EmitString, DoNotEmitString };
-    Node* traverseNodesForSerialization(Node* startNode, Node* pastEnd, NodeTraversalMode);
+    Node* traverseNodesForSerialization(Node& startNode, Node* pastEnd, NodeTraversalMode);
 
     bool appendNodeToPreserveMSOList(Node&);
 
@@ -625,22 +625,24 @@ Node* StyledMarkupAccumulator::serializeNodes(const Position& start, const Posit
 {
     ASSERT(start <= end);
     auto startNode = start.firstNode();
+    if (!startNode)
+        return nullptr;
     Node* pastEnd = end.computeNodeAfterPosition();
     if (!pastEnd && end.containerNode())
         pastEnd = nextSkippingChildren(*end.containerNode());
 
     if (!m_highestNodeToBeSerialized) {
-        Node* lastClosed = traverseNodesForSerialization(startNode.get(), pastEnd, NodeTraversalMode::DoNotEmitString);
+        Node* lastClosed = traverseNodesForSerialization(*startNode, pastEnd, NodeTraversalMode::DoNotEmitString);
         m_highestNodeToBeSerialized = lastClosed;
     }
 
     if (m_highestNodeToBeSerialized && m_highestNodeToBeSerialized->parentNode())
         m_wrappingStyle = EditingStyle::wrappingStyleForSerialization(*m_highestNodeToBeSerialized->parentNode(), shouldAnnotate(), m_standardFontFamilySerializationMode);
 
-    return traverseNodesForSerialization(startNode.get(), pastEnd, NodeTraversalMode::EmitString);
+    return traverseNodesForSerialization(*startNode, pastEnd, NodeTraversalMode::EmitString);
 }
 
-Node* StyledMarkupAccumulator::traverseNodesForSerialization(Node* startNode, Node* pastEnd, NodeTraversalMode traversalMode)
+Node* StyledMarkupAccumulator::traverseNodesForSerialization(Node& startNode, Node* pastEnd, NodeTraversalMode traversalMode)
 {
     const bool shouldEmit = traversalMode == NodeTraversalMode::EmitString;
 
@@ -680,7 +682,7 @@ Node* StyledMarkupAccumulator::traverseNodesForSerialization(Node* startNode, No
 
     Node* lastNode = nullptr;
     Node* next = nullptr;
-    for (auto* n = startNode; n != pastEnd; lastNode = n, n = next) {
+    for (auto* n = &startNode; n != pastEnd; lastNode = n, n = next) {
 
         Vector<Node*, 8> exitedAncestors;
         next = nullptr;

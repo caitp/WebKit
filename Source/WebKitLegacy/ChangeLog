@@ -1,3 +1,100 @@
+2021-10-29  Alex Christensen  <achristensen@webkit.org>
+
+        Remove code inside ENABLE(NETSCAPE_PLUGIN_API)
+        https://bugs.webkit.org/show_bug.cgi?id=232462
+
+        Reviewed by Anders Carlsson.
+
+        * PlatformMac.cmake:
+        * WebKitLegacy.xcodeproj/project.pbxproj:
+
+2021-10-22  Ian Anderson  <iana@apple.com>
+
+        Add a module map file for PrivateFrameworks/WebKitLegacy
+        https://bugs.webkit.org/show_bug.cgi?id=230735
+
+        Reviewed by David Kilzer.
+
+        Add module map files for WebKitLegacy. The public module is empty
+        because there are no public headers. The private module map sets
+        PrivateHeaders as the umbrella directory because there isn't an umbrella
+        header already. Then it makes an explicit submodule for each header so
+        as to mimic the non-modular environment.
+
+        * Modules/WebKitLegacy.modulemap: Added.
+        * Modules/WebKitLegacy.private.modulemap: Added.
+        * WebKitLegacy.xcodeproj/project.pbxproj:
+
+2021-10-22  Commit Queue  <commit-queue@webkit.org>
+
+        Unreviewed, reverting r284713.
+        https://bugs.webkit.org/show_bug.cgi?id=232187
+
+        Broke some Apple internal builds
+
+        Reverted changeset:
+
+        "Add a module map file for PrivateFrameworks/WebKitLegacy"
+        https://bugs.webkit.org/show_bug.cgi?id=230735
+        https://commits.webkit.org/r284713
+
+2021-10-22  Ian Anderson  <iana@apple.com>
+
+        Add a module map file for PrivateFrameworks/WebKitLegacy
+        https://bugs.webkit.org/show_bug.cgi?id=230735
+
+        Reviewed by David Kilzer.
+
+        Add module map files for WebKitLegacy. The public module is empty
+        because there are no public headers. The private module map sets
+        PrivateHeaders as the umbrella directory because there isn't an umbrella
+        header already. Then it makes an explicit submodule for each header so
+        as to mimic the non-modular environment.
+
+        * Modules/WebKitLegacy.modulemap: Added.
+        * Modules/WebKitLegacy.private.modulemap: Added.
+        * WebKitLegacy.xcodeproj/project.pbxproj:
+
+2021-10-14  Chris Dumez  <cdumez@apple.com>
+
+        Unreviewed, fix up previous commit.
+
+        * Storage/InProcessIDBServer.cpp:
+        (storageQuotaManagerSpaceRequester):
+
+2021-10-14  Chris Dumez  <cdumez@apple.com>
+
+        Unreviewed, very tiny partial revert of r284142 to address assertion hits on the bots.
+
+        * Storage/InProcessIDBServer.cpp:
+        (storageQuotaManagerSpaceRequester):
+
+2021-10-13  Chris Dumez  <cdumez@apple.com>
+
+        Drop makeWeakPtr() and use WeakPtr { } directly
+        https://bugs.webkit.org/show_bug.cgi?id=231679
+
+        Reviewed by Darin Adler.
+
+        * Storage/InProcessIDBServer.cpp:
+        (storageQuotaManagerSpaceRequester):
+        * WebCoreSupport/PageStorageSessionProvider.h:
+        * WebCoreSupport/WebBroadcastChannelRegistry.cpp:
+        (WebBroadcastChannelRegistry::getOrCreate):
+
+2021-10-01  Ian Anderson  <iana@apple.com>
+
+        WebKitLegacy's module map files don't get installed
+        https://bugs.webkit.org/show_bug.cgi?id=230736
+
+        Reviewed by David Kilzer.
+
+        Revert r271607 because it doesn't work and isn't the right approach.
+
+        * Modules/WebKitLegacy_iOS.private.modulemap: Removed.
+        * Modules/WebKitLegacy_macOS.private.modulemap: Removed.
+        * WebKitLegacy.xcodeproj/project.pbxproj:
+
 2021-09-29  Jer Noble  <jer.noble@apple.com>
 
         Build-time optimization: forward declare more things in MediaPlayer.h and HTMLMediaElement.h

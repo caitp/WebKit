@@ -36,8 +36,9 @@
 #include "CSSShadowValue.h"
 #include "CSSValuePool.h"
 #include "Length.h" // For ValueRange
+#include "StyleColor.h"
+#include <variant>
 #include <wtf/OptionSet.h>
-#include <wtf/Variant.h>
 #include <wtf/Vector.h>
 
 namespace WebCore {
@@ -73,7 +74,7 @@ struct LengthRaw {
     double value;
 };
 
-using LengthOrPercentRaw = Variant<LengthRaw, double>;
+using LengthOrPercentRaw = std::variant<LengthRaw, double>;
 
 std::optional<int> consumeIntegerRaw(CSSParserTokenRange&, double minimumValue = -std::numeric_limits<double>::max());
 RefPtr<CSSPrimitiveValue> consumeInteger(CSSParserTokenRange&, double minimumValue = -std::numeric_limits<double>::max());
@@ -115,7 +116,7 @@ StringView consumeUrlAsStringView(CSSParserTokenRange&);
 RefPtr<CSSPrimitiveValue> consumeUrl(CSSParserTokenRange&);
 
 Color consumeColorWorkerSafe(CSSParserTokenRange&, const CSSParserContext&);
-RefPtr<CSSPrimitiveValue> consumeColor(CSSParserTokenRange&, const CSSParserContext&, bool acceptQuirkyColors = false);
+RefPtr<CSSPrimitiveValue> consumeColor(CSSParserTokenRange&, const CSSParserContext&, bool acceptQuirkyColors = false, OptionSet<StyleColor::CSSColorType> = { StyleColor::CSSColorType::Absolute, StyleColor::CSSColorType::Current, StyleColor::CSSColorType::System });
 
 enum class PositionSyntax {
     Position, // <position>
@@ -154,10 +155,10 @@ struct FontStyleRaw {
     CSSValueID style;
     std::optional<AngleRaw> angle;
 };
-using FontWeightRaw = Variant<CSSValueID, double>;
-using FontSizeRaw = Variant<CSSValueID, CSSPropertyParserHelpers::LengthOrPercentRaw>;
-using LineHeightRaw = Variant<CSSValueID, double, CSSPropertyParserHelpers::LengthOrPercentRaw>;
-using FontFamilyRaw = Variant<CSSValueID, String>;
+using FontWeightRaw = std::variant<CSSValueID, double>;
+using FontSizeRaw = std::variant<CSSValueID, CSSPropertyParserHelpers::LengthOrPercentRaw>;
+using LineHeightRaw = std::variant<CSSValueID, double, CSSPropertyParserHelpers::LengthOrPercentRaw>;
+using FontFamilyRaw = std::variant<CSSValueID, String>;
 
 struct FontRaw {
     std::optional<FontStyleRaw> style;

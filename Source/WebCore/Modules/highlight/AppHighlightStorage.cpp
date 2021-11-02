@@ -34,6 +34,7 @@
 #include "Document.h"
 #include "DocumentMarkerController.h"
 #include "Editor.h"
+#include "ElementInlines.h"
 #include "HTMLBodyElement.h"
 #include "HighlightRegister.h"
 #include "Node.h"
@@ -217,7 +218,7 @@ static AppHighlightRangeData createAppHighlightRangeData(const StaticRange& rang
 }
 
 AppHighlightStorage::AppHighlightStorage(Document& document)
-    : m_document(makeWeakPtr(document))
+    : m_document(document)
 {
 }
 

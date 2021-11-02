@@ -128,7 +128,7 @@ void ClipboardItemBindingsDataSource::collectDataForWriting(Clipboard& destinati
     m_itemTypeLoaders.clear();
     ASSERT(!m_completionHandler);
     m_completionHandler = WTFMove(completion);
-    m_writingDestination = makeWeakPtr(destination);
+    m_writingDestination = destination;
     m_numberOfPendingClipboardTypes = m_itemPromises.size();
     m_itemTypeLoaders = m_itemPromises.map([&] (auto& typeAndItem) {
         auto type = typeAndItem.key;
@@ -139,7 +139,9 @@ void ClipboardItemBindingsDataSource::collectDataForWriting(Clipboard& destinati
         });
 
         auto promise = typeAndItem.value;
-        promise->whenSettled([this, protectedItem = Ref { m_item }, destination = m_writingDestination, promise, type, weakItemTypeLoader = makeWeakPtr(itemTypeLoader.ptr())] () mutable {
+        /* hack: gcc 8.4 will segfault if the WeakPtr is instantiated within the lambda captures */
+        auto wl = WeakPtr { itemTypeLoader };
+        promise->whenSettled([this, protectedItem = Ref { m_item }, destination = m_writingDestination, promise, type, weakItemTypeLoader = WTFMove(wl)] () mutable {
             if (!weakItemTypeLoader)
                 return;
 
@@ -212,10 +214,10 @@ void ClipboardItemBindingsDataSource::invokeCompletionHandler()
     for (auto& itemTypeLoader : itemTypeLoaders) {
         auto type = itemTypeLoader->type();
         auto& data = itemTypeLoader->data();
-        if (WTF::holds_alternative<String>(data) && !!WTF::get<String>(data))
-            customData.writeString(type, WTF::get<String>(data));
-        else if (WTF::holds_alternative<Ref<SharedBuffer>>(data))
-            customData.writeData(type, WTF::get<Ref<SharedBuffer>>(data).copyRef());
+        if (std::holds_alternative<String>(data) && !!std::get<String>(data))
+            customData.writeString(type, std::get<String>(data));
+        else if (std::holds_alternative<Ref<SharedBuffer>>(data))
+            customData.writeData(type, std::get<Ref<SharedBuffer>>(data).copyRef());
         else {
             completionHandler(std::nullopt);
             return;
@@ -263,11 +265,11 @@ void ClipboardItemBindingsDataSource::ClipboardItemTypeLoader::sanitizeDataIfNee
 {
     if (m_type == "text/html"_s) {
         String markupToSanitize;
-        if (WTF::holds_alternative<Ref<SharedBuffer>>(m_data)) {
-            auto& buffer = WTF::get<Ref<SharedBuffer>>(m_data);
+        if (std::holds_alternative<Ref<SharedBuffer>>(m_data)) {
+            auto& buffer = std::get<Ref<SharedBuffer>>(m_data);
             markupToSanitize = String::fromUTF8(buffer->data(), buffer->size());
-        } else if (WTF::holds_alternative<String>(m_data))
-            markupToSanitize = WTF::get<String>(m_data);
+        } else if (std::holds_alternative<String>(m_data))
+            markupToSanitize = std::get<String>(m_data);
 
         if (markupToSanitize.isEmpty())
             return;
@@ -277,10 +279,10 @@ void ClipboardItemBindingsDataSource::ClipboardItemTypeLoader::sanitizeDataIfNee
 
     if (m_type == "image/png"_s) {
         RefPtr<SharedBuffer> bufferToSanitize;
-        if (WTF::holds_alternative<Ref<SharedBuffer>>(m_data))
-            bufferToSanitize = WTF::get<Ref<SharedBuffer>>(m_data).ptr();
-        else if (WTF::holds_alternative<String>(m_data))
-            bufferToSanitize = utf8Buffer(WTF::get<String>(m_data));
+        if (std::holds_alternative<Ref<SharedBuffer>>(m_data))
+            bufferToSanitize = std::get<Ref<SharedBuffer>>(m_data).ptr();
+        else if (std::holds_alternative<String>(m_data))
+            bufferToSanitize = utf8Buffer(std::get<String>(m_data));
 
         if (!bufferToSanitize || bufferToSanitize->isEmpty())
             return;

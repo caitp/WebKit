@@ -27,10 +27,25 @@ fast/events/ios/ipad [ Skip ]
 fast/forms/ios [ Pass ]
 fast/forms/ios/ipad [ Skip ]
 
+# These tests fail or are flaky in non-internal iOS 14 simulator
+fast/forms/ios/autocapitalize-words.html [ Pass Failure ]
+fast/forms/ios/inputmode-none-with-hardware-keyboard.html [ Pass Failure ]
+
+fast/forms/ios/dismiss-picker-using-keyboard.html [ Pass Timeout ]
+fast/forms/ios/drag-range-thumb.html [ Pass Timeout Timeout ]
+fast/forms/ios/inputmode-change-update-keyboard.html [ Pass Timeout ]
+fast/forms/ios/ipad/open-picker-using-keyboard.html [ Pass Timeout ]
+
 fast/css/appearance-apple-pay-button.html [ Pass ]
 fast/css/appearance-apple-pay-button-border-radius.html [ Pass ]
 fast/css/appearance-apple-pay-button-default-corners.html [ Pass ]
+fast/css/webkit-named-image/apple-pay-logo-black [ Pass ]
+fast/css/webkit-named-image/apple-pay-logo-white [ Pass ]
 fast/css/getComputedStyle/computed-style-apple-pay-button.html [ Pass ]
+
+# accent-color is currently only supported on Cocoa platforms
+fast/css/accent-color [ Pass ]
+imported/w3c/web-platform-tests/css/css-ui/accent-color-checkbox-checked-001.tentative.html [ Pass ]
 
 fast/css/ios [ Pass ]
 fast/media/ios [ Pass ]
@@ -208,6 +223,8 @@ media/video-does-not-loop.html [ WontFix ]
 
 # This test uses movie matricies, which AVFoundation and QTKit64 do not support.
 media/video-size-intrinsic-scale.html [ WontFix ]
+
+media/video-element-fullscreen-not-in-dom-accelerated-iphone.html [ Pass ]
 
 # MediaSource is not currently supported on iOS.
 media/media-source
@@ -792,6 +809,7 @@ svg/text/foreignObject-repaint.xml [ Skip ]
 svg/text/select-text-svgfont.html [ Skip ]
 svg/text/selection-doubleclick.svg [ Skip ]
 svg/text/selection-tripleclick.svg [ Skip ]
+imported/w3c/web-platform-tests/css/css-shadow-parts/invalidation-part-pseudo.html [ Skip ]
 
 # IOS does not implement setAutomaticLinkDetectionEnabled
 editing/inserting/typing-space-to-trigger-smart-link.html [ Skip ]
@@ -1150,7 +1168,6 @@ http/tests/navigation/scrollstate-after-http-equiv-refresh-fragment-identifier.h
 http/tests/navigation/scrollstate-after-http-equiv-refresh.html
 http/tests/navigation/scrollstate-after-location-reload.html
 http/tests/security/contentSecurityPolicy/media-src-allowed.html
-http/tests/security/frameNavigation/xss-DENIED-plugin-navigation.html
 http/tests/canvas/webgl/origin-clean-conformance.html
 
 # HTTP tests that fail:
@@ -1357,7 +1374,6 @@ webkit.org/b/181752 storage/indexeddb/modern/transaction-scheduler-6.html [ Skip
 webkit.org/b/181752 storage/indexeddb/odd-strings.html [ Skip ]
 webkit.org/b/181752 storage/indexeddb/transaction-coordination-within-database.html [ Skip ]
 webkit.org/b/181752 storage/indexeddb/transaction-starvation.html [ Skip ]
-webkit.org/b/176078 imported/w3c/web-platform-tests/webrtc/RTCPeerConnection-onnegotiationneeded.html [ Pass Failure ]
 
 # SVG tests that fail:
 svg/W3C-SVG-1.1-SE/text-intro-02-b.svg [ Failure ]
@@ -2102,6 +2118,8 @@ webkit.org/b/148806 imported/w3c/web-platform-tests/css/css-multicol/multicol-sp
 # Enable "phone number linkifying" test for iOS
 fast/dom/linkify-phone-numbers.html [ Pass ]
 
+accessibility/video-element-url-attribute.html [ Pass ]
+
 # Enable "aria-current" tests for iOS.
 webkit.org/b/149297 accessibility/aria-current.html [ Pass ]
 accessibility/aria-current-state-changed-notification.html [ Pass ]
@@ -2205,7 +2223,6 @@ webkit.org/b/153371 imported/w3c/web-platform-tests/xhr/getresponseheader-chunke
 webkit.org/b/169210 imported/w3c/web-platform-tests/html/browsers/browsing-the-web/history-traversal/persisted-user-state-restoration/scroll-restoration-navigation-samedoc.html [ Failure ]
 
 # displaylist tests are flaky on ios-simulator wk2
-webkit.org/b/153656 displaylists/canvas-display-list.html [ Pass Failure ]
 webkit.org/b/153656 displaylists/extent-includes-transforms.html [ Pass Failure ]
 webkit.org/b/153656 displaylists/extent-includes-shadow.html [ Pass Failure ]
 webkit.org/b/153656 displaylists/layer-dispay-list.html [ Pass Failure ]
@@ -2430,11 +2447,6 @@ webkit.org/b/162739 fast/images/gif-loop-count.html [ Pass ImageOnlyFailure ]
 webkit.org/b/162647 http/tests/xmlhttprequest/onabort-response-getters.html [ Pass Failure ]
 
 webkit.org/b/163755 imported/w3c/web-platform-tests/css/css-shapes/shape-outside/shape-image/shape-image-025.html [ ImageOnlyFailure ]
-
-webkit.org/b/5991 imported/w3c/web-platform-tests/css/cssom-view/scrolling-quirks-vs-nonquirks.html [ Failure ]
-
-webkit.org/b/149264 imported/w3c/web-platform-tests/css/cssom-view/scroll-behavior-subframe-root.html [ Failure ]
-webkit.org/b/149264 imported/w3c/web-platform-tests/css/cssom-view/scroll-behavior-subframe-window.html [ Failure ]
 
 # Variation fonts are not implemented earlier than iOS 11.
 fast/text/variations [ Pass Failure ImageOnlyFailure ]
@@ -2684,10 +2696,6 @@ imported/w3c/web-platform-tests/xhr/send-blob-with-no-mime-type.html [ Failure ]
 # <rdar://problem/33630526> http/tests/websocket/tests/hybi/deflate-frame-parameter.html is failing on iOS 11
 http/tests/websocket/tests/hybi/deflate-frame-parameter.html [ Failure ]
 
-# <rdar://problem/34051745>
-imported/w3c/web-platform-tests/webrtc/RTCPeerConnection-setLocalDescription.html [ Failure ]
-imported/w3c/web-platform-tests/webrtc/getstats.html [ Failure ]
-
 # <rdar://problem/34209038>
 webgl/1.0.3/conformance/ogles/GL/log/log_001_to_008.html [ Skip ]
 webgl/1.0.3/conformance/ogles/GL/log2/log2_001_to_008.html [ Skip ]
@@ -2735,6 +2743,7 @@ fast/mediastream/screencapture-user-gesture.html [ Skip ]
 fast/mediastream/getDisplayMedia-max-constraints1.html [ Skip ]
 fast/mediastream/getDisplayMedia-max-constraints2.html [ Skip ]
 fast/mediastream/getDisplayMedia-max-constraints3.html [ Skip ]
+fast/mediastream/getDisplayMedia-size.html [ Skip ]
 
 webkit.org/b/177401 webrtc/captureCanvas-webrtc.html [ Pass Timeout Failure ]
 
@@ -2983,6 +2992,8 @@ compositing/ios/overflow-scroll-touch-tiles.html [ Pass Failure ]
 http/tests/xmlhttprequest/gzip-content-type-no-content-encoding.html [ Pass ]
 
 webkit.org/b/173041 http/tests/websocket/tests/hybi/handshake-ok-with-legacy-sec-websocket-response-headers.html [ Pass Failure ]
+
+webkit.org/b/230968 http/tests/websocket/tests/hybi/bad-handshake-crash.html [ Skip ]
 
 # WK2 spelling dot test infrastructure isn't hooked up on iOS
 webkit.org/b/190764 editing/spelling/spelling-dots-repaint.html [ Skip ]
@@ -3384,7 +3395,7 @@ http/wpt/mediarecorder/mute-tracks.html [ Pass Failure ]
 http/wpt/mediarecorder/pause-recording.html [ Pass Crash ]
 
 # rdar://80383672 ([ iOS15 ] accessibility/misspelling-range.html is failing)
-accessibility/misspelling-range.html  [ Failure ]
+webkit.org/b/231261 accessibility/misspelling-range.html  [ Failure ]
 
 # rdar://80386523 ([ iOS15 ] fast/events/touch/ios/long-press-then-drag-to-select-text.html is failing)
 fast/events/touch/ios/long-press-then-drag-to-select-text.html  [ Failure ]
@@ -3458,10 +3469,6 @@ http/wpt/webxr [ Skip ]
 # WebM is not supported on iOS
 http/tests/media/video-webm-stall.html [ Skip ]
 
-# webkit.org/b/223385 Two imported webrtc tests are flakey text failing on Release for BigSur+ and iOS 14
-[ Release ] imported/w3c/web-platform-tests/webrtc/RTCPeerConnection-addIceCandidate-connectionSetup.html [ Pass Failure ]
-[ Release ] imported/w3c/web-platform-tests/webrtc/RTCDtlsTransport-state.html [ Pass Failure ]
-
 webkit.org/b/229291 imported/w3c/web-platform-tests/html/rendering/replaced-elements/images/revoked-blob-print.html [ Pass ImageOnlyFailure ]
 
 #rdar://82146367 ([Mac, iOS Release] imported/w3c/web-platform-tests/worklets/layout-worklet-csp.https.html is a flaky failure) imported/w3c/web-platform-tests/worklets/layout-worklet-csp.https.html [ Pass Failure ] 
@@ -3477,13 +3484,15 @@ webkit.org/b/228176 fast/text/variable-system-font-2.html [ Pass ]
 # display-p3 canvas and ImageData are Cocoa only for now.
 fast/canvas/canvas-color-space-display-p3-ImageData.html [ Pass ]
 fast/canvas/canvas-color-space-display-p3.html [ Pass ]
-imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage.html [ Pass ]
+imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage.https.html [ Pass ]
 imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-Blob.html [ Pass ]
 imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-ImageBitmap.html [ Pass ]
 imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-ImageData.html [ Pass ]
 imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-canvas.html [ Pass ]
 imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-cloned.html [ Pass ]
 imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-image.html [ Pass ]
+imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-ImageBitmap-video.html [ Pass ]
+imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-drawImage-video.html [ Pass ]
 imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-pattern-canvas.html [ Pass ]
 imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-pattern-image.html [ Pass ]
 imported/w3c/web-platform-tests/html/canvas/element/manual/wide-gamut-canvas/canvas-display-p3-settings.html [ Pass ]
@@ -3540,3 +3549,21 @@ webkit.org/b/229397 imported/w3c/web-platform-tests/css/css-writing-modes/clip-r
 webkit.org/b/229397 imported/w3c/web-platform-tests/css/css-writing-modes/clip-rect-vrl-004.xht [ ImageOnlyFailure ]
 webkit.org/b/229397 imported/w3c/web-platform-tests/css/css-writing-modes/clip-rect-vrl-006.xht [ ImageOnlyFailure ]
 webkit.org/b/229397 imported/w3c/web-platform-tests/css/css-writing-modes/clip-rect-vrl-008.xht [ ImageOnlyFailure ]
+
+webkit.org/b/232181 imported/w3c/web-platform-tests/file-system-access/sandboxed_FileSystemSyncAccessHandle-close.https.tentative.worker.html [ Pass Failure ]
+
+# These three tests will be fixed by rdar://80384564.
+editing/selection/ios/change-selection-by-tapping-with-existing-selection.html  [ Failure ]
+editing/selection/preserve-selection-when-clicking-button.html [ Failure ]
+editing/selection/ios/persist-selection-after-tapping-on-element-with-mousedown-handler.html [ Failure ]
+
+webkit.org/b/229584 animations/fill-mode-forwards.html [ Pass Failure ]
+
+# rdar://82190832 ([ iOS15 ] editing/caret/ios/caret-in-overflow-area.html is failing)
+[ Debug ] editing/caret/ios/caret-in-overflow-area.html [ Pass Timeout Failure ]
+
+webkit.org/b/229832 [ Release ] imported/w3c/web-platform-tests/beacon/beacon-redirect.https.window.html [ Pass Failure ]
+
+# rdar://83207621 ([ BigSur wk2 Release ] 2 fast/canvas/ tests are flaky failing (230366))
+[ Release ] fast/canvas/canvas-composite-text-alpha.html [ Pass Timeout Failure ]
+fast/canvas/canvas-blending-text.html [ Pass Failure ]

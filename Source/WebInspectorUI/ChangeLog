@@ -1,3 +1,367 @@
+2021-10-29  David Kilzer  <ddkilzer@apple.com>
+
+        Web Inspector: Enable -Wformat=2 warnings
+        <https://webkit.org/b/232359>
+        <rdar://problem/84691442>
+
+        Reviewed by Darin Adler.
+
+        * Configurations/Base.xcconfig:
+        (WARNING_CFLAGS):
+        - Add -Wformat=2 switch, which includes -Wformat-nonliteral.
+
+2021-10-28  Razvan Caliman  <rcaliman@apple.com>
+
+        Web Inspector: Audit: testForLinkLabels Accessibility audit should ignore anchors if aria-hidden
+        https://bugs.webkit.org/show_bug.cgi?id=231038
+        <rdar://problem/83783868>
+
+        Update `testForLinkLabels` accessibility audit test to exclude hidden links.
+        See `AccessibilityObject->isHidden()`
+
+        Reviewed by BJ Burg.
+
+        * UserInterface/NonMinified/DefaultAudits.js:
+        (WI.DefaultAudits.testForLinkLabels):
+
+2021-10-27  BJ Burg  <bburg@apple.com>
+
+        Web Inspector: extension iframes leak when disabling an extension
+        https://bugs.webkit.org/show_bug.cgi?id=232049
+
+        Reviewed by Timothy Hatcher.
+
+        Since shouldNotRemoveFromDOMWhenHidden() is true, the <iframe> will not
+        be detached and unload its document in the normal tab-closing code path.
+        Add a `dispose()` method for cleaning up the tab when its extension is
+        unregistered.
+
+        * UserInterface/Controllers/WebInspectorExtensionController.js:
+        (WI.WebInspectorExtensionController.prototype.unregisterExtension):
+        * UserInterface/Views/WebInspectorExtensionTabContentView.js:
+        (WI.WebInspectorExtensionTabContentView.prototype.dispose):
+
+2021-10-21  Devin Rousso  <drousso@apple.com>
+
+        [css-values-4] Support small (sv*), large (lv*) and dynamic (dv*) viewport units
+        https://bugs.webkit.org/show_bug.cgi?id=219287
+        <rdar://problem/71857370>
+
+        Reviewed by Simon Fraser.
+
+        * UserInterface/Models/CSSCompletions.js:
+
+2021-10-18  David Kilzer  <ddkilzer@apple.com>
+
+        Web Inspector: Remove Source/WebInspectorUI/UserInterface/Controllers/WebInspectorExtensionController.js.orig
+        <https://webkit.org/b/231896>
+
+        Reviewed by BJ Burg.
+
+        * UserInterface/Controllers/WebInspectorExtensionController.js.orig: Remove.
+
+2021-10-15  BJ Burg  <bburg@apple.com>
+
+        [Cocoa] Web Inspector: handle Promise objects returned from evaluateScriptInExtensionTab
+        https://bugs.webkit.org/show_bug.cgi?id=231709
+        <rdar://problem/84224179>
+
+        Reviewed by Timothy Hatcher.
+
+        This patch improves the handling of promises and exceptions that come from
+        InspectorFrontendHost.evaluateScriptInExtensionTab().
+
+        For promises, wait for the returned promise to settle before fulfilling our returned value.
+        For errors, perform a better stringification of the Error instance. The is needed because
+        the default toString implementation leaves out most of the relevant details of the error.
+
+        * UserInterface/Controllers/WebInspectorExtensionController.js:
+        (WI.WebInspectorExtensionController.prototype.evaluateScriptInExtensionTab):
+
+        * UserInterface/Protocol/InspectorFrontendAPI.js:
+        Fix incorrect header docs for InspectorFrontendAPI.evaluateScriptForExtension.
+        Copy the improved header doc for InspectorFrontendAPI.evaluateScriptInExtensionTab
+        since it now has the same calling convention.
+
+2021-10-14  Myles C. Maxfield  <mmaxfield@apple.com>
+
+        All the SDKVariant.xcconfig files should match
+        https://bugs.webkit.org/show_bug.cgi?id=231663
+
+        Reviewed by Youenn Fablet.
+
+        * Configurations/SDKVariant.xcconfig:
+
+2021-10-13  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        HTTP method in web inspector network tab is not what WebKit actually sent after a redirect from POST to GET
+        https://bugs.webkit.org/show_bug.cgi?id=222558
+
+        Reviewed by Michael Catanzaro.
+
+        Test: http/tests/inspector/network/resource-redirect-request-headers.html
+
+        For redirects, use the previous request information combined with the new response information to create a
+        Redirect record.
+
+        * UserInterface/Models/Resource.js:
+        (WI.Resource.prototype.updateForRedirectResponse):
+
+2021-10-12  Alexey Proskuryakov  <ap@apple.com>
+
+        Invoke build scripts with python3 explicitly
+        https://bugs.webkit.org/show_bug.cgi?id=231587
+
+        Reviewed by Jonathan Bedard.
+
+        Much of the work to support Python 3 was done years ago, but we need this to
+        actually use Python 3 on macOS.
+
+        * Scripts/copy-user-interface-resources.pl:
+
+2021-10-11  BJ Burg  <bburg@apple.com>
+
+        Web Inspector: add TabBar context menu support for WI.WebInspectorExtensionTabContentView
+        https://bugs.webkit.org/show_bug.cgi?id=231181
+        <rdar://74698241>
+
+        Unreviewed. Land parts of the previous patch which seem to have been mis-merged and not landed.
+
+        * UserInterface/Base/Main.js:
+        (WI.isNewTabWithTypeAllowed):
+        * UserInterface/Controllers/WebInspectorExtensionController.js:
+        (WI.WebInspectorExtensionController.prototype.showExtensionTab):
+        * UserInterface/Views/TabBar.js:
+        (WI.TabBar.prototype._handleAddClosedTabsTabBarItemMouseDown):
+        (WI.TabBar.prototype._handleTabContainerContextMenu):
+        (WI.TabBar):
+
+2021-10-11  Razvan Caliman  <rcaliman@apple.com>
+
+        Web Inspector: Move CSS longhand and shorthand mapping away from WI.CSSCompletions
+        https://bugs.webkit.org/show_bug.cgi?id=231432
+        <rdar://problem/84029471>
+
+        Reviewed by Devin Rousso.
+
+        `WI.CSSCompletions` has scope creep. Beyond handling filtering for CSS completions,
+        it holds logic to deal with CSS property name longhand-to-shorthand mapping.
+
+        But it already relies heavily on metadata about properties set on `WI.CSSKeywordCompletions`
+        populated as a result of the one-time initialization from `WI.CSSCompletions.initializeCSSCompletions(target)` >
+        `WI.CSSKeywordCompletions.addCustomCompletions(properties)`.
+
+        This change moves the longhand-to-shorthand mapping from `WI.CSSCompletions` to
+        `WI.CSSKeywordCompletions.ShorthandNamesForLongHandProperty` and updates relevant consumers.
+
+        The aim is to gradually remove all specialized logic for property names from `WI.CSSCompletions`.
+
+        * UserInterface/Models/CSSCompletions.js:
+        (WI.CSSCompletions):
+        (WI.CSSCompletions.prototype.isShorthandPropertyName): Deleted.
+        (WI.CSSCompletions.prototype.shorthandsForLonghand): Deleted.
+        * UserInterface/Models/CSSKeywordCompletions.js:
+        * UserInterface/Models/CSSProperty.js:
+        (WI.CSSProperty):
+        * UserInterface/Models/DOMNodeStyles.js:
+        (WI.DOMNodeStyles.prototype._associateRelatedProperties):
+
+2021-10-08  BJ Burg  <bburg@apple.com>
+
+        Web Inspector: add TabBar context menu support for WI.WebInspectorExtensionTabContentView
+        https://bugs.webkit.org/show_bug.cgi?id=231181
+        <rdar://74698241>
+
+        Reviewed by Devin Rousso.
+
+        The existing TabBar/TabBrowser system relies on the fact that each tab class can
+        be instantiated once. This is no longer true with extension tabs, as all of them
+        are instances of the same WI.WebInspectorExtensionTabContentView class.
+
+        The new approach builds on bug 230758 by introducing a 'visible' property on ContentView.
+        This is necessary to mark extension tabs as "attached by not showing" due to the
+        override of shouldNotRemoveFromDOMWhenHidden().
+
+        * UserInterface/Base/Main.js:
+        (WI._createTabContentViewForType):
+        (WI.isNewTabWithTypeAllowed):
+        List WebInspectorExtensionTabContentView as a known tab class. But do not allow
+        this tab class to be instantiated directly. Extension tabs are intended to be
+        created using WebInspectorExtensionController.createTabForExtension().
+
+        * UserInterface/Controllers/WebInspectorExtensionController.js:
+        (WI.WebInspectorExtensionController.prototype.unregisterExtension):
+        (WI.WebInspectorExtensionController.prototype.createTabForExtension):
+        Drive-by, suppress animations when extension tabs are created and destroyed. Otherwise
+        there is a lot of unnecessary and glitchy animation when multiple extension tabs are 
+        created upon loading Web Inspector the first time.
+
+        (WI.WebInspectorExtensionController.prototype.showExtensionTab):
+        (WI.WebInspectorExtensionController.prototype.hideExtensionTab): Added.
+        These methods are counterparts. They toggle tabContentView.visible to make the tab
+        visible and not visible. Note that 'hiding' does not actually close/destroy the
+        extension tab. Extension tabs are hidden by setting .not-visible ('display:none') and
+        removing the tab's TabBarItem from the TabBar.
+
+        (WI.WebInspectorExtensionController.prototype.addContextMenuItemsForClosedExtensionTabs):
+        (WI.WebInspectorExtensionController.prototype.addContextMenuItemsForAllExtensionTabs):
+        Added. TabBar delegates the creation of extension tab context menu items to this class.
+        The first method only shows hidden extension tabs (for the Reopen Closed Tabs + item).
+        The second method shows visible and not visible extension tabs and feeds the main context menu.
+
+        * UserInterface/Views/ContentView.css:
+        (.content-view.not-visible):
+        * UserInterface/Views/ContentViewContainer.css:
+        (.content-view-container > .content-view):
+        (.content-view-container > .content-view.not-visible): Deleted.
+        This style class is now managed by ContentView.js. So, move the style declaration.
+
+        * UserInterface/Views/ContentView.js:
+        (WI.ContentView):
+        (WI.ContentView.prototype.get visible):
+        (WI.ContentView.prototype.set visible):
+        Add a flag so that clients can determine when the content view is not visible and not closed.
+        This can be true if a subclass overrides shouldNotRemoveFromDOMWhenHidden() to return true.
+
+        * UserInterface/Views/ContentViewContainer.js:
+        (WI.ContentViewContainer.prototype._disassociateFromContentView):
+        Fix this code to not detach extension tabs that are hidden.
+
+        (WI.ContentViewContainer.prototype._showEntry):
+        (WI.ContentViewContainer.prototype._hideEntry):
+        Adopt new setter for ContentView.prototype.hidden.
+
+        * UserInterface/Views/TabBar.js:
+        (WI.TabBar.prototype._handleAddClosedTabsTabBarItemMouseDown):
+        Don't add generic context menu items for WebInspectorExtensionTabContentView. Call out
+        to WebInspectorExtensionController to create the appropriate extension tab context menu items.
+        (WI.TabBar.prototype._handleTabContainerContextMenu):
+        (WI.TabBar):
+
+        * UserInterface/Views/WebInspectorExtensionTabContentView.js:
+        (WI.WebInspectorExtensionTabContentView.isTabAllowed): Drive-by, gate creation of this class
+        on Web Extensions being enabled (InspectorFrontendHost.supportsWebExtensions).
+
+2021-10-08  BJ Burg  <bburg@apple.com>
+
+        [Cocoa] Web Inspector: provide a way for _WKInspectorExtension clients to be notified when the inspected page navigates
+        https://bugs.webkit.org/show_bug.cgi?id=231338
+        <rdar://71200338>
+
+        Reviewed by Devin Rousso.
+
+        Pass along an onNavigated event to InspectorFrontendHost when the WI.Frame.MainResourceDidChange
+        event fires at a main frame target.
+
+        * UserInterface/Controllers/WebInspectorExtensionController.js:
+        (WI.WebInspectorExtensionController):
+        (WI.WebInspectorExtensionController.prototype.registerExtension):
+        (WI.WebInspectorExtensionController.prototype.unregisterExtension):
+        Do not add this global listener unless at least one WI.WebInspectorExtension
+        is currently registered.
+
+        (WI.WebInspectorExtensionController.prototype._handleMainResourceDidChange):
+
+2021-10-07  BJ Burg  <bburg@apple.com>
+
+        Web Inspector: WebInspectorExtensionTabContentView should not reload its iframe when detached
+        https://bugs.webkit.org/show_bug.cgi?id=230758
+        <rdar://74714861>
+
+        Reviewed by Timothy Hatcher.
+
+        When an <iframe> element detaches from the DOM, the script context is destroyed, which we don't
+        want to happen for _WKInspectorExtension tabs. Fix this by teaching ContentViewContainer to
+        'hide' such content views by setting `display:none` rather than detaching from the DOM.
+
+        * UserInterface/Views/ContentViewContainer.js:
+        (WI.ContentViewContainer.prototype._showEntry):
+        (WI.ContentViewContainer.prototype._hideEntry):
+        Set and unset 'display:none' instead of calling addSubview() / removeSubview().
+
+        * UserInterface/Views/ContentViewContainer.css:
+        (.content-view-container > .content-view.hidden-for-detach): Added.
+
+        (WI.ContentViewContainer.prototype._disassociateFromContentView):
+        Clean up any remaining content views that were not detached due to overriding shouldNotRemoveFromDOMWhenHidden.
+
+        * UserInterface/Views/ContentView.js:
+        (WI.ContentView.prototype.get shouldNotRemoveFromDOMWhenHidden): Added.
+
+        * UserInterface/Views/WebInspectorExtensionTabContentView.js:
+        (WI.WebInspectorExtensionTabContentView):
+        (WI.WebInspectorExtensionTabContentView.prototype.get shouldNotRemoveFromDOMWhenHidden):
+        Override this to opt into the alternate behavior that does not detach from the DOM. It is still
+        necessary to call attached() and detached() so that WebInpectorExtensionTabContentView can generate
+        didShowExtensionTab/didHideExtensionTab event callbacks.
+
+        * UserInterface/Controllers/WebInspectorExtensionController.js:
+        (WI.WebInspectorExtensionController.prototype.get registeredExtensionIDs):
+        * UserInterface/Debug/Bootstrap.js:
+        (updateMockWebExtensionTab):
+        (WI.runBootstrapOperations):
+        This is a drive-by fix to address a console assertion seen while developing the API test.
+        Don't unregister the mock extension if it is not registered in the first place.
+
+2021-10-07  Nikita Vasilyev  <nvasilyev@apple.com>
+
+        Web Inspector: Styles: format style declarations after editing
+        https://bugs.webkit.org/show_bug.cgi?id=178835
+        <rdar://problem/35185060>
+
+        Reviewed by Devin Rousso.
+
+        Indent CSS properties with spaces/tabs set in Web Inspector settings. Increse indentation level when CSS rules are
+        inside of at-rules (e.g. @media, @keyframes, @supports).
+
+        Don't indent CSS properties in style attributes. Keep them on the single line, separated by a space character:
+
+            style="font-size: 12px; color: black;"
+
+        * UserInterface/Models/CSSProperty.js:
+        (WI.CSSProperty.prototype.set text):
+        Introduce `_isTextPendingSave` flag. It's needed when saving pasted text, and saving commented out or uncommented CSS properties.
+
+        (WI.CSSProperty.prototype.get formattedText):
+
+        (WI.CSSProperty.prototype.replaceWithText): Deleted.
+        This is redundant - setting `text` works the same.
+
+        (WI.CSSProperty.prototype._updateStyleText):
+        (WI.CSSProperty.prototype._updateOwnerStyleText):
+        (WI.CSSProperty.prototype._prependSemicolonIfNeeded): Deleted.
+        Greatly simplify the logic now that we save formatted text and don't modify styleText.
+
+        * UserInterface/Models/CSSStyleDeclaration.js:
+        (WI.CSSStyleDeclaration.prototype.removeProperty):
+        Remode unnecessary code that modifies `_styleSheetTextRange`. The backend sends new `_styleSheetTextRange` data
+        upon a change.
+
+        (WI.CSSStyleDeclaration.prototype.generateFormattedText): Renamed from 'generateCSSRuleString'.
+
+        * UserInterface/Views/SpreadsheetCSSStyleDeclarationSection.js:
+        (WI.SpreadsheetCSSStyleDeclarationSection.prototype._populateIconElementContextMenu):
+        * UserInterface/Views/SpreadsheetStyleProperty.js:
+        (WI.SpreadsheetStyleProperty.prototype.remove):
+
+2021-10-05  Patrick Angle  <pangle@apple.com>
+
+        Web Inspector: Show color space for canvases in the Graphics tab on the overview cards
+        https://bugs.webkit.org/show_bug.cgi?id=231205
+
+        Reviewed by Devin Rousso.
+
+        For canvas context's with a color space attribute, show the color space next to the context type in the header
+        of each context card in the Graphics tab.
+
+        * UserInterface/Models/Canvas.js:
+        (WI.Canvas.displayNameForColorSpace):
+        * UserInterface/Views/CanvasContentView.js:
+        (WI.CanvasContentView.prototype.initialLayout):
+        * UserInterface/Views/CanvasOverviewContentView.css:
+        (.content-view.canvas-overview > .content-view.canvas > header > .titles > :matches(.subtitle, .color-space),):
+        (.content-view.canvas-overview > .content-view.canvas > header .color-space::before):
+
 2021-09-29  BJ Burg  <bburg@apple.com>
 
         [Cocoa] add _WKInspectorExtension SPI to evaluate script on an extension tab

@@ -90,7 +90,7 @@ public:
     Document* document() const override;
 
     bool canSetFocusAttribute() const override;
-    int headingLevel() const override;
+    unsigned headingLevel() const override;
 
     bool canSetValueAttribute() const override;
 
@@ -131,7 +131,6 @@ public:
     AccessibilityObject* parentObject() const override;
     AccessibilityObject* parentObjectIfExists() const override;
 
-    void childrenChanged() override;
     void updateAccessibilityRole() override;
 
     void increment() override;

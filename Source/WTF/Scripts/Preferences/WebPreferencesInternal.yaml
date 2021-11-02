@@ -621,6 +621,17 @@ PreferPageRenderingUpdatesNear60FPSEnabled:
     WebCore:
       default: true
 
+ReplayCGDisplayListsIntoBackingStore:
+  type: bool
+  humanReadableName: "CG Display Lists: Replay for Testing"
+  humanReadableDescription: "Replay CG Display Lists into layer contents for testing"
+  webcoreBinding: none
+  condition: ENABLE(CG_DISPLAY_LIST_BACKED_IMAGE_BUFFER)
+  exposed: [ WebKit ]
+  defaultValue:
+    WebKit:
+      default: false
+
 ResourceLoadSchedulingEnabled:
   type: bool
   humanReadableName: "Resource Load Scheduling"
@@ -681,6 +692,15 @@ SelectionAcrossShadowBoundariesEnabled:
       default: true
     WebCore:
       default: true
+      
+SelectionFlippingEnabled:
+  type: bool
+  humanReadableName: "Selection Flipping"
+  humanReadableDescription: "Enable Selection Flipping"
+  webcoreBinding: none
+  defaultValue:
+    WebKit:
+      default: false
 
 # FIXME: This is not implemented for WebKitLegacy, so should be excluded from WebKitLegacy entirely.
 ServiceWorkersEnabled:
@@ -779,7 +799,7 @@ UpgradeKnownHostsToHTTPSEnabled:
 
 UseCGDisplayListsForDOMRendering:
   type: bool
-  humanReadableName: "Use CG Display Lists for DOM rendering"
+  humanReadableName: "CG Display Lists: DOM Rendering"
   humanReadableDescription: "Use CG Display Lists for DOM rendering"
   webcoreBinding: none
   condition: ENABLE(CG_DISPLAY_LIST_BACKED_IMAGE_BUFFER)

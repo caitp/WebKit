@@ -25,12 +25,13 @@
 
 #pragma once
 
+#include "FloatPoint.h"
 #include "ScrollTypes.h"
 #include <wtf/EnumTraits.h>
 
 namespace WebCore {
 
-enum class SynchronousScrollingReason {
+enum class SynchronousScrollingReason : uint8_t {
     // Flags for frame scrolling.
     ForcedOnMainThread                                          = 1 << 0,
     HasViewportConstrainedObjectsWithoutSupportingFixedLayers   = 1 << 1,
@@ -52,14 +53,15 @@ enum class ScrollingNodeType : uint8_t {
     Positioned
 };
 
-enum ScrollingStateTreeAsTextBehaviorFlags {
-    ScrollingStateTreeAsTextBehaviorNormal                  = 0,
-    ScrollingStateTreeAsTextBehaviorIncludeLayerIDs         = 1 << 0,
-    ScrollingStateTreeAsTextBehaviorIncludeNodeIDs          = 1 << 1,
-    ScrollingStateTreeAsTextBehaviorIncludeLayerPositions   = 1 << 2,
-    ScrollingStateTreeAsTextBehaviorDebug                   = ScrollingStateTreeAsTextBehaviorIncludeLayerIDs | ScrollingStateTreeAsTextBehaviorIncludeNodeIDs | ScrollingStateTreeAsTextBehaviorIncludeLayerPositions
+enum class ScrollingStateTreeAsTextBehavior : uint8_t {
+    IncludeLayerIDs         = 1 << 0,
+    IncludeNodeIDs          = 1 << 1,
+    IncludeLayerPositions   = 1 << 2,
 };
-typedef unsigned ScrollingStateTreeAsTextBehavior;
+
+constexpr auto debugScrollingStateTreeAsTextBehaviors = OptionSet<ScrollingStateTreeAsTextBehavior> {
+    ScrollingStateTreeAsTextBehavior::IncludeLayerIDs, ScrollingStateTreeAsTextBehavior::IncludeNodeIDs, ScrollingStateTreeAsTextBehavior::IncludeLayerPositions
+};
 
 enum class ScrollingLayerPositionAction {
     Set,
@@ -102,9 +104,63 @@ enum class ViewportRectStability {
     ChangingObscuredInsetsInteractively // This implies Unstable.
 };
 
+enum class ScrollRequestType : uint8_t {
+    PositionUpdate,
+    CancelAnimatedScroll
+};
+
+struct RequestedScrollData {
+    ScrollRequestType requestType { ScrollRequestType::PositionUpdate };
+    FloatPoint scrollPosition;
+    ScrollType scrollType { ScrollType::User };
+    ScrollClamping clamping { ScrollClamping::Clamped };
+    ScrollIsAnimated animated { ScrollIsAnimated::No };
+
+    bool operator==(const RequestedScrollData& other) const
+    {
+        return requestType == other.requestType
+            && scrollPosition == other.scrollPosition
+            && scrollType == other.scrollType
+            && clamping == other.clamping
+            && animated == other.animated;
+    }
+};
+
+enum class ScrollUpdateType : uint8_t {
+    PositionUpdate,
+    AnimatedScrollDidEnd
+};
+
+struct ScrollUpdate {
+    ScrollingNodeID nodeID { 0 };
+    FloatPoint scrollPosition;
+    std::optional<FloatPoint> layoutViewportOrigin;
+    ScrollUpdateType updateType { ScrollUpdateType::PositionUpdate };
+    ScrollingLayerPositionAction updateLayerPositionAction { ScrollingLayerPositionAction::Sync };
+    
+    bool canMerge(const ScrollUpdate& other) const
+    {
+        return nodeID == other.nodeID && updateLayerPositionAction == other.updateLayerPositionAction && updateType == other.updateType;
+    }
+    
+    void merge(ScrollUpdate&& other)
+    {
+        scrollPosition = other.scrollPosition;
+        layoutViewportOrigin = other.layoutViewportOrigin;
+    }
+};
+
 } // namespace WebCore
 
 namespace WTF {
+
+template<> struct EnumTraits<WebCore::ScrollRequestType> {
+    using values = EnumValues<
+        WebCore::ScrollRequestType,
+        WebCore::ScrollRequestType::PositionUpdate,
+        WebCore::ScrollRequestType::CancelAnimatedScroll
+    >;
+};
 
 template<> struct EnumTraits<WebCore::ScrollingNodeType> {
     using values = EnumValues<

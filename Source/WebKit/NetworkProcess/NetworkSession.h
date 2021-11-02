@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Apple Inc. All rights reserved.
+ * Copyright (C) 2015-2021 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,6 +27,7 @@
 
 #include "AppPrivacyReport.h"
 #include "NavigatingToAppBoundDomain.h"
+#include "NetworkNotificationManager.h"
 #include "NetworkResourceLoadIdentifier.h"
 #include "PrefetchCache.h"
 #include "PrivateClickMeasurementManagerInterface.h"
@@ -108,7 +109,7 @@ public:
     void logDiagnosticMessageWithValue(const String& message, const String& description, unsigned value, unsigned significantFigures, WebCore::ShouldSample);
     bool enableResourceLoadStatisticsLogTestingEvent() const { return m_enableResourceLoadStatisticsLogTestingEvent; }
     void setResourceLoadStatisticsLogTestingEvent(bool log) { m_enableResourceLoadStatisticsLogTestingEvent = log; }
-    virtual bool hasIsolatedSession(const WebCore::RegistrableDomain) const { return false; }
+    virtual bool hasIsolatedSession(const WebCore::RegistrableDomain&) const { return false; }
     virtual void clearIsolatedSessions() { }
     void setShouldDowngradeReferrerForTesting(bool);
     bool shouldDowngradeReferrer() const;
@@ -127,7 +128,7 @@ public:
     virtual void clearAppBoundSession() { }
 #endif
     void storePrivateClickMeasurement(WebCore::PrivateClickMeasurement&&);
-    void handlePrivateClickMeasurementConversion(WebCore::PrivateClickMeasurement::AttributionTriggerData&&, const URL& requestURL, const WebCore::ResourceRequest& redirectRequest);
+    void handlePrivateClickMeasurementConversion(WebCore::PrivateClickMeasurement::AttributionTriggerData&&, const URL& requestURL, const WebCore::ResourceRequest& redirectRequest, String&& attributedBundleIdentifier);
     void dumpPrivateClickMeasurement(CompletionHandler<void(String)>&&);
     void clearPrivateClickMeasurement(CompletionHandler<void()>&&);
     void clearPrivateClickMeasurementForRegistrableDomain(WebCore::RegistrableDomain&&, CompletionHandler<void()>&&);
@@ -141,6 +142,7 @@ public:
     void setPCMFraudPreventionValuesForTesting(String&& unlinkableToken, String&& secretToken, String&& signature, String&& keyID);
     void firePrivateClickMeasurementTimerImmediatelyForTesting();
     void allowTLSCertificateChainForLocalPCMTesting(const WebCore::CertificateInfo&);
+    void setPrivateClickMeasurementAppBundleIDForTesting(String&&);
 
     void addKeptAliveLoad(Ref<NetworkResourceLoader>&&);
     void removeKeptAliveLoad(NetworkResourceLoader&);
@@ -163,6 +165,7 @@ public:
 
     unsigned testSpeedMultiplier() const { return m_testSpeedMultiplier; }
     bool allowsServerPreconnect() const { return m_allowsServerPreconnect; }
+    bool shouldRunServiceWorkersOnMainThreadForTesting() const { return m_shouldRunServiceWorkersOnMainThreadForTesting; }
 
     bool isStaleWhileRevalidateEnabled() const { return m_isStaleWhileRevalidateEnabled; }
 
@@ -173,6 +176,8 @@ public:
 
     NetworkLoadScheduler& networkLoadScheduler();
     PCM::ManagerInterface& privateClickMeasurement() { return m_privateClickMeasurement.get(); }
+    void setPrivateClickMeasurementDebugMode(bool);
+    bool privateClickMeasurementDebugModeEnabled() const { return m_privateClickMeasurementDebugModeEnabled; }
 
 #if PLATFORM(COCOA)
     AppPrivacyReportTestingData& appPrivacyReportTestingData() { return m_appPrivacyReportTestingData; }
@@ -185,6 +190,10 @@ public:
     virtual size_t countNonDefaultSessionSets() const { return 0; }
 
     String attributedBundleIdentifierFromPageIdentifier(WebPageProxyIdentifier) const;
+
+#if ENABLE(BUILT_IN_NOTIFICATIONS)
+    NetworkNotificationManager& notificationManager() { return m_notificationManager; }
+#endif
 
 protected:
     NetworkSession(NetworkProcess&, const NetworkSessionCreationParameters&);
@@ -213,6 +222,9 @@ protected:
 #endif
     bool m_isStaleWhileRevalidateEnabled { false };
     UniqueRef<PCM::ManagerInterface> m_privateClickMeasurement;
+    bool m_privateClickMeasurementDebugModeEnabled { false };
+    std::optional<WebCore::PrivateClickMeasurement> m_ephemeralMeasurement;
+    bool m_isRunningEphemeralMeasurementTest { false };
 
     HashSet<Ref<NetworkResourceLoader>> m_keptAliveLoads;
 
@@ -239,6 +251,7 @@ protected:
     UniqueRef<NetworkBroadcastChannelRegistry> m_broadcastChannelRegistry;
     unsigned m_testSpeedMultiplier { 1 };
     bool m_allowsServerPreconnect { true };
+    bool m_shouldRunServiceWorkersOnMainThreadForTesting { false };
 
 #if ENABLE(SERVICE_WORKER)
     HashSet<std::unique_ptr<ServiceWorkerSoftUpdateLoader>> m_softUpdateLoaders;
@@ -249,6 +262,10 @@ protected:
 #endif
 
     HashMap<WebPageProxyIdentifier, String> m_attributedBundleIdentifierFromPageIdentifiers;
+
+#if ENABLE(BUILT_IN_NOTIFICATIONS)
+    NetworkNotificationManager m_notificationManager;
+#endif
 };
 
 } // namespace WebKit

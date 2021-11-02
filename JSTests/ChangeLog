@@ -1,3 +1,1104 @@
+2021-11-01  Saam Barati  <sbarati@apple.com>
+
+        ArrayBuffer species watchpoint being invalidated doesn't mean it's not an ArrayBuffer constructor from the same global object
+        https://bugs.webkit.org/show_bug.cgi?id=231322
+        <rdar://problem/84212078>
+
+        Reviewed by Yusuke Suzuki.
+
+        * stress/array-buffer-species-watchpoint-should-not-dictate-if-constructor-is-correct.js: Added.
+        (main.async v23):
+        (main):
+
+2021-11-01  Robin Morisset  <rmorisset@apple.com>
+
+        JSGenericTypedArrayView<Adaptor>::set crashes if the length + objectOffset is > UINT32_MAX
+        https://bugs.webkit.org/show_bug.cgi?id=231975
+        rdar://84402043
+
+        Reviewed by Yusuke Suzuki.
+
+        - regress-84402043 is the testcase that revealed the problem.
+        - typed-array-set-large(-offset) test the same function, in the typed-array to typed-array case
+        - typed-array-large-slice tests the only caller that passes a non-0 objectOffset, and found other issues with it
+        - typed-array-large-oob-eventually-not.js is just another test of the Wasm4GB change that I had forgotten to commit
+
+        * stress/regress-84402043.js: Added.
+        * stress/typed-array-large-oob-eventually-not.js: Added.
+        (test):
+        * stress/typed-array-large-slice.js: Added.
+        (expect):
+        * stress/typed-array-set-large-offset.js: Added.
+        * stress/typed-array-set-large.js: Added.
+
+2021-10-29  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        Unreviewed, reduce # of iterations in stress/validate-int-52-ai-state.js due to Debug timeout
+
+        * stress/validate-int-52-ai-state.js:
+
+2021-10-29  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        Unreviewed, skip stress/unlinked-code-block-destructor.js when it is debug build
+
+        The bug was not related to Debug build. And it is timing out on Debug build due to
+        heavy test load.
+
+        * stress/unlinked-code-block-destructor.js:
+
+2021-10-29  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        Unreviewed, reduce # of iteration since it is timing out on Debug JSC bot
+
+        * stress/put-private-name-ic-write-barrier.js:
+        (PutPrivateNameIC):
+
+2021-10-29  Dmitry Bezhetskov  <dbezhetskov@igalia.com>
+
+        [WASM-Function-References] Add support for (ref.null heaptype)
+        https://bugs.webkit.org/show_bug.cgi?id=229707
+
+        Reviewed by Yusuke Suzuki.
+
+        Added spec tests for (ref.null $t) : https://github.com/WebAssembly/function-references/blob/master/test/core/ref_null.wast.
+
+        * wasm.yaml:
+        * wasm/function-references-spec-tests/call_ref.wast.js:
+        * wasm/function-references-spec-tests/ref_null.wast.js: Added.
+
+2021-10-27  Dmitry Bezhetskov  <dbezhetskov@igalia.com>
+
+        [WASM-Function-References] Add call_ref spec tests
+        https://bugs.webkit.org/show_bug.cgi?id=229710
+
+        Reviewed by Yusuke Suzuki.
+        
+        Add tests for call_ref instruction from the spec repo:
+        https://github.com/WebAssembly/function-references/blob/master/test/core/call_ref.wast.
+        Also added tests for Funcref/Externref in Wasm tables and globals to test
+        new internal representation of Funcref = (ref null funcref).
+        
+        * wasm.yaml:
+        * wasm/function-references-spec-tests/call_ref.wast.js: Added.
+        * wasm/function-references/ref_types.js:
+        (async testRefGlobalCheck):
+        (async testNonNullExternrefIncompatible):
+        (async testNonNullFuncrefIncompatible):
+        (async testWasmJSGlobals):
+        (async testRefTypesInTables):
+        * wasm/wasm.json:
+
+2021-10-26  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        Unreivewed, fix CLoop build and test failure
+
+        CLoop is running Yarr interpreter instead of Yarr JIT.
+
+        * mozilla/ecma_3/RegExp/regress-85721.js:
+
+2021-10-26  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        Unreviewed, fix test262 bot failures
+        https://bugs.webkit.org/show_bug.cgi?id=232005
+
+        * test262/expectations.yaml:
+
+2021-10-25  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [JSC] Don't branch around register allocation in DFG enumerator get by val
+        https://bugs.webkit.org/show_bug.cgi?id=232260
+        rdar://84544469
+
+        Reviewed by Robin Morisset.
+
+        * stress/dont-branch-around-regalloc-enumerator-get-by-val-float.js: Added.
+        (foo):
+
+2021-10-24  Alexey Shvayka  <ashvayka@apple.com>
+
+        InternalFunction::createSubclassStructure() should use prototype's global object
+        https://bugs.webkit.org/show_bug.cgi?id=231874
+
+        Reviewed by Yusuke Suzuki.
+
+        * stress/internal-function-subclass-structure-realm.js: Added.
+
+2021-10-23  Phillip Mates  <pmates@igalia.com>
+
+        update test262
+        https://bugs.webkit.org/show_bug.cgi?id=232005
+
+        Reviewed by Yusuke Suzuki.
+
+        * test262/expectations.yaml:
+        * test262/latest-changes-summary.txt:
+        * test262/test/built-ins/Array/prototype/concat/Array.prototype.concat_large-typed-array.js:
+        (concatTypedArray):
+        * test262/test/built-ins/Array/prototype/concat/Array.prototype.concat_small-typed-array.js:
+        (concatTypedArray):
+        * test262/test/built-ins/Array/prototype/copyWithin/non-negative-target-and-start.js:
+        * test262/test/built-ins/Function/internals/Call/class-ctor-realm.js:
+        * test262/test/built-ins/Object/getOwnPropertyNames/15.2.3.4-4-44.js:
+        * test262/test/built-ins/Object/getOwnPropertyNames/15.2.3.4-4-49.js:
+        * test262/test/built-ins/Object/getOwnPropertyNames/15.2.3.4-4-b-2.js:
+        * test262/test/built-ins/ShadowRealm/prototype/evaluate/globalthis-available-properties.js: Added.
+        * test262/test/built-ins/ShadowRealm/prototype/evaluate/globalthis-config-only-properties.js: Added.
+        (const.remainingNames.names.filter.name.esNonConfigValues.includes):
+        (hasOwn.call):
+        * test262/test/built-ins/ShadowRealm/prototype/evaluate/globalthis-orginary-object.js: Added.
+        * test262/test/built-ins/ShadowRealm/prototype/evaluate/throws-error-from-ctor-realm.js: Added.
+        * test262/test/built-ins/ShadowRealm/prototype/evaluate/validates-realm-object.js:
+        * test262/test/built-ins/ShadowRealm/prototype/evaluate/wrapped-function-proto-from-caller-realm.js:
+        (checkArgWrapperFn.realm.evaluate.string_appeared_here.assert.sameValue.checkArgWrapperFn):
+        * test262/test/built-ins/ShadowRealm/prototype/importValue/not-constructor.js:
+        * test262/test/built-ins/Temporal/PlainDate/prototype/since/largestunit-higher-units.js:
+        * test262/test/built-ins/Temporal/PlainMonthDay/prototype/toPlainDate/basic.js:
+        * test262/test/intl402/NumberFormat/prototype/format/signDisplay-currency-de-DE.js:
+        * test262/test/intl402/NumberFormat/prototype/format/signDisplay-currency-en-US.js:
+        * test262/test/intl402/NumberFormat/prototype/format/signDisplay-currency-ja-JP.js:
+        * test262/test/intl402/NumberFormat/prototype/format/signDisplay-currency-ko-KR.js:
+        * test262/test/intl402/NumberFormat/prototype/format/signDisplay-currency-zh-TW.js:
+        * test262/test/intl402/NumberFormat/prototype/formatToParts/signDisplay-currency-de-DE.js:
+        * test262/test/intl402/NumberFormat/prototype/formatToParts/signDisplay-currency-en-US.js:
+        * test262/test/intl402/NumberFormat/prototype/formatToParts/signDisplay-currency-ja-JP.js:
+        * test262/test/intl402/NumberFormat/prototype/formatToParts/signDisplay-currency-ko-KR.js:
+        * test262/test/intl402/NumberFormat/prototype/formatToParts/signDisplay-currency-zh-TW.js:
+        * test262/test/intl402/Temporal/Instant/prototype/toLocaleString/locales-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/Instant/prototype/toLocaleString/locales-undefined.js.
+        * test262/test/intl402/Temporal/Instant/prototype/toLocaleString/options-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/Instant/prototype/toLocaleString/options-undefined.js.
+        * test262/test/intl402/Temporal/PlainDate/prototype/toLocaleString/locales-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/PlainDate/prototype/toLocaleString/locales-undefined.js.
+        * test262/test/intl402/Temporal/PlainDate/prototype/toLocaleString/options-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/PlainDate/prototype/toLocaleString/options-undefined.js.
+        * test262/test/intl402/Temporal/PlainDateTime/prototype/toLocaleString/locales-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/PlainDateTime/prototype/toLocaleString/locales-undefined.js.
+        * test262/test/intl402/Temporal/PlainDateTime/prototype/toLocaleString/options-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/PlainDateTime/prototype/toLocaleString/options-undefined.js.
+        * test262/test/intl402/Temporal/PlainMonthDay/prototype/toLocaleString/locales-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/PlainMonthDay/prototype/toLocaleString/locales-undefined.js.
+        * test262/test/intl402/Temporal/PlainMonthDay/prototype/toLocaleString/options-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/PlainMonthDay/prototype/toLocaleString/options-undefined.js.
+        * test262/test/intl402/Temporal/PlainTime/prototype/toLocaleString/locales-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/PlainTime/prototype/toLocaleString/locales-undefined.js.
+        * test262/test/intl402/Temporal/PlainTime/prototype/toLocaleString/options-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/PlainTime/prototype/toLocaleString/options-undefined.js.
+        * test262/test/intl402/Temporal/PlainYearMonth/prototype/toLocaleString/locales-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/PlainYearMonth/prototype/toLocaleString/locales-undefined.js.
+        * test262/test/intl402/Temporal/PlainYearMonth/prototype/toLocaleString/options-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/PlainYearMonth/prototype/toLocaleString/options-undefined.js.
+        * test262/test/intl402/Temporal/ZonedDateTime/prototype/toLocaleString/locales-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/ZonedDateTime/prototype/toLocaleString/locales-undefined.js.
+        * test262/test/intl402/Temporal/ZonedDateTime/prototype/toLocaleString/options-undefined.js: Renamed from JSTests/test262/test/built-ins/Temporal/ZonedDateTime/prototype/toLocaleString/options-undefined.js.
+        * test262/test/language/computed-property-names/basics/number.js:
+        * test262/test/language/computed-property-names/basics/string.js:
+        * test262/test/language/computed-property-names/basics/symbol.js:
+        * test262/test/language/computed-property-names/class/method/generator.js:
+        * test262/test/language/computed-property-names/class/method/number.js:
+        * test262/test/language/computed-property-names/class/method/string.js:
+        * test262/test/language/computed-property-names/class/method/symbol.js:
+        * test262/test/language/computed-property-names/object/method/generator.js:
+        * test262/test/language/computed-property-names/object/method/number.js:
+        * test262/test/language/computed-property-names/object/method/string.js:
+        * test262/test/language/computed-property-names/object/method/symbol.js:
+        * test262/test/language/computed-property-names/to-name-side-effects/numbers-object.js:
+        * test262/test/language/computed-property-names/to-name-side-effects/object.js:
+        * test262/test/language/identifiers/part-unicode-14.0.0-escaped.js: Added.
+        * test262/test/language/identifiers/part-unicode-14.0.0.js: Added.
+        * test262/test/language/identifiers/start-unicode-14.0.0-escaped.js: Added.
+        * test262/test/language/identifiers/start-unicode-14.0.0.js: Added.
+        * test262/test/language/rest-parameters/arrow-function.js:
+        * test262/test/language/rest-parameters/no-alias-arguments.js:
+        (f):
+        * test262/test/language/rest-parameters/with-new-target.js:
+        (Base):
+        (Child):
+        * test262/test/language/statements/class/definition/fn-length-static-precedence-order.js:
+        * test262/test/language/statements/class/definition/fn-name-static-precedence-order.js:
+        * test262/test/language/statements/class/static-init-arguments-functions.js:
+        * test262/test/language/statements/class/static-init-arguments-methods.js:
+        * test262/test/language/statements/class/subclass/builtin-objects/Array/contructor-calls-super-multiple-arguments.js:
+        * test262/test/language/statements/class/subclass/builtin-objects/Array/regular-subclassing.js:
+        * test262/test262-Revision.txt:
+
+2021-10-22  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [JSC] GetTypedArrayLengthAsInt52 must be inserted only when we ensure that input is TypedArray via array-mode-based filtering
+        https://bugs.webkit.org/show_bug.cgi?id=232168
+        rdar://84366658
+
+        Reviewed by Robin Morisset.
+
+        * stress/gettypedarraylengthasint52-must-be-emitted-for-typedarray.js: Added.
+        (foo):
+
+2021-10-22  Asumu Takikawa  <asumu@igalia.com>
+
+        Change WebAssembly module import linking time to evaluate step.
+        https://bugs.webkit.org/show_bug.cgi?id=231114
+
+        Reviewed by Yusuke Suzuki.
+
+        Added test cases based on Wasm/ESM proposal examples from:
+
+          https://github.com/WebAssembly/esm-integration/blob/main/proposals/esm-integration/EXAMPLES.md
+
+        The new tests cases cover the bindings made for both JS<->Wasm
+        and Wasm<->JS cyclic module cases, and importing values from JS
+        into Wasm modules. The tests do not cover importing memory values
+        as this does not work yet.
+
+        * wasm/modules/wasm-js-cycle.js:
+        * wasm/modules/wasm-js-cycle/entry-global.wasm:
+        * wasm/modules/wasm-js-cycle/entry-global.wat:
+        * wasm/modules/wasm-js-cycle/entry-table.wasm:
+        * wasm/modules/wasm-js-cycle/entry-table.wat:
+        * wasm/modules/wasm-js-cycle/global.js:
+        (from.string_appeared_here.export.incrementGlobal): Deleted.
+        * wasm/modules/wasm-js-cycle/table.js:
+        (from.string_appeared_here.export.setTable): Deleted.
+
+        * wasm/modules/js-wasm-cycle.js:
+        (then):
+        * wasm/modules/js-wasm-cycle/entry-function.js: Added.
+        (f):
+        * wasm/modules/js-wasm-cycle/entry-i32-global.js: Added.
+        * wasm/modules/js-wasm-cycle/entry-i32-value.js: Added.
+        * wasm/modules/js-wasm-cycle/entry-memory.js: Added.
+        * wasm/modules/js-wasm-cycle/entry-table.js: Added.
+        * wasm/modules/js-wasm-cycle/entry-wasm-global.js: Added.
+        (f):
+        * wasm/modules/js-wasm-cycle/entry-wasm-memory.js: Added.
+        (f):
+        * wasm/modules/js-wasm-cycle/entry-wasm-table.js: Added.
+        (f):
+        * wasm/modules/js-wasm-cycle/function.wasm: Added.
+        * wasm/modules/js-wasm-cycle/function.wat: Added.
+        * wasm/modules/js-wasm-cycle/i32-global.wasm: Added.
+        * wasm/modules/js-wasm-cycle/i32-global.wat: Added.
+        * wasm/modules/js-wasm-cycle/i32-value.wasm: Added.
+        * wasm/modules/js-wasm-cycle/i32-value.wat: Added.
+        * wasm/modules/js-wasm-cycle/memory.wasm: Added.
+        * wasm/modules/js-wasm-cycle/memory.wat: Added.
+        * wasm/modules/js-wasm-cycle/table.wasm: Added.
+        * wasm/modules/js-wasm-cycle/table.wat: Added.
+        * wasm/modules/js-wasm-cycle/wasm-global.wasm: Added.
+        * wasm/modules/js-wasm-cycle/wasm-global.wat: Added.
+        * wasm/modules/js-wasm-cycle/wasm-memory.wasm: Added.
+        * wasm/modules/js-wasm-cycle/wasm-memory.wat: Added.
+        * wasm/modules/js-wasm-cycle/wasm-table.wasm: Added.
+        * wasm/modules/js-wasm-cycle/wasm-table.wat: Added.
+        * wasm/modules/wasm-imports-js-exports.js:
+        * wasm/modules/wasm-imports-js-exports/global.js: Added.
+        * wasm/modules/wasm-imports-js-exports/global.wasm: Added.
+        * wasm/modules/wasm-imports-js-exports/global.wat: Added.
+        * wasm/modules/wasm-imports-js-exports/table.js: Added.
+        * wasm/modules/wasm-imports-js-exports/table.wasm: Added.
+        * wasm/modules/wasm-imports-js-exports/table.wat: Added.
+        * wasm/modules/wasm-js-cycle.js:
+        * wasm/modules/wasm-js-cycle/entry-global.wasm: Added.
+        * wasm/modules/wasm-js-cycle/entry-global.wat: Added.
+        * wasm/modules/wasm-js-cycle/entry-memory.wasm: Added.
+        * wasm/modules/wasm-js-cycle/entry-memory.wat: Added.
+        * wasm/modules/wasm-js-cycle/entry-table.wasm: Added.
+        * wasm/modules/wasm-js-cycle/entry-table.wat: Added.
+        * wasm/modules/wasm-js-cycle/global.js: Added.
+        (export.incrementGlobal):
+        * wasm/modules/wasm-js-cycle/memory.js: Added.
+        (from.string_appeared_here.export.setMemory):
+        * wasm/modules/wasm-js-cycle/table.js: Added.
+        (export.setTable):
+
+2021-10-21  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [JSC] Inserted GetTypedArrayLengthAsInt52 for PutByVal should have NodeResultInt52
+        https://bugs.webkit.org/show_bug.cgi?id=232059
+
+        Reviewed by Saam Barati.
+
+        * stress/inserted-gettypedarraylengthasint52-should-have-int52-result-for-put-by-val.js: Added.
+        (foo.bar):
+        (foo):
+
+2021-10-18  Phillip Mates  <pmates@igalia.com>
+
+        Test coverage for JSC shadow realms implementation
+        https://bugs.webkit.org/show_bug.cgi?id=230602
+
+        Reviewed by Yusuke Suzuki.
+
+        * modules/import-meta-syntax.js:
+        (shouldThrow):
+        * stress/eval-indirect.js: Added.
+        (shouldBe):
+        (shouldThrow):
+        * stress/import-syntax.js:
+        * stress/resources/shadow-realm-example-module.js: Added.
+        (putInGlobal):
+        (getFromGlobal):
+        (getAnObject):
+        (getCallCount):
+        * stress/shadow-realm-evaluate.js: Added.
+        (shouldBe):
+        (shouldThrow):
+        (assertionFn):
+        (shouldBe.String):
+        (shouldBe.globalObjectFor.doEval):
+        (shouldBe.globalObjectFor):
+        * stress/shadow-realm-import-value.js: Added.
+        (shouldBe):
+        (shouldThrow):
+        (async shouldThrowAsync):
+        (async const):
+        (doImport):
+        * stress/shadow-realm.js: Added.
+        (shouldBe):
+        (throw.new.Error):
+        * test262/config.yaml:
+
+2021-10-18  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [JSC] PutByVal's child5 should be KnownInt32Use / Int52RepUse in FTL
+        https://bugs.webkit.org/show_bug.cgi?id=231884
+        rdar://84357099
+
+        Reviewed by Robin Morisset.
+
+        * stress/put-by-val-known-int32.js: Added.
+        (new.Uint8Array.1000000.map):
+
+2021-10-16  Robin Morisset  <rmorisset@apple.com>
+
+        Allow WASM to use up to 4GB
+        https://bugs.webkit.org/show_bug.cgi?id=229353
+        rdar://81603447
+
+        Reviewed by Yusuke Suzuki.
+
+        The big-wasm-memory/wasm-memory-requested... tests used to simply expect an OOM at 2GB.
+        They now expect success at 4GB, and failure at 4GB+1.
+        The exceptions they expect are now more specific, as previously there was a rounding issue that was causing the specific exceptions not to be thrown (resulting in the generic OOM exception later in the code).
+        Finally I made them only run on 64-bit platforms since we don't support typed arrays >=2GB on 32-bits, and I made them only run in one configuration since they can take a little bit of time.
+
+        I also added a few new tests, specifically checking our handling of large typed arrays, and especially of indices above INT32_MAX.
+
+        * stress/big-wasm-memory-grow-no-max.js:
+        (test):
+        * stress/big-wasm-memory-grow.js:
+        (test):
+        * stress/big-wasm-memory.js:
+        (test):
+        * stress/typed-array-always-large.js: Added.
+        (getArrayLength):
+        (getByVal):
+        (putByVal):
+        (test):
+        * stress/typed-array-eventually-large.js: Added.
+        (getArrayLength):
+        (getByVal):
+        (putByVal):
+        (test):
+        * stress/typed-array-large-eventually-oob.js: Added.
+        (getArrayLength):
+        (getByVal):
+        (putByVal):
+        (test):
+        * wasm/regress/wasm-memory-requested-more-than-MAX_ARRAY_BUFFER_SIZE-2.js:
+        * wasm/regress/wasm-memory-requested-more-than-MAX_ARRAY_BUFFER_SIZE.js:
+
+2021-10-15  Robin Morisset  <rmorisset@apple.com>
+
+        Revert r284230, my last fixes to the watch build make it break tests
+        https://bugs.webkit.org/show_bug.cgi?id=231797
+
+        Unreviewed.
+
+        * stress/big-wasm-memory-grow-no-max.js:
+        (test):
+        * stress/big-wasm-memory-grow.js:
+        (test):
+        * stress/big-wasm-memory.js:
+        (test):
+        * stress/typed-array-always-large.js: Removed.
+        (getArrayLength): Deleted.
+        (getByVal): Deleted.
+        (putByVal): Deleted.
+        (test): Deleted.
+        * stress/typed-array-eventually-large.js: Removed.
+        (getArrayLength): Deleted.
+        (getByVal): Deleted.
+        (putByVal): Deleted.
+        (test): Deleted.
+        * stress/typed-array-large-eventually-oob.js: Removed.
+        (getArrayLength): Deleted.
+        (getByVal): Deleted.
+        (putByVal): Deleted.
+        (test): Deleted.
+        * wasm/regress/wasm-memory-requested-more-than-MAX_ARRAY_BUFFER_SIZE-2.js:
+        * wasm/regress/wasm-memory-requested-more-than-MAX_ARRAY_BUFFER_SIZE.js:
+
+2021-10-14  Robin Morisset  <rmorisset@apple.com>
+
+        Allow WASM to use up to 4GB
+        https://bugs.webkit.org/show_bug.cgi?id=229353
+        rdar://81603447
+
+        Reviewed by Yusuke Suzuki.
+
+        The big-wasm-memory/wasm-memory-requested... tests used to simply expect an OOM at 2GB.
+        They now expect success at 4GB, and failure at 4GB+1.
+        The exceptions they expect are now more specific, as previously there was a rounding issue that was causing the specific exceptions not to be thrown (resulting in the generic OOM exception later in the code).
+        Finally I made them only run on 64-bit platforms since we don't support typed arrays >=2GB on 32-bits, and I made them only run in one configuration since they can take a little bit of time.
+
+        I also added a few new tests, specifically checking our handling of large typed arrays, and especially of indices above INT32_MAX.
+
+        * stress/big-wasm-memory-grow-no-max.js:
+        (test):
+        * stress/big-wasm-memory-grow.js:
+        (test):
+        * stress/big-wasm-memory.js:
+        (test):
+        * stress/typed-array-always-large.js: Added.
+        (getArrayLength):
+        (getByVal):
+        (putByVal):
+        (test):
+        * stress/typed-array-eventually-large.js: Added.
+        (getArrayLength):
+        (getByVal):
+        (putByVal):
+        (test):
+        * stress/typed-array-large-eventually-oob.js: Added.
+        (getArrayLength):
+        (getByVal):
+        (putByVal):
+        (test):
+        * wasm/regress/wasm-memory-requested-more-than-MAX_ARRAY_BUFFER_SIZE-2.js:
+        * wasm/regress/wasm-memory-requested-more-than-MAX_ARRAY_BUFFER_SIZE.js:
+
+2021-10-14  Commit Queue  <commit-queue@webkit.org>
+
+        Unreviewed, reverting r284151.
+        https://bugs.webkit.org/show_bug.cgi?id=231740
+
+        WTR
+
+        Reverted changeset:
+
+        "Test coverage for JSC shadow realms implementation"
+        https://bugs.webkit.org/show_bug.cgi?id=230602
+        https://commits.webkit.org/r284151
+
+2021-10-14  Phillip Mates  <pmates@igalia.com>
+
+        Test coverage for JSC shadow realms implementation
+        https://bugs.webkit.org/show_bug.cgi?id=230602
+
+        Reviewed by Yusuke Suzuki.
+
+        * modules/import-meta-syntax.js:
+        (shouldThrow):
+        * stress/eval-indirect.js: Added.
+        (shouldBe):
+        (shouldThrow):
+        * stress/import-syntax.js:
+        * stress/resources/shadow-realm-example-module.js: Added.
+        (putInGlobal):
+        (getFromGlobal):
+        (getAnObject):
+        (getCallCount):
+        * stress/shadow-realm-evaluate.js: Added.
+        (shouldBe):
+        (shouldThrow):
+        (assertionFn):
+        (shouldBe.String):
+        (shouldBe.globalObjectFor.doEval):
+        (shouldBe.globalObjectFor):
+        * stress/shadow-realm-import-value.js: Added.
+        (shouldBe):
+        (shouldThrow):
+        (async shouldThrowAsync):
+        (async const):
+        (doImport):
+        * stress/shadow-realm.js: Added.
+        (shouldBe):
+        (throw.new.Error):
+        * test262/config.yaml:
+
+2021-10-11  Saam Barati  <sbarati@apple.com>
+
+        Don't branch around register allocation in DFG enumerator get by val and pass in the right LValue type to strictInt52ToJSValue
+        https://bugs.webkit.org/show_bug.cgi?id=231465
+        <rdar://83876470>
+
+        Reviewed by Yusuke Suzuki.
+
+        * stress/dont-branch-around-regalloc-enumerator-get-by-val.js: Added.
+        (foo):
+
+2021-10-09  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [JSC] Refine RegExp#compile based on regexp-legacy-features proposal
+        https://bugs.webkit.org/show_bug.cgi?id=231486
+
+        Reviewed by Alexey Shvayka.
+
+        * stress/regexp-recompile.js: Added.
+        (shouldBe):
+        (recompile):
+        (target):
+        * test262/expectations.yaml:
+
+2021-10-08  Tadeu Zagallo  <tzagallo@apple.com>
+
+        Implement the WebAssembly exception handling proposal
+        https://bugs.webkit.org/show_bug.cgi?id=229681
+        <rdar://81603387>
+
+        Reviewed by Keith Miller.
+
+        Add new tests for the exception handling and import a set of tests used by V8 into wasm/v8.
+
+        * wasm.yaml:
+        * wasm/Builder.js:
+        (const._importExceptionContinuation.type.Import.field):
+        (export.default.Builder.prototype._registerSectionBuilders.const.section.in.WASM.description.section.switch.section.case.string_appeared_here.this.section):
+        (const._exportFunctionContinuation.type.Export.field): Deleted.
+        (const._exportFunctionContinuation): Deleted.
+        * wasm/Builder_WebAssemblyBinary.js:
+        (const.emitters.Import):
+        (const.emitters.Export):
+        (const.emitters.Exception):
+        * wasm/assert.js:
+        * wasm/self-test/test_BuilderJSON.js:
+        (ImportBeforeTypeSections): Deleted.
+        * wasm/stress/catch-with-delegate.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.callback):
+        (assert.throws):
+        * wasm/stress/create-tag-from.js: Added.
+        * wasm/stress/exception-cross-instance-2.js: Added.
+        (test):
+        (assert.eq):
+        * wasm/stress/exception-cross-instance-3.js: Added.
+        (test):
+        (assert.eq):
+        * wasm/stress/exception-cross-instance.js: Added.
+        (test):
+        (assert.throws):
+        (instB.new.WebAssembly.Instance):
+        * wasm/stress/exception-liveness-tier-up.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.catch):
+        (assert.eq.):
+        (assert.eq):
+        * wasm/stress/exception-multiple-instances.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.const.module.new.WebAssembly.Module):
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.inst.exports.throw):
+        * wasm/stress/exception-simple-delegate.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.testSimpleThrowDelegate):
+        (testThrowDelegateSkip):
+        (testDelegateCaller):
+        (testSimpleDelegateMerge):
+        * wasm/stress/exception-simple-throw-catch.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.testSimpleTryCatch):
+        (testSimpleTryCatchAll):
+        (testCallTryCatch):
+        (testCallTryCatchAll):
+        (testSimpleTryCatchValue):
+        (testCallTryCatchValue):
+        (testStackTryCatch):
+        (testLiveAfterTryCatch):
+        (testLiveAfterTryCatchAll):
+        (testUnifyTryCatchCatch):
+        (testUnifyTryCatchCatchAll):
+        (testUnifyTryNoThrow):
+        (testUnifyTryNoCatch):
+        (testNestedCatch):
+        * wasm/stress/exception-thrown-from-js-to-wasm-catchall-rethrow.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.callback):
+        * wasm/stress/exception-thrown-from-js-to-wasm-catchall.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.callback):
+        * wasm/stress/exception-thrown-from-js-to-wasm.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.callback):
+        * wasm/stress/exception-thrown-out-of-wasm.js: Added.
+        * wasm/stress/exception-thrown-over-wasm.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.callback):
+        * wasm/stress/exception-trap.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.testCannotCatchUnreachable):
+        (testCannotCatchOOB):
+        (testWasmAPIThrow):
+        (testJSCatchAndRethrow):
+        * wasm/stress/rethrow-from-catch-to-catch.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.callback):
+        * wasm/stress/rethrow-to-catch.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here.callback):
+        (assert.throws.callback):
+        (assert.throws):
+        * wasm/stress/rethrow-to-delegate-to-catch.js: Added.
+        (import.Builder.from.string_appeared_here.import.as.assert.from.string_appeared_here):
+        (assert.eq.exn.getArg):
+        (assert.throws):
+        (assert.throws.callback):
+        (assert.eq):
+        * wasm/stress/simple-export-exception.js: Added.
+        * wasm/v8/LICENSE: Added.
+        * wasm/v8/exceptions-api.js: Added.
+        (TestImport):
+        (TestImportExport):
+        (TestExceptionConstructor):
+        (TestExceptionConstructorWithPayload):
+        (TestCatchJSException.js_func):
+        (js_func):
+        (TestCatchJS):
+        (TestCatchJSExceptionWithPayload):
+        (TestGetArg):
+        * wasm/v8/exceptions-export.js: Added.
+        (TestExportMultiple):
+        (TestExportOutOfBounds):
+        * wasm/v8/exceptions-externref.js: Added.
+        (TestThrowRefNull):
+        (TestThrowRefParam):
+        * wasm/v8/exceptions-import.js: Added.
+        (NewExportedTag):
+        (TestImportSimple):
+        (TestImportMissing):
+        * wasm/v8/exceptions-rethrow.js: Added.
+        (TestRethrowInCatch):
+        (TestRethrowInCatchAll):
+        (TestRethrowNested):
+        (TestRethrowRecatch):
+        * wasm/v8/exceptions-shared.js: Added.
+        (NewExportedException):
+        (TestSingleInstance.let.instance.builder.instantiate.):
+        (TestSingleInstance):
+        (TestMultiInstanceNonShared.let.instance2.builder.instantiate.):
+        (TestMultiInstanceShared.let.instance2.builder.instantiate.):
+        (TestMultiModuleShared.let.instance2.builder2.instantiate.):
+        * wasm/v8/exceptions-type-reflection.js: Added.
+        (TestExport):
+        (TestImportExport):
+        * wasm/v8/exceptions-utils.js: Added.
+        (assertWasmThrows):
+        * wasm/v8/exceptions.js: Added.
+        (TestThrowSimple):
+        (TestCatchSimple):
+        (TestTrapNotCaught):
+        (TestTrapViaJSNotCaught.js_import):
+        (TestManuallyThrownRuntimeErrorCaught.throw_exc):
+        (TestManuallyThrownRuntimeErrorCaught):
+        (TestExnWithWasmProtoNotCaught.js_import):
+        (TestExnWithWasmProtoNotCaught):
+        (TestStackOverflowNotCaught.stack_overflow):
+        (TestStackOverflowNotCaught):
+        (TestThrowParamI):
+        (TestThrowParamF):
+        (TestThrowParamL):
+        (TestThrowParamD):
+        (TestCatchCrossFunctions.throw_value):
+        (TestCatchCrossFunctions.throw_string):
+        (TestCatchCrossFunctions.throw_undefined):
+        (TestCatchCrossFunctions.throw_fp):
+        (TestCatchCrossFunctions.throw_large):
+        (TestDelegateNoThrow):
+        (TestDelegateThrow):
+        (TestDelegateThrowNoCatch):
+        (TestDelegateMerge):
+        (TestDelegate1):
+        (TestDelegateUnreachable):
+        (TestDelegateToCaller):
+        (TestUnreachableInCatchAll):
+        (TestThrowWithLocal):
+        (TestCatchlessTry):
+        * wasm/v8/mjsunit.js: Added.
+        (MjsUnitAssertionError):
+        (MjsUnitAssertionError.prototype.toString):
+        (catch):
+        (classOf):
+        (ValueOf):
+        (prettyPrinted):
+        (prettyPrintedArrayElement):
+        (failWithMessage):
+        (formatFailureText):
+        (fail):
+        (deepObjectEquals):
+        (deepEquals):
+        (assertSame):
+        (assertNotSame):
+        (assertEquals):
+        (assertNotEquals):
+        (assertEqualsDelta):
+        (assertArrayEquals):
+        (assertPropertiesEqual):
+        (assertToStringEquals):
+        (assertTrue):
+        (assertFalse):
+        (assertNull):
+        (assertNotNull):
+        (executeCode):
+        (checkException):
+        (assertThrows):
+        (assertThrowsEquals):
+        (assertThrowsAsync):
+        (assertInstanceof):
+        (assertDoesNotThrow):
+        (assertUnreachable):
+        (assertContains):
+        (assertMatches):
+        (concatenateErrors):
+        (assertPromiseResult):
+        (OptimizationStatus):
+        (assertUnoptimized):
+        (assertOptimized):
+        (isNeverOptimizeLiteMode):
+        (isNeverOptimize):
+        (isAlwaysOptimize):
+        (isInterpreted):
+        (isBaseline):
+        (isUnoptimized):
+        (isOptimized):
+        (isTurboFanned):
+        (MjsUnitAssertionError.prepareStackTrace):
+        * wasm/v8/wasm-module-builder.js: Added.
+        (bytes):
+        (wasmOptRefType):
+        (wasmRefType):
+        (wasmRtt):
+        (wasmRttNoDepth):
+        (makeSig):
+        (makeSig_v_x):
+        (makeSig_x_v):
+        (makeSig_v_xx):
+        (makeSig_r_v):
+        (makeSig_r_x):
+        (makeSig_r_xx):
+        (defineWasmOpcode):
+        (assertTraps):
+        (Binary):
+        (Binary.prototype.ensure_space):
+        (Binary.prototype.trunc_buffer):
+        (Binary.prototype.reset):
+        (Binary.prototype.emit_u8):
+        (Binary.prototype.emit_u16):
+        (Binary.prototype.emit_u32):
+        (Binary.prototype.emit_leb_u):
+        (Binary.prototype.emit_u32v):
+        (Binary.prototype.emit_u64v):
+        (Binary.prototype.emit_bytes):
+        (Binary.prototype.emit_string):
+        (Binary.prototype.emit_heap_type):
+        (Binary.prototype.emit_type):
+        (Binary.prototype.emit_init_expr_recursive):
+        (Binary.prototype.emit_init_expr):
+        (Binary.prototype.emit_header):
+        (Binary.prototype.emit_section):
+        (WasmFunctionBuilder):
+        (WasmFunctionBuilder.prototype.numLocalNames):
+        (WasmFunctionBuilder.prototype.exportAs):
+        (WasmFunctionBuilder.prototype.exportFunc):
+        (WasmFunctionBuilder.prototype.setCompilationHint):
+        (WasmFunctionBuilder.prototype.addBody):
+        (WasmFunctionBuilder.prototype.addBodyWithEnd):
+        (WasmFunctionBuilder.prototype.getNumLocals):
+        (WasmFunctionBuilder.prototype.addLocals):
+        (WasmFunctionBuilder.prototype.end):
+        (WasmInitExpr.I32Const):
+        (WasmInitExpr.I64Const):
+        (WasmInitExpr.F32Const):
+        (WasmInitExpr.F64Const):
+        (WasmInitExpr.S128Const):
+        (WasmInitExpr.GlobalGet):
+        (WasmInitExpr.RefFunc):
+        (WasmInitExpr.RefNull):
+        (WasmInitExpr.StructNewWithRtt):
+        (WasmInitExpr.StructNew):
+        (WasmInitExpr.StructNewDefaultWithRtt):
+        (WasmInitExpr.StructNewDefault):
+        (WasmInitExpr.ArrayInit):
+        (WasmInitExpr.ArrayInitStatic):
+        (WasmInitExpr.RttCanon):
+        (WasmInitExpr.RttSub):
+        (WasmInitExpr.RttFreshSub):
+        (WasmInitExpr.defaultFor):
+        (WasmInitExpr):
+        (WasmGlobalBuilder):
+        (WasmGlobalBuilder.prototype.exportAs):
+        (WasmTableBuilder):
+        (WasmTableBuilder.prototype.exportAs):
+        (makeField):
+        (WasmStruct):
+        (WasmStructSubtype):
+        (WasmArray):
+        (WasmArraySubtype):
+        (WasmElemSegment):
+        (WasmElemSegment.prototype.is_active):
+        (WasmElemSegment.prototype.is_passive):
+        (WasmElemSegment.prototype.is_declarative):
+        (WasmElemSegment.prototype.expressions_as_elements):
+        (WasmModuleBuilder):
+        (WasmModuleBuilder.prototype.addStart):
+        (WasmModuleBuilder.prototype.addMemory):
+        (WasmModuleBuilder.prototype.addMemory64):
+        (WasmModuleBuilder.prototype.addExplicitSection):
+        (WasmModuleBuilder.prototype.stringToBytes):
+        (WasmModuleBuilder.prototype.createCustomSection):
+        (WasmModuleBuilder.prototype.addCustomSection):
+        (WasmModuleBuilder.prototype.addType):
+        (WasmModuleBuilder.prototype.addStruct):
+        (WasmModuleBuilder.prototype.addStructSubtype):
+        (WasmModuleBuilder.prototype.addArray):
+        (WasmModuleBuilder.prototype.addArraySubtype):
+        (WasmModuleBuilder.prototype.addGlobal):
+        (WasmModuleBuilder.prototype.addTable):
+        (WasmModuleBuilder.prototype.addTag):
+        (WasmModuleBuilder.prototype.addFunction):
+        (WasmModuleBuilder.prototype.addImport):
+        (WasmModuleBuilder.prototype.addImportedGlobal):
+        (WasmModuleBuilder.prototype.addImportedMemory):
+        (WasmModuleBuilder.prototype.addImportedTable):
+        (WasmModuleBuilder.prototype.addImportedTag):
+        (WasmModuleBuilder.prototype.addExport):
+        (WasmModuleBuilder.prototype.addExportOfKind):
+        (WasmModuleBuilder.prototype.setCompilationHint):
+        (WasmModuleBuilder.prototype.addDataSegment):
+        (WasmModuleBuilder.prototype.addPassiveDataSegment):
+        (WasmModuleBuilder.prototype.exportMemoryAs):
+        (WasmModuleBuilder.prototype.addActiveElementSegment):
+        (WasmModuleBuilder.prototype.addPassiveElementSegment):
+        (WasmModuleBuilder.prototype.addDeclarativeElementSegment):
+        (WasmModuleBuilder.prototype.appendToTable):
+        (WasmModuleBuilder.prototype.setTableBounds):
+        (WasmModuleBuilder.prototype.setName):
+        (WasmModuleBuilder.prototype.toBuffer):
+        (WasmModuleBuilder.prototype.toArray):
+        (WasmModuleBuilder.prototype.instantiate):
+        (WasmModuleBuilder.prototype.asyncInstantiate):
+        (WasmModuleBuilder.prototype.toModule):
+        (wasmSignedLeb):
+        (wasmUnsignedLeb):
+        (wasmI32Const):
+        (wasmI64Const):
+        (wasmF32Const):
+        (wasmF64Const):
+        (wasmS128Const):
+        (getOpcodeName):
+        * wasm/wasm.json:
+
+2021-10-08  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [JSC] UnlinkedCodeBlock::m_instructions can be nullptr
+        https://bugs.webkit.org/show_bug.cgi?id=231445
+        rdar://83975933
+
+        Reviewed by Mark Lam.
+
+        * stress/unlinked-code-block-destructor.js: Added.
+        (useAllMemory.get Object):
+        (useAllMemory.foo):
+        (useAllMemory):
+        (try.bar):
+
+2021-10-08  Saam Barati  <sbarati@apple.com>
+
+        RegExpExec can't statically prove which of the two structures it will get in AI by just looking at the RegExp*
+        https://bugs.webkit.org/show_bug.cgi?id=231382
+        <rdar://83722151>
+
+        Reviewed by Mark Lam.
+
+        * stress/reg-exp-exec-cant-prove-which-structure-it-produces-in-ai.js: Added.
+        (foo):
+
+2021-10-07  Philip Chimento  <pchimento@igalia.com>
+
+        [JSC] Temporal tweaks to pass more test262 tests
+        https://bugs.webkit.org/show_bug.cgi?id=231331
+
+        Reviewed by Yusuke Suzuki.
+
+        * test262/config.yaml: Three tests no longer crash, but they still
+          depend on unimplemented functionality, so skip them.
+        * test262/expectations.yaml:
+
+2021-10-06  Ross Kirsling  <ross.kirsling@sony.com>
+
+        Unreviewed, ensure test262 expectations reflect BigSur release mode.
+
+        * test262/expectations.yaml:
+
+2021-10-06  Philip Chimento  <pchimento@igalia.com>
+
+        [JSC] Update test262
+        https://bugs.webkit.org/show_bug.cgi?id=231201
+
+        Add tests that were somehow cut off in the previous patch.
+
+        Reviewed by Ross Kirsling.
+
+        * test262/test/built-ins/Temporal/Now/*: Added.
+
+2021-10-06  Philip Chimento  <pchimento@igalia.com>
+
+        [JSC] Update test262
+        https://bugs.webkit.org/show_bug.cgi?id=231201
+
+        Reviewed by Ross Kirsling.
+
+        Update test262 to latest, to bring in Temporal tests.
+
+        * test262/config.yaml: Ignore tests that depend on unimplemented parts
+        of Temporal.
+        * test262/expectations.yaml: Add new failures.
+        * test262/*: Update from upstream.
+        * test262/test262-Revision.txt:
+
+2021-10-06  Saam Barati  <sbarati@apple.com>
+
+        Run backwards propagation before we prune the graph after ForceOSRExit nodes in BytecodeParser
+        https://bugs.webkit.org/show_bug.cgi?id=230823
+        <rdar://problem/83565088>
+
+        Reviewed by Robin Morisset.
+
+        * run-backwards-propagation-before-osr-exit-pruning.js: Added.
+        (assert):
+        (main.async v24):
+        (main):
+
+2021-10-05  Saam Barati  <sbarati@apple.com>
+
+        Don't pass DontBuildStrings to next token after parsing an empty parameter list
+        https://bugs.webkit.org/show_bug.cgi?id=225094
+        <rdar://problem/77231778>
+
+        Reviewed by Yusuke Suzuki.
+
+        * stress/dont-pass-DontBuildStrings-when-building-empty-arguments-list.js: Added.
+        (main.a.prototype.g.toString.string_appeared_here):
+        (main.a):
+        (main):
+
+2021-10-05  Mark Lam  <mark.lam@apple.com>
+
+        CodeBlock should not add/remove LoopHintExecutionCounters.
+        https://bugs.webkit.org/show_bug.cgi?id=231209
+        rdar://83571235
+
+        Reviewed by Saam Barati.
+
+        * stress/codeBlock-should-not-add-remove-loop-hint-execution-counters-due-to-cached-unlinked-baseline-code.js: Added.
+
+2021-10-05  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [JSC] JSPropertyNameEnumerator should not have cached prototype chain since empty JSPropertyNameEnumerator is shared
+        https://bugs.webkit.org/show_bug.cgi?id=231202
+
+        Reviewed by Keith Miller.
+
+        * stress/for-in-validation-poly-proto.js: Added.
+        (shouldBe):
+        (test):
+        (factory.Test):
+        (factory):
+        * stress/for-in-validation-watchpoint.js: Added.
+        (shouldBe):
+        (test):
+        (Test):
+        (factory):
+
+2021-10-04  Saam Barati  <sbarati@apple.com>
+
+        IntrinsicGetterAccessCase implementation of __proto__ needs to handle get_by_id_with_this
+        https://bugs.webkit.org/show_bug.cgi?id=229951
+        <rdar://problem/82787527>
+
+        Reviewed by Yusuke Suzuki.
+
+        * stress/run-proto-intrinsic-getter-with-this-value-in-get-by-id-with-this.js: Added.
+        (assert):
+        (main.v37):
+        (main):
+
+2021-10-02  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [JSC] Update test262 config.yaml since OSS WebKit now uses ICU 64.2 header
+        https://bugs.webkit.org/show_bug.cgi?id=231121
+
+        Reviewed by Mark Lam.
+
+        * test262/config.yaml:
+
+2021-10-02  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [JSC] DateTimeFormat.resolvedOptions shouldn't return an object with other date/time properties if dateStyle or timeStyle are set
+        https://bugs.webkit.org/show_bug.cgi?id=231041
+
+        Reviewed by Ross Kirsling.
+
+        * stress/intl-date-time-format-date-time-style-basic.js:
+        (shouldBe.JSON.stringify.o.resolvedOptions):
+        (shouldBe):
+        (shouldBe.o.format): Deleted.
+
+2021-10-02  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        Unreviewed, add reported test to our stress tests
+        https://bugs.webkit.org/show_bug.cgi?id=230827
+
+        While we cannot reproduce the issue successfully, adding it to our stress tests to ensure that this will never happen.
+
+        * stress/intl-datetimeformat.js:
+
+2021-10-01  Commit Queue  <commit-queue@webkit.org>
+
+        Unreviewed, reverting r283293.
+        https://bugs.webkit.org/show_bug.cgi?id=231116
+
+        changing print() broke a lot of random things
+
+        Reverted changeset:
+
+        "Print values in a nicer way in the jsc shell"
+        https://bugs.webkit.org/show_bug.cgi?id=230931
+        https://commits.webkit.org/r283293
+
+2021-09-30  Saam Barati  <sbarati@apple.com>
+
+        The DFG/FTL need to be aware that Proxy's can produce "function" for typeof and might be callable
+        https://bugs.webkit.org/show_bug.cgi?id=230804
+        <rdar://problem/83543951>
+
+        Reviewed by Yusuke Suzuki.
+
+        * stress/ai-typeof-needs-to-be-aware-of-proxy-2.js: Added.
+        (assert):
+        (builtin.vm.createBuiltin):
+        (builtin2.vm.createBuiltin):
+        (let.p.new.Proxy):
+        * stress/ai-typeof-needs-to-be-aware-of-proxy.js: Added.
+        (assert):
+        (builtin.vm.createBuiltin):
+        (let.p.new.Proxy):
+        * stress/is-callable-in-ftl-needs-to-be-aware-of-proxy.js: Added.
+        (main):
+
+2021-09-29  Mark Lam  <mark.lam@apple.com>
+
+        DFG strength reduction on % operator should handle an INT_MIN divisor.
+        https://bugs.webkit.org/show_bug.cgi?id=230391
+        <rdar://problem/83229740>
+
+        Reviewed by Robin Morisset.
+
+        * stress/dfg-strength-reduction-on-mod-should-handle-INT_MIN.js: Added.
+
+2021-09-29  Saam Barati  <sbarati@apple.com>
+
+        Print values in a nicer way in the jsc shell
+        https://bugs.webkit.org/show_bug.cgi?id=230931
+
+        Reviewed by Tadeu Zagallo.
+
+        * ChakraCore/test/jsc-lib.js:
+
+2021-09-29  Saam Barati  <sbarati@apple.com>
+
+        We need to load the baseline JIT's constant pool register after OSR exit to checkpoints if we return to baseline code
+        https://bugs.webkit.org/show_bug.cgi?id=230972
+        <rdar://83659469>
+
+        Reviewed by Mark Lam and Yusuke Suzuki.
+
+        * stress/checkpoint-osr-exit-needs-to-reload-baseline-jit-constant-pool-gpr.js: Added.
+        (empty):
+        (empty2):
+        (test):
+
 2021-09-29  Saam Barati  <sbarati@apple.com>
 
         Code inside strength reduction can incorrectly prove that we know what lastIndex is

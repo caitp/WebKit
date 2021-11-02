@@ -1583,6 +1583,18 @@
     "imported/w3c/web-platform-tests/css/css-pseudo/idlharness.html": [
         "slow"
     ],
+    "imported/w3c/web-platform-tests/css/css-transforms/animation/rotate-interpolation.html": [
+        "slow"
+    ],
+    "imported/w3c/web-platform-tests/css/css-transforms/animation/transform-interpolation-001.html": [
+        "slow"
+    ],
+    "imported/w3c/web-platform-tests/css/css-transforms/animation/transform-interpolation-005.html": [
+        "slow"
+    ],
+    "imported/w3c/web-platform-tests/css/css-transforms/animation/translate-interpolation.html": [
+        "slow"
+    ],
     "imported/w3c/web-platform-tests/css/css-transitions/properties-value-001.html": [
         "slow"
     ],
@@ -2672,6 +2684,9 @@
     "imported/w3c/web-platform-tests/html/cross-origin-opener-policy/coep.https.html": [
         "slow"
     ],
+    "imported/w3c/web-platform-tests/html/cross-origin-opener-policy/coop-csp-sandbox-navigate.https.html": [
+        "slow"
+    ],
     "imported/w3c/web-platform-tests/html/cross-origin-opener-policy/coop-navigated-history-popup.https.html": [
         "slow"
     ],
@@ -3084,9 +3099,6 @@
         "slow"
     ],
     "imported/w3c/web-platform-tests/html/semantics/forms/form-submission-0/submit-entity-body.html": [
-        "slow"
-    ],
-    "imported/w3c/web-platform-tests/html/semantics/forms/textfieldselection/select-event.html": [
         "slow"
     ],
     "imported/w3c/web-platform-tests/html/semantics/forms/textfieldselection/selection.html": [
@@ -3636,6 +3648,9 @@
         "slow"
     ],
     "imported/w3c/web-platform-tests/mathml/relations/html5-tree/tabindex-002.html": [
+        "slow"
+    ],
+    "imported/w3c/web-platform-tests/media-capabilities/decodingInfoEncryptedMedia.https.html": [
         "slow"
     ],
     "imported/w3c/web-platform-tests/media-source/SourceBuffer-abort-readyState.html": [

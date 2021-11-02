@@ -106,7 +106,7 @@ struct PathElement {
     Type type;
 };
 
-using PathApplierFunction = WTF::Function<void(const PathElement&)>;
+using PathApplierFunction = Function<void(const PathElement&)>;
 
 class Path {
     WTF_MAKE_FAST_ALLOCATED;
@@ -295,7 +295,7 @@ private:
 #endif
 };
 
-WTF::TextStream& operator<<(WTF::TextStream&, const Path&);
+WEBCORE_EXPORT WTF::TextStream& operator<<(WTF::TextStream&, const Path&);
 
 template<class Encoder> void Path::encode(Encoder& encoder) const
 {
@@ -419,22 +419,22 @@ template<class Decoder> std::optional<Path> Path::decode(Decoder& decoder)
 
 template <typename DataType> inline bool Path::hasInlineData() const
 {
-    return WTF::holds_alternative<DataType>(m_inlineData);
+    return std::holds_alternative<DataType>(m_inlineData);
 }
 
 template<typename DataType> inline const DataType& Path::inlineData() const
 {
-    return WTF::get<DataType>(m_inlineData);
+    return std::get<DataType>(m_inlineData);
 }
 
 template<typename DataType> inline DataType& Path::inlineData()
 {
-    return WTF::get<DataType>(m_inlineData);
+    return std::get<DataType>(m_inlineData);
 }
 
 inline bool Path::hasInlineData() const
 {
-    return !hasInlineData<Monostate>();
+    return !hasInlineData<std::monostate>();
 }
 
 #endif

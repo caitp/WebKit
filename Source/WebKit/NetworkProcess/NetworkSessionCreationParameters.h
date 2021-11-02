@@ -98,11 +98,14 @@ struct NetworkSessionCreationParameters {
     bool suppressesConnectionTerminationOnSystemChange { false };
     bool allowsServerPreconnect { true };
     bool requiresSecureHTTPSProxyConnection { false };
+    bool shouldRunServiceWorkersOnMainThreadForTesting { false };
     bool preventsSystemHTTPProxyAuthentication { false };
     bool appHasRequestedCrossWebsiteTrackingPermission { false };
     bool useNetworkLoader { false };
     bool allowsHSTSWithUntrustedRootCertificate { false };
     String pcmMachServiceName;
+    String webPushMachServiceName;
+    bool enablePrivateClickMeasurementDebugMode { false };
 
     ResourceLoadStatisticsParameters resourceLoadStatisticsParameters;
 };

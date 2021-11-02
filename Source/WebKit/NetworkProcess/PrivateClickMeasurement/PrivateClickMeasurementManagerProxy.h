@@ -32,18 +32,23 @@
 
 namespace WebKit {
 
+class NetworkSession;
+
 namespace PCM {
 
 class ManagerProxy : public ManagerInterface {
     WTF_MAKE_FAST_ALLOCATED;
 public:
-    ManagerProxy(const String& machServiceName);
+    ManagerProxy(const String& machServiceName, NetworkSession&);
 
-    void storeUnattributed(WebCore::PrivateClickMeasurement&&) final;
-    void handleAttribution(WebCore::PrivateClickMeasurement::AttributionTriggerData&&, const URL& requestURL, WebCore::RegistrableDomain&& redirectDomain, const URL& firstPartyURL) final;
+    using ApplicationBundleIdentifier = String;
+
+    void storeUnattributed(WebCore::PrivateClickMeasurement&&, CompletionHandler<void()>&&) final;
+    void handleAttribution(WebCore::PrivateClickMeasurement::AttributionTriggerData&&, const URL& requestURL, WebCore::RegistrableDomain&& redirectDomain, const URL& firstPartyURL, const ApplicationBundleIdentifier&) final;
     void clear(CompletionHandler<void()>&&) final;
     void clearForRegistrableDomain(const WebCore::RegistrableDomain&, CompletionHandler<void()>&&) final;
     void migratePrivateClickMeasurementFromLegacyStorage(WebCore::PrivateClickMeasurement&&, PrivateClickMeasurementAttributionType) final;
+    void setDebugModeIsEnabled(bool) final;
 
     void toStringForTesting(CompletionHandler<void(String)>&&) const final;
     void setOverrideTimerForTesting(bool) final;
@@ -52,9 +57,9 @@ public:
     void setAttributionReportURLsForTesting(URL&& sourceURL, URL&& destinationURL) final;
     void markAllUnattributedAsExpiredForTesting() final;
     void markAttributedPrivateClickMeasurementsAsExpiredForTesting(CompletionHandler<void()>&&) final;
-    void setEphemeralMeasurementForTesting(bool) final;
     void setPCMFraudPreventionValuesForTesting(String&& unlinkableToken, String&& secretToken, String&& signature, String&& keyID) final;
     void startTimerImmediatelyForTesting() final;
+    void setPrivateClickMeasurementAppBundleIDForTesting(ApplicationBundleIdentifier&&) final;
     void destroyStoreForTesting(CompletionHandler<void()>&&) final;
     void allowTLSCertificateChainForLocalPCMTesting(const WebCore::CertificateInfo&) final;
 

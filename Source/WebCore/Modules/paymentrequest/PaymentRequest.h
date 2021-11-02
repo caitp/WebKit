@@ -35,8 +35,8 @@
 #include "PaymentMethodChangeEvent.h"
 #include "PaymentOptions.h"
 #include "PaymentResponse.h"
+#include <variant>
 #include <wtf/URL.h>
-#include <wtf/Variant.h>
 
 namespace WebCore {
 
@@ -101,7 +101,7 @@ public:
     ExceptionOr<void> retry(PaymentValidationErrors&&);
     void cancel();
 
-    using MethodIdentifier = Variant<String, URL>;
+    using MethodIdentifier = std::variant<String, URL>;
     using RefCounted<PaymentRequest>::ref;
     using RefCounted<PaymentRequest>::deref;
 

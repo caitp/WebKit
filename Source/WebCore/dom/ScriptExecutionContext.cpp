@@ -48,7 +48,9 @@
 #include "Navigator.h"
 #include "Page.h"
 #include "Performance.h"
+#include "PermissionController.h"
 #include "PublicURLManager.h"
+#include "RTCDataChannelRemoteHandlerConnection.h"
 #include "RejectedPromiseTracker.h"
 #include "ResourceRequest.h"
 #include "SWClientConnection.h"
@@ -62,6 +64,7 @@
 #include "Settings.h"
 #include "WebCoreJSClientData.h"
 #include "WorkerGlobalScope.h"
+#include "WorkerLoaderProxy.h"
 #include "WorkerNavigator.h"
 #include "WorkerOrWorkletGlobalScope.h"
 #include "WorkerOrWorkletScriptController.h"
@@ -375,6 +378,16 @@ void ScriptExecutionContext::willDestroyDestructionObserver(ContextDestructionOb
     m_destructionObservers.remove(&observer);
 }
 
+RefPtr<PermissionController> ScriptExecutionContext::permissionController()
+{
+    return nullptr;
+}
+
+RefPtr<RTCDataChannelRemoteHandlerConnection> ScriptExecutionContext::createRTCDataChannelRemoteHandlerConnection()
+{
+    return nullptr;
+}
+
 // FIXME: Should this function be in SecurityContext or SecurityOrigin instead?
 bool ScriptExecutionContext::canIncludeErrorDetails(CachedScript* script, const String& sourceURL)
 {
@@ -668,6 +681,29 @@ bool ScriptExecutionContext::ensureOnContextThread(ScriptExecutionContextIdentif
 
     task.performTask(*context);
     return true;
+}
+
+void ScriptExecutionContext::postTaskToResponsibleDocument(Function<void(Document&)>&& callback)
+{
+    if (is<Document>(this)) {
+        callback(downcast<Document>(*this));
+        return;
+    }
+
+    ASSERT(is<WorkerOrWorkletGlobalScope>(this));
+    if (!is<WorkerOrWorkletGlobalScope>(this))
+        return;
+
+    auto* thread = downcast<WorkerOrWorkletGlobalScope>(this)->workerOrWorkletThread();
+    if (thread) {
+        thread->workerLoaderProxy().postTaskToLoader([callback = WTFMove(callback)](auto&& context) {
+            callback(downcast<Document>(context));
+        });
+        return;
+    }
+
+    if (auto document = downcast<WorkletGlobalScope>(this)->responsibleDocument())
+        callback(*document);
 }
 
 } // namespace WebCore

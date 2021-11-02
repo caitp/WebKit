@@ -130,6 +130,8 @@ public:
     static bool shouldManageAudioSessionCategory() { return s_shouldManageAudioSessionCategory; }
     static void setShouldManageAudioSessionCategory(bool flag) { s_shouldManageAudioSessionCategory = flag; }
 
+    virtual void setHostProcessAttribution(audit_token_t) { };
+
 protected:
     friend class NeverDestroyed<AudioSession>;
     AudioSession();
@@ -145,7 +147,7 @@ protected:
     static bool s_shouldManageAudioSessionCategory;
 };
 
-class WEBCORE_EXPORT AudioSessionRoutingArbitrationClient {
+class WEBCORE_EXPORT AudioSessionRoutingArbitrationClient : public CanMakeWeakPtr<AudioSessionRoutingArbitrationClient> {
 public:
     virtual ~AudioSessionRoutingArbitrationClient() = default;
 

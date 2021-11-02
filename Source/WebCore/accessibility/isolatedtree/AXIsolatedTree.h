@@ -29,6 +29,7 @@
 
 #include "AccessibilityObjectInterface.h"
 #include "PageIdentifier.h"
+#include <pal/SessionID.h>
 #include <wtf/HashMap.h>
 #include <wtf/Lock.h>
 #include <wtf/RefPtr.h>
@@ -96,6 +97,7 @@ enum class AXPropertyName : uint16_t {
     ColumnIndexRange,
     ComputedLabel,
     ComputedRoleString,
+    Contents,
     CurrentState,
     CurrentValue,
     DatetimeAttributeValue,
@@ -116,7 +118,6 @@ enum class AXPropertyName : uint16_t {
     HasARIAValueNow,
     HasApplePDFAnnotationAttribute,
     HasBoldFont,
-    HasChildren,
     HasHighlighting,
     HasItalicFont,
     HasPlainText,
@@ -227,6 +228,7 @@ enum class AXPropertyName : uint16_t {
     IsValueAutofillAvailable,
     IsVisible,
     IsVisited,
+    IsWidget,
     KeyShortcutsValue,
     Language,
     LayoutCount,
@@ -240,7 +242,7 @@ enum class AXPropertyName : uint16_t {
     MathLineThickness,
     MathPrescripts,
     MathPostscripts,
-    MathRadicandObject,
+    MathRadicand,
     MathRootIndexObject,
     MathUnderObject,
     MathOverObject,
@@ -315,8 +317,8 @@ enum class AXPropertyName : uint16_t {
     WebArea,
 };
 
-using AXPropertyValueVariant = Variant<std::nullptr_t, String, bool, int, unsigned, double, float, uint64_t, Color, URL, LayoutRect, FloatRect, AXID, IntPoint, OptionSet<SpeakAs>, std::pair<unsigned, unsigned>, Vector<AccessibilityText>, Vector<AXID>, Vector<std::pair<AXID, AXID>>, Vector<String>, Path>;
-using AXPropertyMap = HashMap<AXPropertyName, AXPropertyValueVariant, WTF::IntHash<AXPropertyName>, WTF::StrongEnumHashTraits<AXPropertyName>>;
+using AXPropertyValueVariant = std::variant<std::nullptr_t, String, bool, int, unsigned, double, float, uint64_t, Color, URL, LayoutRect, FloatRect, PAL::SessionID, IntPoint, OptionSet<SpeakAs>, std::pair<unsigned, unsigned>, Vector<AccessibilityText>, Vector<AXID>, Vector<std::pair<AXID, AXID>>, Vector<String>, Path>;
+using AXPropertyMap = HashMap<AXPropertyName, AXPropertyValueVariant, IntHash<AXPropertyName>, WTF::StrongEnumHashTraits<AXPropertyName>>;
 
 struct AXPropertyChange {
     AXID axID { InvalidAXID }; // ID of the object whose properties changed.

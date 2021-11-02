@@ -25,10 +25,6 @@
 
 #pragma once
 
-#include "FloatPoint.h"
-#include "IntPoint.h"
-#include <cstdint>
-#include <wtf/Assertions.h>
 #include <wtf/EnumTraits.h>
 
 namespace WTF {
@@ -36,6 +32,8 @@ class TextStream;
 }
 
 namespace WebCore {
+
+class IntPoint;
 
 // scrollPosition is in content coordinates (0,0 is at scrollOrigin), so may have negative components.
 using ScrollPosition = IntPoint;
@@ -67,14 +65,12 @@ enum ScrollLogicalDirection : uint8_t {
     ScrollInlineDirectionForward
 };
 
-// FIXME: Add another status InNativeAnimation to indicate native scrolling is in progress.
-// See: https://bugs.webkit.org/show_bug.cgi?id=204936
-enum class ScrollBehaviorStatus : uint8_t {
-    NotInAnimation,
-    InNonNativeAnimation,
+enum class ScrollAnimationStatus : uint8_t {
+    NotAnimating,
+    Animating,
 };
 
-enum class AnimatedScroll : uint8_t {
+enum class ScrollIsAnimated : uint8_t {
     No,
     Yes
 };
@@ -130,9 +126,6 @@ inline ScrollDirection logicalToPhysical(ScrollLogicalDirection direction, bool 
         }
         break;
     }
-    default:
-        ASSERT_NOT_REACHED();
-        break;
     }
     return ScrollUp;
 }
@@ -268,18 +261,10 @@ WEBCORE_EXPORT WTF::TextStream& operator<<(WTF::TextStream&, ScrollType);
 WEBCORE_EXPORT WTF::TextStream& operator<<(WTF::TextStream&, ScrollClamping);
 WEBCORE_EXPORT WTF::TextStream& operator<<(WTF::TextStream&, ScrollBehaviorForFixedElements);
 
-struct ScrollExtents {
-    FloatSize contentsSize;
-    FloatSize viewportSize;
-
-    FloatPoint minimumScrollOffset() const { return { }; }
-    FloatPoint maximumScrollOffset() const { return toFloatPoint(contentsSize - viewportSize).expandedTo({ 0, 0 }); }
-};
-
 struct ScrollPositionChangeOptions {
     ScrollType type;
     ScrollClamping clamping = ScrollClamping::Clamped;
-    AnimatedScroll animated = AnimatedScroll::No;
+    ScrollIsAnimated animated = ScrollIsAnimated::No;
     ScrollSnapPointSelectionMethod snapPointSelectionMethod = ScrollSnapPointSelectionMethod::Closest;
 
     static ScrollPositionChangeOptions createProgrammatic()
@@ -287,7 +272,7 @@ struct ScrollPositionChangeOptions {
         return { ScrollType::Programmatic };
     }
 
-    static ScrollPositionChangeOptions createProgrammaticWithOptions(ScrollClamping clamping, AnimatedScroll animated, ScrollSnapPointSelectionMethod snapPointSelectionMethod)
+    static ScrollPositionChangeOptions createProgrammaticWithOptions(ScrollClamping clamping, ScrollIsAnimated animated, ScrollSnapPointSelectionMethod snapPointSelectionMethod)
     {
         return { ScrollType::Programmatic, clamping, animated, snapPointSelectionMethod };
     }
@@ -306,6 +291,14 @@ struct ScrollPositionChangeOptions {
 } // namespace WebCore
 
 namespace WTF {
+
+template<> struct EnumTraits<WebCore::ScrollIsAnimated> {
+    using values = EnumValues<
+        WebCore::ScrollIsAnimated,
+        WebCore::ScrollIsAnimated::No,
+        WebCore::ScrollIsAnimated::Yes
+    >;
+};
 
 template<> struct EnumTraits<WebCore::ScrollbarMode> {
     using values = EnumValues<

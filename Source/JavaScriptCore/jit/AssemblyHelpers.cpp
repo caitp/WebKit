@@ -674,9 +674,47 @@ void AssemblyHelpers::restoreCalleeSavesFromEntryFrameCalleeSavesBuffer(EntryFra
 #endif
 
     loadPtr(&topEntryFrame, scratch);
-    addPtr(TrustedImm32(EntryFrame::calleeSaveRegistersBufferOffset()), scratch);
+    restoreCalleeSavesFromVMEntryFrameCalleeSavesBufferImpl(scratch, skipList);
 
-    LoadRegSpooler spooler(*this, scratch);
+    // Restore the callee save value of the scratch.
+    RegisterAtOffset entry = allCalleeSaves->at(scratchGPREntryIndex);
+    ASSERT(!dontRestoreRegisters.get(entry.reg()));
+    ASSERT(entry.reg().isGPR());
+    ASSERT(scratch == entry.reg().gpr());
+#if CPU(ARM64)
+    RegisterAtOffset entry2 = allCalleeSaves->at(scratchGPREntryIndex + 1);
+    ASSERT_UNUSED(entry2, !dontRestoreRegisters.get(entry2.reg()));
+    ASSERT(entry2.reg().isGPR());
+    ASSERT(unusedNextSlotGPR == entry2.reg().gpr());
+    loadPair64(scratch, TrustedImm32(entry.offset()), scratch, unusedNextSlotGPR);
+#else
+    loadPtr(Address(scratch, entry.offset()), scratch);
+#endif
+
+#else
+    UNUSED_PARAM(topEntryFrame);
+#endif // NUMBER_OF_CALLEE_SAVES_REGISTERS > 0
+}
+
+void AssemblyHelpers::restoreCalleeSavesFromVMEntryFrameCalleeSavesBuffer(GPRReg vmGPR, GPRReg scratchGPR)
+{
+#if NUMBER_OF_CALLEE_SAVES_REGISTERS > 0
+    loadPtr(Address(vmGPR, VM::topEntryFrameOffset()), scratchGPR);
+    restoreCalleeSavesFromVMEntryFrameCalleeSavesBufferImpl(scratchGPR, RegisterSet::stackRegisters());
+#else
+    UNUSED_PARAM(vmGPR);
+#endif // NUMBER_OF_CALLEE_SAVES_REGISTERS > 0
+}
+
+void AssemblyHelpers::restoreCalleeSavesFromVMEntryFrameCalleeSavesBufferImpl(GPRReg entryFrameGPR, const RegisterSet& skipList)
+{
+#if NUMBER_OF_CALLEE_SAVES_REGISTERS > 0
+    addPtr(TrustedImm32(EntryFrame::calleeSaveRegistersBufferOffset()), entryFrameGPR);
+
+    RegisterAtOffsetList* allCalleeSaves = RegisterSet::vmCalleeSaveRegisterOffsets();
+    unsigned registerCount = allCalleeSaves->size();
+
+    LoadRegSpooler spooler(*this, entryFrameGPR);
 
     // Restore all callee saves except for the scratch.
     unsigned i = 0;
@@ -698,23 +736,9 @@ void AssemblyHelpers::restoreCalleeSavesFromEntryFrameCalleeSavesBuffer(EntryFra
     }
     spooler.finalizeFPR();
 
-    // Restore the callee save value of the scratch.
-    RegisterAtOffset entry = allCalleeSaves->at(scratchGPREntryIndex);
-    ASSERT(!dontRestoreRegisters.get(entry.reg()));
-    ASSERT(entry.reg().isGPR());
-    ASSERT(scratch == entry.reg().gpr());
-#if CPU(ARM64)
-    RegisterAtOffset entry2 = allCalleeSaves->at(scratchGPREntryIndex + 1);
-    ASSERT_UNUSED(entry2, !dontRestoreRegisters.get(entry2.reg()));
-    ASSERT(entry2.reg().isGPR());
-    ASSERT(unusedNextSlotGPR == entry2.reg().gpr());
-    loadPair64(scratch, TrustedImm32(entry.offset()), scratch, unusedNextSlotGPR);
 #else
-    loadPtr(Address(scratch, entry.offset()), scratch);
-#endif
-
-#else
-    UNUSED_PARAM(topEntryFrame);
+    UNUSED_PARAM(vmGPR);
+    UNUSED_PARAM(skipList);
 #endif // NUMBER_OF_CALLEE_SAVES_REGISTERS > 0
 }
 
@@ -874,7 +898,7 @@ void AssemblyHelpers::emitConvertValueToBoolean(VM& vm, JSValueRegs value, GPRRe
     done.link(this);
 }
 
-AssemblyHelpers::JumpList AssemblyHelpers::branchIfValue(VM& vm, JSValueRegs value, GPRReg scratch, GPRReg scratchIfShouldCheckMasqueradesAsUndefined, FPRReg valueAsFPR, FPRReg tempFPR, bool shouldCheckMasqueradesAsUndefined, Variant<JSGlobalObject*, GPRReg> globalObject, bool invert)
+AssemblyHelpers::JumpList AssemblyHelpers::branchIfValue(VM& vm, JSValueRegs value, GPRReg scratch, GPRReg scratchIfShouldCheckMasqueradesAsUndefined, FPRReg valueAsFPR, FPRReg tempFPR, bool shouldCheckMasqueradesAsUndefined, std::variant<JSGlobalObject*, GPRReg> globalObject, bool invert)
 {
     // Implements the following control flow structure:
     // if (value is cell) {
@@ -906,10 +930,10 @@ AssemblyHelpers::JumpList AssemblyHelpers::branchIfValue(VM& vm, JSValueRegs val
         JumpList isNotMasqueradesAsUndefined;
         isNotMasqueradesAsUndefined.append(branchTest8(Zero, Address(value.payloadGPR(), JSCell::typeInfoFlagsOffset()), TrustedImm32(MasqueradesAsUndefined)));
         emitLoadStructure(vm, value.payloadGPR(), scratch, scratchIfShouldCheckMasqueradesAsUndefined);
-        if (WTF::holds_alternative<JSGlobalObject*>(globalObject))
-            move(TrustedImmPtr(WTF::get<JSGlobalObject*>(globalObject)), scratchIfShouldCheckMasqueradesAsUndefined);
+        if (std::holds_alternative<JSGlobalObject*>(globalObject))
+            move(TrustedImmPtr(std::get<JSGlobalObject*>(globalObject)), scratchIfShouldCheckMasqueradesAsUndefined);
         else
-            move(WTF::get<GPRReg>(globalObject), scratchIfShouldCheckMasqueradesAsUndefined);
+            move(std::get<GPRReg>(globalObject), scratchIfShouldCheckMasqueradesAsUndefined);
         isNotMasqueradesAsUndefined.append(branchPtr(NotEqual, Address(scratch, Structure::globalObjectOffset()), scratchIfShouldCheckMasqueradesAsUndefined));
 
         // We act like we are "undefined" here.
@@ -1042,7 +1066,7 @@ void AssemblyHelpers::debugCall(VM& vm, V_DebugOperation_EPP function, void* arg
 
     for (unsigned i = 0; i < FPRInfo::numberOfRegisters; ++i) {
         move(TrustedImmPtr(buffer + GPRInfo::numberOfRegisters + i), GPRInfo::regT0);
-        storeDouble(FPRInfo::toRegister(i), GPRInfo::regT0);
+        storeDouble(FPRInfo::toRegister(i), Address(GPRInfo::regT0));
     }
 
 #if CPU(X86_64) || CPU(ARM_THUMB2) || CPU(ARM64) || CPU(MIPS)
@@ -1059,7 +1083,7 @@ void AssemblyHelpers::debugCall(VM& vm, V_DebugOperation_EPP function, void* arg
 
     for (unsigned i = 0; i < FPRInfo::numberOfRegisters; ++i) {
         move(TrustedImmPtr(buffer + GPRInfo::numberOfRegisters + i), GPRInfo::regT0);
-        loadDouble(GPRInfo::regT0, FPRInfo::toRegister(i));
+        loadDouble(Address(GPRInfo::regT0), FPRInfo::toRegister(i));
     }
     for (unsigned i = 0; i < GPRInfo::numberOfRegisters; ++i) {
 #if USE(JSVALUE64)
@@ -1109,7 +1133,7 @@ void AssemblyHelpers::sanitizeStackInline(VM& vm, GPRReg scratch)
     loadPtr(vm.addressOfLastStackTop(), scratch);
     Jump done = branchPtr(BelowOrEqual, stackPointerRegister, scratch);
     Label loop = label();
-    storePtr(TrustedImmPtr(nullptr), scratch);
+    storePtr(TrustedImmPtr(nullptr), Address(scratch));
     addPtr(TrustedImmPtr(sizeof(void*)), scratch);
     branchPtr(Above, stackPointerRegister, scratch).linkTo(loop, this);
     done.link(this);

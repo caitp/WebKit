@@ -45,6 +45,7 @@
 #include "CalculationCategory.h"
 #include "ColorConversion.h"
 #include "ColorLuminance.h"
+#include "Logging.h"
 #include "Pair.h"
 #include "RenderStyleConstants.h"
 #include "RuntimeEnabledFeatures.h"
@@ -52,6 +53,7 @@
 #include "WebKitFontFamilyNames.h"
 #include <wtf/SortedArrayMap.h>
 #include <wtf/text/StringConcatenateNumbers.h>
+#include <wtf/text/TextStream.h>
 
 namespace WebCore {
 
@@ -142,8 +144,13 @@ public:
 
     RefPtr<CSSPrimitiveValue> consumeValueIfCategory(CalculationCategory category)
     {
-        if (!m_calcValue || m_calcValue->category() != category)
+        if (!m_calcValue)
             return nullptr;
+
+        if (m_calcValue->category() != category) {
+            LOG_WITH_STREAM(Calc, stream << "CalcParser::consumeValueIfCategory - failing because calc category " << m_calcValue->category() << " does not match requested category " << category);
+            return nullptr;
+        }
         m_sourceRange = m_range;
         return m_pool.createValue(WTFMove(m_calcValue));
     }
@@ -485,6 +492,18 @@ static std::optional<LengthRaw> consumeLengthRawWithKnownTokenTypeDimension(CSSP
     case CSSUnitType::CSS_VH:
     case CSSUnitType::CSS_VMIN:
     case CSSUnitType::CSS_VMAX:
+    case CSSUnitType::CSS_SVW:
+    case CSSUnitType::CSS_SVH:
+    case CSSUnitType::CSS_SVMIN:
+    case CSSUnitType::CSS_SVMAX:
+    case CSSUnitType::CSS_LVW:
+    case CSSUnitType::CSS_LVH:
+    case CSSUnitType::CSS_LVMIN:
+    case CSSUnitType::CSS_LVMAX:
+    case CSSUnitType::CSS_DVW:
+    case CSSUnitType::CSS_DVH:
+    case CSSUnitType::CSS_DVMIN:
+    case CSSUnitType::CSS_DVMAX:
     case CSSUnitType::CSS_Q:
         break;
     default:
@@ -1417,7 +1436,7 @@ static Color consumeOriginColor(CSSParserTokenRange& args, const CSSParserContex
     // FIXME: We don't have enough context in the parser to resolving a system keyword
     // correctly. We should package up the relative color parameters and resolve the
     // whole thing at the appropriate time when the origin color is a system keyword.
-    if (StyleColor::isSystemColor(keyword))
+    if (StyleColor::isSystemColorKeyword(keyword))
         return { };
 
     return StyleColor::colorFromKeyword(keyword, { });
@@ -2573,7 +2592,7 @@ Color consumeColorWorkerSafe(CSSParserTokenRange& range, const CSSParserContext&
     if (StyleColor::isColorKeyword(keyword)) {
         // FIXME: Need a worker-safe way to compute the system colors.
         //        For now, we detect the system color, but then intentionally fail parsing.
-        if (StyleColor::isSystemColor(keyword))
+        if (StyleColor::isSystemColorKeyword(keyword))
             return { };
         if (!isValueAllowedInMode(keyword, context.mode))
             return { };
@@ -2592,10 +2611,10 @@ Color consumeColorWorkerSafe(CSSParserTokenRange& range, const CSSParserContext&
     return result;
 }
 
-RefPtr<CSSPrimitiveValue> consumeColor(CSSParserTokenRange& range, const CSSParserContext& context, bool acceptQuirkyColors)
+RefPtr<CSSPrimitiveValue> consumeColor(CSSParserTokenRange& range, const CSSParserContext& context, bool acceptQuirkyColors, OptionSet<StyleColor::CSSColorType> allowedColorTypes)
 {
     auto keyword = range.peek().id();
-    if (StyleColor::isColorKeyword(keyword)) {
+    if (StyleColor::isColorKeyword(keyword, allowedColorTypes)) {
         if (!isValueAllowedInMode(keyword, context.mode))
             return nullptr;
         return consumeIdent(range);
@@ -3097,9 +3116,6 @@ static RefPtr<CSSValue> consumeRadialGradient(CSSParserTokenRange& args, const C
         return nullptr;
     // If there's only one size, it must be a length.
     if (!verticalSize && horizontalSize && horizontalSize->isPercentage())
-        return nullptr;
-    if ((horizontalSize && horizontalSize->isCalculatedPercentageWithLength())
-        || (verticalSize && verticalSize->isCalculatedPercentageWithLength()))
         return nullptr;
 
     RefPtr<CSSPrimitiveValue> centerX;
@@ -3728,9 +3744,9 @@ std::optional<CSSValueID> consumeGenericFamilyRaw(CSSParserTokenRange& range)
     return consumeIdentRangeRaw(range, CSSValueSerif, CSSValueWebkitBody);
 }
 
-std::optional<WTF::Vector<FontFamilyRaw>> consumeFontFamilyRaw(CSSParserTokenRange& range)
+std::optional<Vector<FontFamilyRaw>> consumeFontFamilyRaw(CSSParserTokenRange& range)
 {
-    WTF::Vector<FontFamilyRaw> list;
+    Vector<FontFamilyRaw> list;
     do {
         if (auto ident = consumeGenericFamilyRaw(range))
             list.append({ *ident });

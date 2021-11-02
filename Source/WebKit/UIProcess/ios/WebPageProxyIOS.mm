@@ -264,7 +264,7 @@ void WebPageProxy::scrollingNodeScrollDidEndScroll()
     pageClient().scrollingNodeScrollDidEndScroll();
 }
 
-void WebPageProxy::dynamicViewportSizeUpdate(const FloatSize& viewLayoutSize, const WebCore::FloatSize& maximumUnobscuredSize, const FloatRect& targetExposedContentRect, const FloatRect& targetUnobscuredRect, const FloatRect& targetUnobscuredRectInScrollViewCoordinates, const WebCore::FloatBoxExtent& unobscuredSafeAreaInsets, double targetScale, int32_t deviceOrientation, double minimumEffectiveDeviceWidth, DynamicViewportSizeUpdateID dynamicViewportSizeUpdateID)
+void WebPageProxy::dynamicViewportSizeUpdate(const FloatSize& viewLayoutSize, const WebCore::FloatSize& minimumUnobscuredSize, const WebCore::FloatSize& maximumUnobscuredSize, const FloatRect& targetExposedContentRect, const FloatRect& targetUnobscuredRect, const FloatRect& targetUnobscuredRectInScrollViewCoordinates, const WebCore::FloatBoxExtent& unobscuredSafeAreaInsets, double targetScale, int32_t deviceOrientation, double minimumEffectiveDeviceWidth, DynamicViewportSizeUpdateID dynamicViewportSizeUpdateID)
 {
     if (!hasRunningProcess())
         return;
@@ -273,7 +273,7 @@ void WebPageProxy::dynamicViewportSizeUpdate(const FloatSize& viewLayoutSize, co
 
     m_viewportConfigurationViewLayoutSize = viewLayoutSize;
     m_process->send(Messages::WebPage::DynamicViewportSizeUpdate(viewLayoutSize,
-        maximumUnobscuredSize, targetExposedContentRect, targetUnobscuredRect,
+        minimumUnobscuredSize, maximumUnobscuredSize, targetExposedContentRect, targetUnobscuredRect,
         targetUnobscuredRectInScrollViewCoordinates, unobscuredSafeAreaInsets,
         targetScale, deviceOrientation, minimumEffectiveDeviceWidth, dynamicViewportSizeUpdateID), m_webPageID);
 
@@ -298,6 +298,14 @@ void WebPageProxy::setForceAlwaysUserScalable(bool userScalable)
 
     if (hasRunningProcess())
         m_process->send(Messages::WebPage::SetForceAlwaysUserScalable(userScalable), m_webPageID);
+}
+
+void WebPageProxy::setMinimumUnobscuredSize(const WebCore::FloatSize& size)
+{
+    m_minimumUnobscuredSize = size;
+
+    if (hasRunningProcess())
+        m_process->send(Messages::WebPage::SetMinimumUnobscuredSize(size), m_webPageID);
 }
 
 void WebPageProxy::setMaximumUnobscuredSize(const WebCore::FloatSize& size)
@@ -753,11 +761,6 @@ void WebPageProxy::registerUIProcessAccessibilityTokens(const IPC::DataReference
 }
 
 void WebPageProxy::pluginFocusOrWindowFocusChanged(uint64_t, bool)
-{
-    notImplemented();
-}
-
-void WebPageProxy::setPluginComplexTextInputState(uint64_t, uint64_t)
 {
     notImplemented();
 }
@@ -1238,6 +1241,14 @@ UIViewController *WebPageProxy::paymentCoordinatorPresentingViewController(const
     return uiClient().presentingViewController();
 }
 
+#if ENABLE(APPLE_PAY_REMOTE_UI_USES_SCENE)
+void WebPageProxy::getWindowSceneIdentifierForPaymentPresentation(WebPageProxyIdentifier, CompletionHandler<void(const String&)>&& completionHandler)
+{
+    ASSERT_NOT_REACHED();
+    completionHandler(nullString());
+}
+#endif
+
 const String& WebPageProxy::paymentCoordinatorCTDataConnectionServiceType(const WebPaymentCoordinatorProxy&)
 {
     return websiteDataStore().configuration().dataConnectionServiceType();
@@ -1250,7 +1261,7 @@ static bool desktopClassBrowsingSupported()
     static bool supportsDesktopClassBrowsing = false;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        supportsDesktopClassBrowsing = !currentUserInterfaceIdiomIsPhoneOrWatch();
+        supportsDesktopClassBrowsing = !currentUserInterfaceIdiomIsSmallScreen();
     });
     return supportsDesktopClassBrowsing;
 }
@@ -1496,7 +1507,7 @@ void WebPageProxy::willOpenAppLink()
     // We chose 25 seconds because the system only gives us 30 seconds and we don't want to get too close to that limit
     // to avoid assertion invalidation (or even termination).
     m_openingAppLinkActivity = process().throttler().backgroundActivity("Opening AppLink"_s).moveToUniquePtr();
-    WorkQueue::main().dispatchAfter(25_s, [weakThis = makeWeakPtr(*this)] {
+    WorkQueue::main().dispatchAfter(25_s, [weakThis = WeakPtr { *this }] {
         if (weakThis)
             weakThis->m_openingAppLinkActivity = nullptr;
     });

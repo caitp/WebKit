@@ -125,7 +125,7 @@ public:
     JSC::JSValue evaluateModule(const URL&, JSC::JSModuleRecord&, DOMWrapperWorld&, JSC::JSValue awaitedValue, JSC::JSValue resumeMode);
     JSC::JSValue evaluateModule(const URL&, JSC::JSModuleRecord&, JSC::JSValue awaitedValue, JSC::JSValue resumeMode);
 
-    WTF::TextPosition eventHandlerPosition() const;
+    TextPosition eventHandlerPosition() const;
 
     void enableEval();
     void enableWebAssembly();
@@ -165,10 +165,6 @@ public:
 #endif
 
     WEBCORE_EXPORT JSC::JSObject* jsObjectForPluginElement(HTMLPlugInElement*);
-    
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    WEBCORE_EXPORT NPObject* windowScriptNPObject();
-#endif
 
     void initScriptForWindowProxy(JSWindowProxy&);
 
@@ -200,9 +196,6 @@ private:
     // This ensures they are still available when the page is restored.
     RefPtr<JSC::Bindings::RootObject> m_cacheableBindingRootObject;
     RootObjectMap m_rootObjects;
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    NPObject* m_windowScriptNPObject;
-#endif
 #if PLATFORM(COCOA)
     RetainPtr<WebScriptObject> m_windowScriptObject;
 #endif

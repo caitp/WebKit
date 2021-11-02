@@ -32,6 +32,8 @@
 #import <wtf/RetainPtr.h>
 #import <wtf/text/StringHash.h>
 
+OBJC_CLASS NSURLRequest;
+
 namespace TestWebKitAPI {
 
 class Connection;
@@ -41,7 +43,7 @@ class HTTPServer {
     WTF_MAKE_FAST_ALLOCATED;
 public:
     struct RequestData;
-    enum class Protocol : uint8_t { Http, Https, HttpsWithLegacyTLS, Http2 };
+    enum class Protocol : uint8_t { Http, Https, HttpsWithLegacyTLS, Http2, HttpsProxy, HttpsProxyWithAuthentication };
     using CertificateVerifier = Function<void(sec_protocol_metadata_t, sec_trust_t, sec_protocol_verify_complete_t)>;
 
     HTTPServer(std::initializer_list<std::pair<String, HTTPResponse>>, Protocol = Protocol::Http, CertificateVerifier&& = nullptr, RetainPtr<SecIdentityRef>&& = nullptr, std::optional<uint16_t> port = { });
@@ -52,9 +54,14 @@ public:
     size_t totalRequests() const;
     void cancel();
 
+    void addResponse(String&& path, HTTPResponse&&);
+
     static void respondWithOK(Connection);
     static void respondWithChallengeThenOK(Connection);
     static String parsePath(const Vector<char>& request);
+
+    static Vector<uint8_t> testPrivateKey();
+    static Vector<uint8_t> testCertificate();
 
 private:
     static RetainPtr<nw_parameters_t> listenerParameters(Protocol, CertificateVerifier&&, RetainPtr<SecIdentityRef>&&, std::optional<uint16_t> port);

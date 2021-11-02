@@ -27,9 +27,19 @@
     Persisted(struct WebCore::ClientOrigin origin) -> (bool persisted) Async
     Persist(struct WebCore::ClientOrigin origin) -> (bool persisted) Async
     FileSystemGetDirectory(struct WebCore::ClientOrigin origin) -> (Expected<WebCore::FileSystemHandleIdentifier, WebKit::FileSystemStorageError> result) Async WantsConnection
+    CloseHandle(WebCore::FileSystemHandleIdentifier identifier)
     IsSameEntry(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemHandleIdentifier targetIdentifier) -> (bool result) Async
     GetFileHandle(WebCore::FileSystemHandleIdentifier identifier, String name, bool createIfNecessary) -> (Expected<WebCore::FileSystemHandleIdentifier, WebKit::FileSystemStorageError> result) Async WantsConnection
     GetDirectoryHandle(WebCore::FileSystemHandleIdentifier identifier, String name, bool createIfNecessary) -> (Expected<WebCore::FileSystemHandleIdentifier, WebKit::FileSystemStorageError> result) Async WantsConnection
     RemoveEntry(WebCore::FileSystemHandleIdentifier identifier, String name, bool deleteRecursively) -> (std::optional<WebKit::FileSystemStorageError> result) Async
     Resolve(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemHandleIdentifier targetIdentifier) -> (Expected<Vector<String>, WebKit::FileSystemStorageError> result) Async
+    Move(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemHandleIdentifier destinationIdentifier, String newName) -> (std::optional<WebKit::FileSystemStorageError> result) Async
+
+    CreateSyncAccessHandle(WebCore::FileSystemHandleIdentifier identifier) -> (Expected<std::pair<WebCore::FileSystemSyncAccessHandleIdentifier, IPC::SharedFileHandle>, WebKit::FileSystemStorageError> result) Async
+    GetSizeForAccessHandle(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemSyncAccessHandleIdentifier accessHandleIdentifier) -> (Expected<uint64_t, WebKit::FileSystemStorageError> result) Async
+    TruncateForAccessHandle(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemSyncAccessHandleIdentifier accessHandleIdentifier, uint64_t size) -> (std::optional<WebKit::FileSystemStorageError> result) Async
+    FlushForAccessHandle(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemSyncAccessHandleIdentifier accessHandleIdentifier) -> (std::optional<WebKit::FileSystemStorageError> result) Async
+    CloseAccessHandle(WebCore::FileSystemHandleIdentifier identifier, WebCore::FileSystemSyncAccessHandleIdentifier accessHandleIdentifier) -> (std::optional<WebKit::FileSystemStorageError> result) Async
+    GetHandleNames(WebCore::FileSystemHandleIdentifier identifier) -> (Expected<Vector<String>, WebKit::FileSystemStorageError> result) Async
+    GetHandle(WebCore::FileSystemHandleIdentifier identifier, String name) -> (Expected<std::pair<WebCore::FileSystemHandleIdentifier, bool>, WebKit::FileSystemStorageError> result) Async WantsConnection
 }

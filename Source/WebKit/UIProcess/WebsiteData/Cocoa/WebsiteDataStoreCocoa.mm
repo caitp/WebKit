@@ -49,6 +49,10 @@
 #import <wtf/cocoa/Entitlements.h>
 #import <wtf/text/cf/StringConcatenateCF.h>
 
+#if ENABLE(GPU_PROCESS)
+#import "GPUProcessProxy.h"
+#endif
+
 #if PLATFORM(IOS_FAMILY)
 #import <UIKit/UIApplication.h>
 #import <pal/ios/ManagedConfigurationSoftLink.h>
@@ -67,7 +71,7 @@ static HashSet<WebsiteDataStore*>& dataStores()
 #if ENABLE(APP_BOUND_DOMAINS)
 static WorkQueue& appBoundDomainQueue()
 {
-    static auto& queue = WorkQueue::create("com.apple.WebKit.AppBoundDomains", WorkQueue::Type::Serial).leakRef();
+    static auto& queue = WorkQueue::create("com.apple.WebKit.AppBoundDomains").leakRef();
     return queue;
 }
 static std::atomic<bool> hasInitializedAppBoundDomains = false;
@@ -87,6 +91,17 @@ WebCore::ThirdPartyCookieBlockingMode WebsiteDataStore::thirdPartyCookieBlocking
     return *m_thirdPartyCookieBlockingMode;
 }
 #endif
+
+static bool experimentalFeatureEnabled(const String& key)
+{
+#if PLATFORM(MAC)
+    constexpr NSString *format = @"Experimental%@";
+#else
+    constexpr NSString *format = @"WebKitExperimental%@";
+#endif
+    auto defaultsKey = adoptNS([[NSString alloc] initWithFormat:format, static_cast<NSString *>(key)]);
+    return [[NSUserDefaults standardUserDefaults] boolForKey:defaultsKey.get()];
+}
 
 void WebsiteDataStore::platformSetNetworkParameters(WebsiteDataStoreParameters& parameters)
 {
@@ -188,23 +203,13 @@ void WebsiteDataStore::platformSetNetworkParameters(WebsiteDataStoreParameters& 
 
     parameters.uiProcessCookieStorageIdentifier = m_uiProcessCookieStorageIdentifier;
 
+    parameters.networkSessionParameters.enablePrivateClickMeasurementDebugMode = experimentalFeatureEnabled(WebPreferencesKey::privateClickMeasurementDebugModeEnabledKey());
+
     if (!cookieFile.isEmpty()) {
         if (auto handle = SandboxExtension::createHandleForReadWriteDirectory(FileSystem::parentPath(cookieFile)))
             parameters.cookieStoragePathExtensionHandle = WTFMove(*handle);
     }
 }
-
-#if HAVE(CFNETWORK_ALTERNATIVE_SERVICE) || HAVE(NETWORK_LOADER)
-static bool experimentalFeatureEnabled(const String& key)
-{
-#if PLATFORM(MAC)
-    NSString *format = @"Experimental%@";
-#else
-    NSString *format = @"WebKitExperimental%@";
-#endif
-    return [[NSUserDefaults standardUserDefaults] boolForKey:[NSString stringWithFormat:format, static_cast<NSString *>(key)]];
-}
-#endif
 
 bool WebsiteDataStore::http3Enabled()
 {
@@ -594,23 +599,28 @@ bool WebsiteDataStore::networkProcessHasEntitlementForTesting(const String& enti
     return WTF::hasEntitlement(networkProcess().connection()->xpcConnection(), entitlement.utf8().data());
 }
 
-void WebsiteDataStore::sendNetworkProcessXPCEndpointToWebProcess(WebProcessProxy& process)
+bool WebsiteDataStore::sendNetworkProcessXPCEndpointToProcess(AuxiliaryProcessProxy& process) const
 {
     if (process.state() != AuxiliaryProcessProxy::State::Running)
-        return;
+        return false;
     auto* connection = process.connection();
     if (!connection)
-        return;
+        return false;
     auto message = networkProcess().xpcEndpointMessage();
     if (!message)
-        return;
+        return false;
     xpc_connection_send_message(connection->xpcConnection(), message);
+    return true;
 }
 
-void WebsiteDataStore::sendNetworkProcessXPCEndpointToAllWebProcesses()
+void WebsiteDataStore::sendNetworkProcessXPCEndpointToAllProcesses()
 {
     for (auto& process : m_processes)
-        sendNetworkProcessXPCEndpointToWebProcess(process);
+        sendNetworkProcessXPCEndpointToProcess(process);
+#if ENABLE(GPU_PROCESS)
+    if (GPUProcessProxy::singletonIfCreated())
+        sendNetworkProcessXPCEndpointToProcess(*GPUProcessProxy::singletonIfCreated());
+#endif
 }
 
 }

@@ -55,6 +55,16 @@ my $supplementalMakefileDeps;
 my $idlAttributesFile;
 my $verbose = 0;
 
+my @supportedGlobalContexts = (
+    "Window",
+    "Worker",
+    "DedicatedWorker",
+    "ServiceWorker",
+    "Worklet",
+    "PaintWorklet",
+    "AudioWorklet"
+);
+
 # Toggle this to validate that the fast regular expression based "parsing" used
 # in this file produces the same results as the slower results produced by the
 # complete IDLParser.
@@ -239,14 +249,18 @@ foreach my $idlFileName (sort keys %idlFileNameHash) {
     # - is a callback interface that has constants declared on it, or
     # - is a non-callback interface that is not declared with the [LegacyNoInterfaceObject] extended attribute, a corresponding
     #   property must exist on the ECMAScript environment's global object.
-    # See https://heycam.github.io/webidl/#es-interfaces
+    # See https://webidl.spec.whatwg.org/#es-interfaces
     my $extendedAttributes = getInterfaceExtendedAttributesFromIDL($idlFile);
     if (!$extendedAttributes->{"LegacyNoInterfaceObject"} && (!$isCallbackInterface || containsInterfaceWithConstantsFromIDL($idlFile))) {
         my $exposedAttribute = $extendedAttributes->{"Exposed"};
         if (!$exposedAttribute) {
             die "ERROR: No [Exposed] extended attribute specified for interface in $idlFileName";
         }
+        if ($exposedAttribute eq "*") {
+            $exposedAttribute = "(" . join(',', @supportedGlobalContexts) . ")";
+        }
         $exposedAttribute = substr($exposedAttribute, 1, -1) if substr($exposedAttribute, 0, 1) eq "(";
+
         my @globalContexts = split(",", $exposedAttribute);
         foreach my $globalContext (@globalContexts) {
             my ($attributeCode, $windowAliases) = GenerateConstructorAttributes($interfaceName, $extendedAttributes, $globalContext);
@@ -594,7 +608,7 @@ sub getPartialNamesFromIDL
 }
 
 # identifier-A includes identifier-B;
-# https://heycam.github.io/webidl/#includes-statement
+# https://webidl.spec.whatwg.org/#includes-statement
 sub getIncludedInterfacesFromIDL
 {
     my $idlFile = shift;

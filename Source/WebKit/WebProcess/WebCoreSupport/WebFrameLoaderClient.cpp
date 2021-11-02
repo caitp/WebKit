@@ -968,6 +968,7 @@ void WebFrameLoaderClient::dispatchDecidePolicyForNavigationAction(const Navigat
         navigationAction.initiatedByMainFrame() == InitiatedByMainFrame::Yes,
         ResourceRequest { requester.url },
         requester.securityOrigin->data(),
+        { },
         WTFMove(originatingFrameID),
         WTFMove(parentFrameID),
     };
@@ -1012,6 +1013,7 @@ void WebFrameLoaderClient::dispatchDecidePolicyForNavigationAction(const Navigat
         documentLoader = static_cast<WebDocumentLoader*>(coreFrame->loader().documentLoader());
 
     navigationActionData.clientRedirectSourceForHistory = documentLoader->clientRedirectSourceForHistory();
+    navigationActionData.effectiveSandboxFlags = coreFrame->loader().effectiveSandboxFlags();
 
     // Notify the UIProcess.
     Ref protector { *coreFrame };
@@ -1557,7 +1559,7 @@ void WebFrameLoaderClient::transitionToCommittedForNewPage()
     }
 
     if (auto viewportSizeForViewportUnits = webPage->viewportSizeForCSSViewportUnits())
-        view->setViewportSizeForCSSViewportUnits(*viewportSizeForViewportUnits);
+        view->setSizeForCSSLargeViewportUnits(*viewportSizeForViewportUnits);
     view->setProhibitsScrolling(shouldDisableScrolling);
     view->setVisualUpdatesAllowedByClient(!webPage->shouldExtendIncrementalRenderingSuppression());
 #if PLATFORM(COCOA)
@@ -1630,7 +1632,7 @@ RefPtr<Widget> WebFrameLoaderClient::createPlugin(const IntSize&, HTMLPlugInElem
     parameters.layerHostingMode = m_frame->page()->layerHostingMode();
 #endif
 
-#if ENABLE(NETSCAPE_PLUGIN_API)
+#if ENABLE(PDFKIT_PLUGIN)
     auto plugin = m_frame->page()->createPlugin(m_frame.ptr(), &pluginElement, parameters, parameters.mimeType);
     if (!plugin)
         return nullptr;
@@ -1756,6 +1758,15 @@ void WebFrameLoaderClient::dispatchGlobalObjectAvailable(DOMWrapperWorld& world)
         return;
     
     webPage->injectedBundleLoaderClient().globalObjectIsAvailableForFrame(*webPage, m_frame, world);
+}
+
+void WebFrameLoaderClient::dispatchServiceWorkerGlobalObjectAvailable(DOMWrapperWorld& world)
+{
+    WebPage* webPage = m_frame->page();
+    if (!webPage)
+        return;
+
+    webPage->injectedBundleLoaderClient().serviceWorkerGlobalObjectIsAvailableForFrame(*webPage, m_frame, world);
 }
 
 void WebFrameLoaderClient::willInjectUserScript(DOMWrapperWorld& world)
@@ -1929,6 +1940,17 @@ void WebFrameLoaderClient::didCreateWindow(DOMWindow& window)
 
     webPage->send(Messages::WebPageProxy::DidCreateWindow(m_frame->frameID(), window.identifier()));
 }
+
+#if ENABLE(SERVICE_WORKER)
+void WebFrameLoaderClient::didFinishServiceWorkerPageRegistration(bool success)
+{
+    auto* webPage = m_frame->page();
+    if (!webPage)
+        return;
+
+    webPage->send(Messages::WebPageProxy::DidFinishServiceWorkerPageRegistration(success));
+}
+#endif
 
 #if ENABLE(APP_BOUND_DOMAINS)
 bool WebFrameLoaderClient::shouldEnableInAppBrowserPrivacyProtections() const

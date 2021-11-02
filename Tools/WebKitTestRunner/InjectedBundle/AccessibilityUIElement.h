@@ -357,6 +357,7 @@ public:
     JSRetainPtr<JSStringRef> supportedActions() const;
     JSRetainPtr<JSStringRef> mathPostscriptsDescription() const;
     JSRetainPtr<JSStringRef> mathPrescriptsDescription() const;
+    JSValueRef mathRootRadicand() const;
 
     JSRetainPtr<JSStringRef> pathDescription() const;
     
@@ -395,6 +396,11 @@ public:
 private:
     AccessibilityUIElement(PlatformUIElement);
     AccessibilityUIElement(const AccessibilityUIElement&);
+
+#if PLATFORM(MAC)
+    id attributeValue(NSString *) const;
+    NSString *descriptionOfValue(id valueObject) const;
+#endif
 
 #if !PLATFORM(COCOA) && !USE(ATSPI)
     PlatformUIElement m_element;

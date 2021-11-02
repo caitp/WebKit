@@ -49,6 +49,7 @@ class FetchLoaderClient;
 class PageConfiguration;
 class ServiceWorkerInspectorProxy;
 struct ServiceWorkerContextData;
+enum class WorkerThreadMode : bool;
 
 class ServiceWorkerThreadProxy final : public ThreadSafeRefCounted<ServiceWorkerThreadProxy>, public WorkerLoaderProxy, public WorkerDebuggerProxy {
 public:
@@ -79,13 +80,15 @@ public:
     void postMessageToServiceWorker(MessageWithMessagePorts&&, ServiceWorkerOrClientData&&);
     void fireInstallEvent();
     void fireActivateEvent();
+    void firePushEvent(std::optional<Vector<uint8_t>>&&, CompletionHandler<void(bool)>&&);
+
     void didSaveScriptsToDisk(ScriptBuffer&&, HashMap<URL, ScriptBuffer>&& importedScripts);
 
     WEBCORE_EXPORT void setLastNavigationWasAppInitiated(bool);
     WEBCORE_EXPORT bool lastNavigationWasAppInitiated();
 
 private:
-    WEBCORE_EXPORT ServiceWorkerThreadProxy(PageConfiguration&&, ServiceWorkerContextData&&, ServiceWorkerData&&, String&& userAgent, CacheStorageProvider&, StorageBlockingPolicy);
+    WEBCORE_EXPORT ServiceWorkerThreadProxy(PageConfiguration&&, ServiceWorkerContextData&&, ServiceWorkerData&&, String&& userAgent, WorkerThreadMode, CacheStorageProvider&, StorageBlockingPolicy);
 
     WEBCORE_EXPORT static void networkStateChanged(bool isOnLine);
 
@@ -111,6 +114,8 @@ private:
 
     ServiceWorkerInspectorProxy m_inspectorProxy;
     HashMap<std::pair<SWServerConnectionIdentifier, FetchIdentifier>, Ref<ServiceWorkerFetch::Client>> m_ongoingFetchTasks;
+    uint64_t m_pushTasksCounter { 0 };
+    HashMap<uint64_t, CompletionHandler<void(bool)>> m_ongoingPushTasks;
 };
 
 } // namespace WebKit

@@ -135,7 +135,7 @@ MediaPlayerPrivateMediaStreamAVFObjC::MediaPlayerPrivateMediaStreamAVFObjC(Media
 {
     INFO_LOG(LOGIDENTIFIER);
     // MediaPlayerPrivateMediaStreamAVFObjC::processNewVideoSample expects a weak pointer to be created in the constructor.
-    m_boundsChangeListener = adoptNS([[WebRootSampleBufferBoundsChangeListener alloc] initWithCallback:[this, weakThis = makeWeakPtr(this)] {
+    m_boundsChangeListener = adoptNS([[WebRootSampleBufferBoundsChangeListener alloc] initWithCallback:[this, weakThis = WeakPtr { *this }] {
         if (!weakThis)
             return;
         rootLayerBoundsDidChange();
@@ -283,7 +283,7 @@ void MediaPlayerPrivateMediaStreamAVFObjC::processNewVideoSample(MediaSample& sa
             Locker locker { m_currentVideoSampleLock };
             m_currentVideoSample = &sample;
         }
-        callOnMainThread([weakThis = makeWeakPtr(this), hasChangedOrientation]() mutable {
+        callOnMainThread([weakThis = WeakPtr { *this }, hasChangedOrientation]() mutable {
             if (!weakThis)
                 return;
 
@@ -315,6 +315,8 @@ void MediaPlayerPrivateMediaStreamAVFObjC::processNewVideoSample(MediaSample& sa
         if (m_readyState < MediaPlayer::ReadyState::HaveEnoughData)
             updateReadyState();
     }
+
+    ++m_sampleCount;
 
     if (m_displayMode != LivePreview && !m_waitingForFirstImage)
         return;
@@ -380,7 +382,7 @@ void MediaPlayerPrivateMediaStreamAVFObjC::ensureLayers()
         m_sampleBufferDisplayLayer->setRenderPolicy(SampleBufferDisplayLayer::RenderPolicy::Immediately);
 
     auto size = snappedIntRect(m_player->playerContentBoxRect()).size();
-    m_sampleBufferDisplayLayer->initialize(hideRootLayer(), size, [weakThis = makeWeakPtr(this), size](auto didSucceed) {
+    m_sampleBufferDisplayLayer->initialize(hideRootLayer(), size, [weakThis = WeakPtr { *this }, size](auto didSucceed) {
         if (weakThis) {
 #if !RELEASE_LOG_DISABLED
             if (weakThis->m_sampleBufferDisplayLayer)
@@ -1007,6 +1009,12 @@ void MediaPlayerPrivateMediaStreamAVFObjC::paintCurrentFrameInContext(GraphicsCo
     context.drawNativeImage(*image, imageRect.size(), transformedDestRect, imageRect);
 }
 
+DestinationColorSpace MediaPlayerPrivateMediaStreamAVFObjC::colorSpace()
+{
+    updateCurrentFrameImage();
+    return m_imagePainter.cgImage ? m_imagePainter.cgImage->colorSpace() : DestinationColorSpace::SRGB();
+}
+
 void MediaPlayerPrivateMediaStreamAVFObjC::updateLayersAsNeeded()
 {
     if (m_player->renderingCanBeAccelerated())
@@ -1061,7 +1069,7 @@ void MediaPlayerPrivateMediaStreamAVFObjC::audioOutputDeviceChanged()
 void MediaPlayerPrivateMediaStreamAVFObjC::scheduleDeferredTask(Function<void ()>&& function)
 {
     ASSERT(function);
-    callOnMainThread([weakThis = makeWeakPtr(*this), function = WTFMove(function)] {
+    callOnMainThread([weakThis = WeakPtr { *this }, function = WTFMove(function)] {
         if (!weakThis)
             return;
 
@@ -1086,6 +1094,22 @@ void MediaPlayerPrivateMediaStreamAVFObjC::rootLayerBoundsDidChange()
 WTFLogChannel& MediaPlayerPrivateMediaStreamAVFObjC::logChannel() const
 {
     return LogMedia;
+}
+
+std::optional<VideoFrameMetadata> MediaPlayerPrivateMediaStreamAVFObjC::videoFrameMetadata()
+{
+    if (m_sampleCount == m_lastVideoFrameMetadataSampleCount)
+        return { };
+    m_lastVideoFrameMetadataSampleCount = m_sampleCount;
+
+    VideoFrameMetadata metadata;
+    metadata.width = m_intrinsicSize.width();
+    metadata.height = m_intrinsicSize.height();
+    metadata.presentedFrames = m_sampleCount;
+
+    // FIXME: It would be good to expose more video frame metadata.
+
+    return metadata;
 }
 
 }

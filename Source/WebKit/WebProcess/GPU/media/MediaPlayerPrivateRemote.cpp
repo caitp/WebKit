@@ -40,15 +40,16 @@
 #include "VideoLayerRemote.h"
 #include "WebCoreArgumentCoders.h"
 #include "WebProcess.h"
-#include <JavaScriptCore/GenericTypedArrayViewInlines.h>
-#include <JavaScriptCore/TypedArrayType.h>
+#include <JavaScriptCore/TypedArrayInlines.h>
 #include <WebCore/GraphicsContext.h>
 #include <WebCore/MediaPlayer.h>
 #include <WebCore/NotImplemented.h>
 #include <WebCore/PlatformLayer.h>
+#include <WebCore/PlatformScreen.h>
 #include <WebCore/PlatformTimeRanges.h>
 #include <WebCore/ResourceError.h>
 #include <WebCore/RuntimeEnabledFeatures.h>
+#include <WebCore/SecurityOrigin.h>
 #include <WebCore/TextTrackRepresentation.h>
 #include <WebCore/VideoLayerManager.h>
 #include <wtf/HashMap.h>
@@ -109,7 +110,7 @@ MediaPlayerPrivateRemote::MediaPlayerPrivateRemote(MediaPlayer* player, MediaPla
     , m_logIdentifier(player->mediaPlayerLogIdentifier())
     ,
 #endif
-      m_player(makeWeakPtr(*player))
+      m_player(*player)
     , m_mediaResourceLoader(*player->createResourceLoader())
 #if PLATFORM(COCOA)
     , m_videoLayerManager(makeUniqueRef<VideoLayerManagerObjC>(logger(), logIdentifier()))
@@ -147,7 +148,7 @@ void MediaPlayerPrivateRemote::prepareForPlayback(bool privateMode, MediaPlayer:
     auto scale = player->playerContentsScale();
     auto preferredDynamicRangeMode = m_player->preferredDynamicRangeMode();
 
-    connection().sendWithAsyncReply(Messages::RemoteMediaPlayerProxy::PrepareForPlayback(privateMode, preload, preservesPitch, prepare, scale, preferredDynamicRangeMode), [weakThis = makeWeakPtr(*this), this](auto inlineLayerHostingContextId) mutable {
+    connection().sendWithAsyncReply(Messages::RemoteMediaPlayerProxy::PrepareForPlayback(privateMode, preload, preservesPitch, prepare, scale, preferredDynamicRangeMode), [weakThis = WeakPtr { *this }, this](auto inlineLayerHostingContextId) mutable {
         if (!weakThis)
             return;
 
@@ -200,7 +201,7 @@ void MediaPlayerPrivateRemote::load(const URL& url, const ContentType& contentTy
         sandboxExtensionHandle = WTFMove(handle);
     }
 
-    connection().sendWithAsyncReply(Messages::RemoteMediaPlayerProxy::Load(url, sandboxExtensionHandle, contentType, keySystem), [weakThis = makeWeakPtr(*this), this](auto&& configuration) {
+    connection().sendWithAsyncReply(Messages::RemoteMediaPlayerProxy::Load(url, sandboxExtensionHandle, contentType, keySystem), [weakThis = WeakPtr { *this }, this](auto&& configuration) {
         if (!weakThis)
             return;
 
@@ -208,7 +209,7 @@ void MediaPlayerPrivateRemote::load(const URL& url, const ContentType& contentTy
         if (!player)
             return;
 
-        m_configuration = WTFMove(configuration);
+        updateConfiguration(WTFMove(configuration));
         player->mediaEngineUpdated();
     }, m_id);
 }
@@ -353,9 +354,7 @@ void MediaPlayerPrivateRemote::readyStateChanged(RemoteMediaPlayerState&& state)
     updateCachedState(WTFMove(state));
     if (RefPtr player = m_player.get()) {
         player->readyStateChanged();
-        bool renderingCanBeAccelerated = player->renderingCanBeAccelerated();
-        if (m_renderingCanBeAccelerated != renderingCanBeAccelerated)
-            acceleratedRenderingStateChanged();
+        checkAcceleratedRenderingState();
     }
 }
 
@@ -473,10 +472,26 @@ bool MediaPlayerPrivateRemote::supportsAcceleratedRendering() const
 
 void MediaPlayerPrivateRemote::acceleratedRenderingStateChanged()
 {
-    if (RefPtr player = m_player.get()) {
-        m_renderingCanBeAccelerated = player->renderingCanBeAccelerated();
+    if (m_player) {
+        m_renderingCanBeAccelerated = m_player->renderingCanBeAccelerated();
         connection().send(Messages::RemoteMediaPlayerProxy::AcceleratedRenderingStateChanged(m_renderingCanBeAccelerated), m_id);
     }
+}
+
+void MediaPlayerPrivateRemote::checkAcceleratedRenderingState()
+{
+    if (m_player) {
+        bool renderingCanBeAccelerated = m_player->renderingCanBeAccelerated();
+        if (m_renderingCanBeAccelerated != renderingCanBeAccelerated)
+            acceleratedRenderingStateChanged();
+    }
+}
+
+void MediaPlayerPrivateRemote::updateConfiguration(RemoteMediaPlayerConfiguration&& configuration)
+{
+    m_configuration = WTFMove(configuration);
+    // player->renderingCanBeAccelerated() result is dependent on m_configuration.supportsAcceleratedRendering value.
+    checkAcceleratedRenderingState();
 }
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
@@ -759,7 +774,7 @@ void MediaPlayerPrivateRemote::load(const URL& url, const ContentType& contentTy
 {
     if (m_remoteEngineIdentifier == MediaPlayerEnums::MediaEngineIdentifier::AVFoundationMSE) {
         auto identifier = RemoteMediaSourceIdentifier::generate();
-        connection().sendWithAsyncReply(Messages::RemoteMediaPlayerProxy::LoadMediaSource(url, contentType, RuntimeEnabledFeatures::sharedFeatures().webMParserEnabled(), identifier), [weakThis = makeWeakPtr(*this), this](auto&& configuration) {
+        connection().sendWithAsyncReply(Messages::RemoteMediaPlayerProxy::LoadMediaSource(url, contentType, RuntimeEnabledFeatures::sharedFeatures().webMParserEnabled(), identifier), [weakThis = WeakPtr { *this }, this](auto&& configuration) {
             if (!weakThis)
                 return;
 
@@ -767,7 +782,7 @@ void MediaPlayerPrivateRemote::load(const URL& url, const ContentType& contentTy
             if (!player)
                 return;
 
-            m_configuration = WTFMove(configuration);
+            updateConfiguration(WTFMove(configuration));
             player->mediaEngineUpdated();
         }, m_id);
         m_mediaSourcePrivate = MediaSourcePrivateRemote::create(m_manager.gpuProcessConnection(), identifier, m_manager.typeCache(m_remoteEngineIdentifier), *this, client);
@@ -775,7 +790,7 @@ void MediaPlayerPrivateRemote::load(const URL& url, const ContentType& contentTy
         return;
     }
 
-    callOnMainRunLoop([weakThis = makeWeakPtr(*this), this] {
+    callOnMainRunLoop([weakThis = WeakPtr { *this }, this] {
         if (!weakThis)
             return;
 
@@ -792,7 +807,7 @@ void MediaPlayerPrivateRemote::load(const URL& url, const ContentType& contentTy
 #if ENABLE(MEDIA_STREAM)
 void MediaPlayerPrivateRemote::load(MediaStreamPrivate&)
 {
-    callOnMainRunLoop([weakThis = makeWeakPtr(*this), this] {
+    callOnMainRunLoop([weakThis = WeakPtr { *this }, this] {
         if (!weakThis)
             return;
 
@@ -822,6 +837,8 @@ void MediaPlayerPrivateRemote::setVideoFullscreenLayer(PlatformLayer* videoFulls
 #if PLATFORM(COCOA)
     m_videoLayerManager->setVideoFullscreenLayer(videoFullscreenLayer, WTFMove(completionHandler), nullptr);
 #endif
+    // A Fullscreen layer has been set, this could update the value returned by player->renderingCanBeAccelerated().
+    checkAcceleratedRenderingState();
 }
 
 void MediaPlayerPrivateRemote::updateVideoFullscreenInlineImage()
@@ -850,7 +867,11 @@ void MediaPlayerPrivateRemote::setVideoFullscreenMode(MediaPlayer::VideoFullscre
 
 void MediaPlayerPrivateRemote::videoFullscreenStandbyChanged()
 {
-    connection().send(Messages::RemoteMediaPlayerProxy::VideoFullscreenStandbyChanged(), m_id);
+    RefPtr player = m_player.get();
+    if (!player)
+        return;
+
+    connection().send(Messages::RemoteMediaPlayerProxy::VideoFullscreenStandbyChanged(player->isVideoFullscreenStandby()), m_id);
 }
 #endif
 
@@ -990,6 +1011,12 @@ RefPtr<NativeImage> MediaPlayerPrivateRemote::nativeImageForCurrentTime()
 {
     notImplemented();
     return nullptr;
+}
+
+DestinationColorSpace MediaPlayerPrivateRemote::colorSpace()
+{
+    notImplemented();
+    return DestinationColorSpace::SRGB();
 }
 #endif
 
@@ -1313,14 +1340,14 @@ void MediaPlayerPrivateRemote::applicationDidBecomeActive()
     connection().send(Messages::RemoteMediaPlayerProxy::ApplicationDidBecomeActive(), m_id);
 }
 
-void MediaPlayerPrivateRemote::setPreferredDynamicRangeMode(DynamicRangeMode mode)
+void MediaPlayerPrivateRemote::setPreferredDynamicRangeMode(WebCore::DynamicRangeMode mode)
 {
     connection().send(Messages::RemoteMediaPlayerProxy::SetPreferredDynamicRangeMode(mode), m_id);
 }
 
 bool MediaPlayerPrivateRemote::performTaskAtMediaTime(WTF::Function<void()>&& completionHandler, const MediaTime& mediaTime)
 {
-    auto asyncReplyHandler = [weakThis = makeWeakPtr(*this), this, completionHandler = WTFMove(completionHandler)](std::optional<MediaTime> currentTime, std::optional<MonotonicTime> queryTime) mutable {
+    auto asyncReplyHandler = [weakThis = WeakPtr { *this }, this, completionHandler = WTFMove(completionHandler)](std::optional<MediaTime> currentTime, std::optional<MonotonicTime> queryTime) mutable {
         if (!weakThis || !currentTime || !queryTime)
             return;
 

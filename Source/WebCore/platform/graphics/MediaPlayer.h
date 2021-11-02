@@ -36,15 +36,16 @@
 #include "PlatformLayer.h"
 #include "SecurityOriginData.h"
 #include "Timer.h"
+#include "VideoFrameMetadata.h"
 #include "VideoPlaybackQualityMetrics.h"
-#include <wtf/URL.h>
-#include <JavaScriptCore/Uint8Array.h>
+#include <JavaScriptCore/Forward.h>
 #include <wtf/CompletionHandler.h>
 #include <wtf/Function.h>
 #include <wtf/HashSet.h>
 #include <wtf/Logger.h>
 #include <wtf/MediaTime.h>
 #include <wtf/ThreadSafeRefCounted.h>
+#include <wtf/URL.h>
 #include <wtf/WallTime.h>
 #include <wtf/WeakPtr.h>
 #include <wtf/text/StringHash.h>
@@ -65,6 +66,7 @@ class AudioSourceProvider;
 class AudioTrackPrivate;
 class CDMInstance;
 class CachedResourceLoader;
+class DestinationColorSpace;
 class GraphicsContextGL;
 class GraphicsContext;
 class InbandTextTrackPrivate;
@@ -323,7 +325,7 @@ public:
 
 #if ENABLE(VIDEO_PRESENTATION_MODE)
     RetainPtr<PlatformLayer> createVideoFullscreenLayer();
-    void setVideoFullscreenLayer(PlatformLayer*, WTF::Function<void()>&& completionHandler = [] { });
+    void setVideoFullscreenLayer(PlatformLayer*, Function<void()>&& completionHandler = [] { });
     void setVideoFullscreenFrame(FloatRect);
     void updateVideoFullscreenInlineImage();
     using MediaPlayerEnums::VideoGravity;
@@ -468,6 +470,7 @@ public:
 #endif
 
     RefPtr<NativeImage> nativeImageForCurrentTime();
+    DestinationColorSpace colorSpace();
 
     using MediaPlayerEnums::NetworkState;
     NetworkState networkState();
@@ -677,6 +680,8 @@ public:
     MediaPlayerIdentifier identifier() const;
     bool hasMediaEngine() const;
 
+    std::optional<VideoFrameMetadata> videoFrameMetadata();
+
 private:
     MediaPlayer(MediaPlayerClient&);
     MediaPlayer(MediaPlayerClient&, MediaPlayerEnums::MediaEngineIdentifier);
@@ -749,7 +754,7 @@ public:
 
 class RemoteMediaPlayerSupport {
 public:
-    using RegisterRemotePlayerCallback = WTF::Function<void(MediaEngineRegistrar, MediaPlayerEnums::MediaEngineIdentifier)>;
+    using RegisterRemotePlayerCallback = Function<void(MediaEngineRegistrar, MediaPlayerEnums::MediaEngineIdentifier)>;
     WEBCORE_EXPORT static void setRegisterRemotePlayerCallback(RegisterRemotePlayerCallback&&);
 };
 

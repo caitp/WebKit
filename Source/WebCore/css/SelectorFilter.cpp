@@ -30,6 +30,7 @@
 #include "SelectorFilter.h"
 
 #include "CSSSelector.h"
+#include "HTMLNames.h"
 #include "ShadowRoot.h"
 #include "StyledElement.h"
 
@@ -193,6 +194,8 @@ static CollectedSelectorHashes collectSelectorHashes(const CSSSelector& rightmos
         case CSSSelector::DirectAdjacent:
         case CSSSelector::IndirectAdjacent:
         case CSSSelector::ShadowDescendant:
+        case CSSSelector::ShadowPartDescendant:
+        case CSSSelector::ShadowSlotted:
             skipOverSubselectors = true;
             break;
         case CSSSelector::DescendantSpace:

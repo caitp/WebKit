@@ -338,6 +338,7 @@ public:
     void setIgnoresViewportScaleLimits(bool);
     void setShouldDownloadUndisplayableMIMETypes(bool);
     void setShouldAllowDeviceOrientationAndMotionAccess(bool);
+    void stopLoading();
 
     bool didCancelClientRedirect() const { return m_didCancelClientRedirect; }
     void setDidCancelClientRedirect(bool value) { m_didCancelClientRedirect = value; }
@@ -532,6 +533,7 @@ public:
     void markAttributedPrivateClickMeasurementsAsExpiredForTesting();
     void setPrivateClickMeasurementEphemeralMeasurementForTesting(bool value);
     void setPrivateClickMeasurementFraudPreventionValuesForTesting(JSStringRef unlinkableToken, JSStringRef secretToken, JSStringRef signature, JSStringRef keyID);
+    void setPrivateClickMeasurementAppBundleIDForTesting(JSStringRef);
     void simulateResourceLoadStatisticsSessionRestart();
 
     void setIsSpeechRecognitionPermissionGranted(bool);

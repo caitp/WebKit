@@ -28,7 +28,7 @@
 #include "AXObjectCache.h"
 #include "CSSPrimitiveValueMappings.h"
 #include "ChromeClient.h"
-#include "Document.h"
+#include "DocumentInlines.h"
 #include "Editing.h"
 #include "ElementAncestorIterator.h"
 #include "Event.h"
@@ -40,9 +40,9 @@
 #include "HTMLInputElement.h"
 #include "HTMLNames.h"
 #include "HTMLParserIdioms.h"
+#include "InlineIteratorBox.h"
+#include "InlineIteratorLine.h"
 #include "LayoutDisallowedScope.h"
-#include "LayoutIntegrationLineIterator.h"
-#include "LayoutIntegrationRunIterator.h"
 #include "Logging.h"
 #include "NodeTraversal.h"
 #include "Page.h"
@@ -603,7 +603,7 @@ void HTMLTextFormControlElement::setInnerTextValue(const String& value)
                 innerText->appendChild(HTMLBRElement::create(document()));
         }
 
-#if ENABLE(ACCESSIBILITY) && PLATFORM(COCOA)
+#if ENABLE(ACCESSIBILITY) && (PLATFORM(COCOA) || USE(ATSPI))
         if (textIsChanged && renderer()) {
             if (AXObjectCache* cache = document().existingAXObjectCache())
                 cache->deferTextReplacementNotificationForTextControl(*this, previousValue);
@@ -701,7 +701,7 @@ String HTMLTextFormControlElement::valueWithHardLineBreaks() const
 
     Node* softLineBreakNode = nullptr;
     unsigned softLineBreakOffset = 0;
-    auto currentLine = LayoutIntegration::firstLineFor(*renderer);
+    auto currentLine = InlineIterator::firstLineFor(*renderer);
     if (!currentLine)
         return value();
 

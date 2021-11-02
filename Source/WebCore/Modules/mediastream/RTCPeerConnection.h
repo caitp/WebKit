@@ -50,7 +50,7 @@
 #include "RTCRtpTransceiver.h"
 #include "RTCSessionDescriptionInit.h"
 #include "RTCSignalingState.h"
-#include <JavaScriptCore/Uint8Array.h>
+#include <JavaScriptCore/Forward.h>
 #include <wtf/LoggerHelper.h>
 #include <wtf/WeakPtr.h>
 
@@ -105,7 +105,7 @@ public:
         std::optional<double> expires;
     };
 
-    using AlgorithmIdentifier = Variant<JSC::Strong<JSC::JSObject>, String>;
+    using AlgorithmIdentifier = std::variant<JSC::Strong<JSC::JSObject>, String>;
     static void generateCertificate(JSC::JSGlobalObject&, AlgorithmIdentifier&&, DOMPromiseDeferred<IDLInterface<RTCCertificate>>&&);
 
     // 4.3.2 RTCPeerConnection Interface
@@ -122,7 +122,7 @@ public:
     RTCSessionDescription* currentRemoteDescription() const { return m_currentRemoteDescription.get(); }
     RTCSessionDescription* pendingRemoteDescription() const { return m_pendingRemoteDescription.get(); }
 
-    using Candidate = std::optional<Variant<RTCIceCandidateInit, RefPtr<RTCIceCandidate>>>;
+    using Candidate = std::optional<std::variant<RTCIceCandidateInit, RefPtr<RTCIceCandidate>>>;
     void addIceCandidate(Candidate&&, Ref<DeferredPromise>&&);
 
     RTCSignalingState signalingState() const { return m_signalingState; }
@@ -151,7 +151,7 @@ public:
     ExceptionOr<Ref<RTCRtpSender>> addTrack(Ref<MediaStreamTrack>&&, const Vector<std::reference_wrapper<MediaStream>>&);
     ExceptionOr<void> removeTrack(RTCRtpSender&);
 
-    using AddTransceiverTrackOrKind = Variant<RefPtr<MediaStreamTrack>, String>;
+    using AddTransceiverTrackOrKind = std::variant<RefPtr<MediaStreamTrack>, String>;
     ExceptionOr<Ref<RTCRtpTransceiver>> addTransceiver(AddTransceiverTrackOrKind&&, const RTCRtpTransceiverInit&);
 
     // 6.1 Peer-to-peer data API
@@ -159,6 +159,8 @@ public:
 
     // 8.2 Statistics API
     void getStats(MediaStreamTrack*, Ref<DeferredPromise>&&);
+    // Used for testing
+    WEBCORE_EXPORT void gatherDecoderImplementationName(Function<void(String&&)>&&);
 
     // EventTarget
     EventTargetInterface eventTargetInterface() const final { return RTCPeerConnectionEventTargetInterfaceType; }
@@ -192,6 +194,7 @@ public:
     void updateSctpBackend(std::unique_ptr<RTCSctpTransportBackend>&&);
 
     void processIceTransportStateChange(RTCIceTransport&);
+    void processIceTransportChanges();
 
     RTCSctpTransport* sctp() { return m_sctpTransport.get(); }
 

@@ -27,6 +27,7 @@
 #include "HTMLButtonElement.h"
 
 #include "DOMFormData.h"
+#include "ElementInlines.h"
 #include "EventNames.h"
 #include "HTMLFormElement.h"
 #include "HTMLNames.h"
@@ -240,6 +241,11 @@ bool HTMLButtonElement::computeWillValidate() const
 bool HTMLButtonElement::isSubmitButton() const
 {
     return m_type == SUBMIT;
+}
+
+bool HTMLButtonElement::isExplicitlySetSubmitButton() const
+{
+    return isSubmitButton() && hasAttributeWithoutSynchronization(HTMLNames::typeAttr);
 }
 
 } // namespace

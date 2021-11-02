@@ -52,24 +52,12 @@ struct SameSizeAsScrollableArea {
 #endif
     void* pointer[3];
     IntPoint origin;
-    unsigned bitfields : 16;
+    bool bytes[9];
 };
 
 COMPILE_ASSERT(sizeof(ScrollableArea) == sizeof(SameSizeAsScrollableArea), ScrollableArea_should_stay_small);
 
-ScrollableArea::ScrollableArea()
-    : m_constrainsScrollingToContentEdge(true)
-    , m_inLiveResize(false)
-    , m_verticalScrollElasticity(ScrollElasticityNone)
-    , m_horizontalScrollElasticity(ScrollElasticityNone)
-    , m_scrollbarOverlayStyle(ScrollbarOverlayStyleDefault)
-    , m_scrollOriginChanged(false)
-    , m_currentScrollType(static_cast<unsigned>(ScrollType::User))
-    , m_scrollShouldClearLatchedState(false)
-    , m_currentScrollBehaviorStatus(static_cast<unsigned>(ScrollBehaviorStatus::NotInAnimation))
-{
-}
-
+ScrollableArea::ScrollableArea() = default;
 ScrollableArea::~ScrollableArea() = default;
 
 ScrollAnimator& ScrollableArea::scrollAnimator() const
@@ -152,10 +140,16 @@ void ScrollableArea::scrollToPositionWithoutAnimation(const FloatPoint& position
     scrollAnimator().scrollToPositionWithoutAnimation(position, clamping);
 }
 
-void ScrollableArea::scrollToPositionWithAnimation(const FloatPoint& position, ScrollClamping)
+void ScrollableArea::scrollToPositionWithAnimation(const FloatPoint& position, ScrollClamping clamping)
 {
     LOG_WITH_STREAM(Scrolling, stream << "ScrollableArea " << this << " scrollToPositionWithAnimation " << position);
-    scrollAnimator().scrollToPositionWithAnimation(position);
+
+    bool startedAnimation = requestAnimatedScrollToPosition(roundedIntPoint(position), clamping);
+    if (!startedAnimation)
+        startedAnimation = scrollAnimator().scrollToPositionWithAnimation(position);
+
+    if (startedAnimation)
+        setScrollAnimationStatus(ScrollAnimationStatus::Animating);
 }
 
 void ScrollableArea::scrollToOffsetWithoutAnimation(const FloatPoint& offset, ScrollClamping clamping)
@@ -187,10 +181,10 @@ void ScrollableArea::scrollPositionChanged(const ScrollPosition& position)
     // Tell the derived class to scroll its contents.
     setScrollOffset(scrollOffsetFromPosition(position));
 
-    Scrollbar* verticalScrollbar = this->verticalScrollbar();
+    auto* verticalScrollbar = this->verticalScrollbar();
 
     // Tell the scrollbars to update their thumb postions.
-    if (Scrollbar* horizontalScrollbar = this->horizontalScrollbar()) {
+    if (auto* horizontalScrollbar = this->horizontalScrollbar()) {
         horizontalScrollbar->offsetDidChange();
         if (horizontalScrollbar->isOverlayScrollbar() && !hasLayerForHorizontalScrollbar()) {
             if (!verticalScrollbar)
@@ -223,6 +217,11 @@ bool ScrollableArea::handleWheelEventForScrolling(const PlatformWheelEvent& whee
     
     LOG_WITH_STREAM(Scrolling, stream << "ScrollableArea (" << *this << ") handleWheelEvent - handled " << handledEvent);
     return handledEvent;
+}
+
+void ScrollableArea::stopKeyboardScrollAnimation()
+{
+    scrollAnimator().stopKeyboardScrollAnimation();
 }
 
 #if ENABLE(TOUCH_EVENTS)
@@ -551,7 +550,7 @@ void ScrollableArea::resnapAfterLayout()
     if (correctedOffset != currentOffset) {
         LOG_WITH_STREAM(ScrollSnap, stream << " adjusting offset from " << currentOffset << " to " << correctedOffset);
         auto position = scrollPositionFromOffset(correctedOffset);
-        if (currentScrollBehaviorStatus() == ScrollBehaviorStatus::NotInAnimation)
+        if (scrollAnimationStatus() == ScrollAnimationStatus::NotAnimating)
             scrollToOffsetWithoutAnimation(correctedOffset);
         else
             scrollAnimator->retargetRunningAnimation(position);
@@ -578,41 +577,27 @@ void ScrollableArea::doPostThumbMoveSnapping(ScrollbarOrientation orientation)
     scrollAnimator->scrollToPositionWithAnimation(position);
 }
 
-bool ScrollableArea::isPinnedForScrollDeltaOnAxis(float scrollDelta, ScrollEventAxis axis) const
+bool ScrollableArea::isPinnedOnSide(BoxSide side) const
 {
-    auto scrollPosition = this->scrollPosition();
-    switch (axis) {
-    case ScrollEventAxis::Vertical:
+    switch (side) {
+    case BoxSide::Top:
         if (!allowsVerticalScrolling())
             return true;
-
-        if (scrollDelta < 0) // top
-            return scrollPosition.y() <= minimumScrollPosition().y();
-
-        if (scrollDelta > 0) // bottom
-            return scrollPosition.y() >= maximumScrollPosition().y();
-
-        break;
-    case ScrollEventAxis::Horizontal:
+        return scrollPosition().y() <= minimumScrollPosition().y();
+    case BoxSide::Bottom:
+        if (!allowsVerticalScrolling())
+            return true;
+        return scrollPosition().y() >= maximumScrollPosition().y();
+    case BoxSide::Left:
         if (!allowsHorizontalScrolling())
             return true;
-
-        if (scrollDelta < 0) // left
-            return scrollPosition.x() <= minimumScrollPosition().x();
-
-        if (scrollDelta > 0) // right
-            return scrollPosition.x() >= maximumScrollPosition().x();
-
-        break;
+        return scrollPosition().x() <= minimumScrollPosition().x();
+    case BoxSide::Right:
+        if (!allowsHorizontalScrolling())
+            return true;
+        return scrollPosition().x() >= maximumScrollPosition().x();
     }
-
     return false;
-}
-
-bool ScrollableArea::isPinnedForScrollDelta(const FloatSize& scrollDelta) const
-{
-    return (!scrollDelta.width() || isPinnedForScrollDeltaOnAxis(scrollDelta.width(), ScrollEventAxis::Horizontal))
-        && (!scrollDelta.height() || isPinnedForScrollDeltaOnAxis(scrollDelta.height(), ScrollEventAxis::Vertical));
 }
 
 RectEdges<bool> ScrollableArea::edgePinnedState() const
@@ -795,6 +780,29 @@ void ScrollableArea::computeScrollbarValueAndOverhang(float currentPosition, flo
         else
             doubleValue = 0;
     }
+}
+
+std::optional<BoxSide> ScrollableArea::targetSideForScrollDelta(FloatSize delta, ScrollEventAxis axis)
+{
+    switch (axis) {
+    case ScrollEventAxis::Horizontal:
+        if (delta.width() < 0)
+            return BoxSide::Left;
+
+        if (delta.width() > 0)
+            return BoxSide::Right;
+        break;
+
+    case ScrollEventAxis::Vertical:
+        if (delta.height() < 0)
+            return BoxSide::Top;
+
+        if (delta.height() > 0)
+            return BoxSide::Bottom;
+        break;
+    }
+
+    return { };
 }
 
 TextStream& operator<<(TextStream& ts, const ScrollableArea& scrollableArea)

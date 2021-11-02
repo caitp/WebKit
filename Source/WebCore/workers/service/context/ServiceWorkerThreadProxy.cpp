@@ -93,13 +93,13 @@ static HashSet<ServiceWorkerThreadProxy*>& allServiceWorkerThreadProxies()
     return set;
 }
 
-ServiceWorkerThreadProxy::ServiceWorkerThreadProxy(PageConfiguration&& pageConfiguration, ServiceWorkerContextData&& contextData, ServiceWorkerData&& workerData, String&& userAgent, CacheStorageProvider& cacheStorageProvider, StorageBlockingPolicy storageBlockingPolicy)
+ServiceWorkerThreadProxy::ServiceWorkerThreadProxy(PageConfiguration&& pageConfiguration, ServiceWorkerContextData&& contextData, ServiceWorkerData&& workerData, String&& userAgent, WorkerThreadMode workerThreadMode, CacheStorageProvider& cacheStorageProvider, StorageBlockingPolicy storageBlockingPolicy)
     : m_page(createPageForServiceWorker(WTFMove(pageConfiguration), contextData, storageBlockingPolicy))
     , m_document(*m_page->mainFrame().document())
 #if ENABLE(REMOTE_INSPECTOR)
     , m_remoteDebuggable(makeUnique<ServiceWorkerDebuggable>(*this, contextData))
 #endif
-    , m_serviceWorkerThread(ServiceWorkerThread::create(WTFMove(contextData), WTFMove(workerData), WTFMove(userAgent), m_document->settingsValues(), *this, *this, idbConnectionProxy(m_document), m_document->socketProvider()))
+    , m_serviceWorkerThread(ServiceWorkerThread::create(WTFMove(contextData), WTFMove(workerData), WTFMove(userAgent), workerThreadMode, m_document->settingsValues(), *this, *this, idbConnectionProxy(m_document), m_document->socketProvider()))
     , m_cacheStorageProvider(cacheStorageProvider)
     , m_inspectorProxy(*this)
 {
@@ -122,6 +122,10 @@ ServiceWorkerThreadProxy::~ServiceWorkerThreadProxy()
 {
     ASSERT(allServiceWorkerThreadProxies().contains(this));
     allServiceWorkerThreadProxies().remove(this);
+
+    auto pushTasks = WTFMove(m_ongoingPushTasks);
+    for (auto& callback : pushTasks.values())
+        callback(false);
 }
 
 void ServiceWorkerThreadProxy::setLastNavigationWasAppInitiated(bool wasAppInitiated)
@@ -292,6 +296,28 @@ void ServiceWorkerThreadProxy::didSaveScriptsToDisk(ScriptBuffer&& script, HashM
     thread().runLoop().postTask([script = WTFMove(script), importedScripts = WTFMove(importedScripts)](auto& context) mutable {
         downcast<ServiceWorkerGlobalScope>(context).didSaveScriptsToDisk(WTFMove(script), WTFMove(importedScripts));
     });
+}
+
+void ServiceWorkerThreadProxy::firePushEvent(std::optional<Vector<uint8_t>>&& data, CompletionHandler<void(bool)>&& callback)
+{
+    if (m_ongoingPushTasks.isEmpty())
+        thread().startPushEventMonitoring();
+
+    auto identifier = ++m_pushTasksCounter;
+    ASSERT(!m_ongoingPushTasks.contains(identifier));
+    m_ongoingPushTasks.add(identifier, WTFMove(callback));
+    bool isPosted = postTaskForModeToWorkerOrWorkletGlobalScope([this, protectedThis = Ref { *this }, identifier, data = WTFMove(data)](auto&) mutable {
+        thread().queueTaskToFirePushEvent(WTFMove(data), [this, protectedThis = WTFMove(protectedThis), identifier](bool result) mutable {
+            callOnMainThread([this, protectedThis = WTFMove(protectedThis), identifier, result]() mutable {
+                if (auto callback = m_ongoingPushTasks.take(identifier))
+                    callback(result);
+                if (m_ongoingPushTasks.isEmpty())
+                    thread().stopPushEventMonitoring();
+            });
+        });
+    }, WorkerRunLoop::defaultMode());
+    if (!isPosted)
+        m_ongoingPushTasks.take(identifier)(false);
 }
 
 } // namespace WebCore

@@ -79,8 +79,6 @@ public:
         C,
         Unknown,
     };
-    static constexpr intptr_t internalSourceID = -1;
-    static constexpr intptr_t aggregatedExternalSourceID = -2;
 
     struct StackFrame {
         StackFrame(ExecutableBase* executable)
@@ -148,7 +146,7 @@ public:
         String displayNameForJSONTests(VM&); // Used for JSC stress tests because they want the "(anonymous function)" string for anonymous functions and they want "(eval)" for eval'd code.
         int functionStartLine();
         unsigned functionStartColumn();
-        intptr_t sourceID();
+        SourceID sourceID();
         String url();
     };
 

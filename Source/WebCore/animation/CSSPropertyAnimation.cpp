@@ -41,8 +41,8 @@
 #include "CSSPropertyNames.h"
 #include "CachedImage.h"
 #include "CalculationValue.h"
-#include "ClipPathOperation.h"
 #include "ColorBlending.h"
+#include "CompositeOperation.h"
 #include "FloatConversion.h"
 #include "FontCascade.h"
 #include "FontSelectionAlgorithm.h"
@@ -54,6 +54,7 @@
 #include "Logging.h"
 #include "Matrix3DTransformOperation.h"
 #include "MatrixTransformOperation.h"
+#include "PathOperation.h"
 #include "RenderBox.h"
 #include "RenderStyle.h"
 #include "StyleCachedImage.h"
@@ -75,8 +76,8 @@ namespace WebCore {
 struct CSSPropertyBlendingContext : BlendingContext {
     const CSSPropertyBlendingClient* client { nullptr };
 
-    CSSPropertyBlendingContext(double progress, bool isDiscrete, const CSSPropertyBlendingClient* client)
-        : BlendingContext(progress, isDiscrete)
+    CSSPropertyBlendingContext(double progress, bool isDiscrete, CompositeOperation compositeOperation, const CSSPropertyBlendingClient* client)
+        : BlendingContext(progress, isDiscrete, compositeOperation)
         , client(client)
     {
     }
@@ -148,7 +149,7 @@ static inline std::unique_ptr<ShadowData> blendFunc(const ShadowData* from, cons
     ASSERT(from->style() == to->style());
 
     return makeUnique<ShadowData>(blend(from->location(), to->location(), context),
-        std::max(0, blend(from->radius(), to->radius(), context)),
+        blend(from->radius(), to->radius(), context, ValueRange::NonNegative),
         blend(from->spread(), to->spread(), context),
         blendFunc(from->style(), to->style(), context),
         from->isWebkitBoxShadow(),
@@ -270,22 +271,18 @@ static RefPtr<TranslateTransformOperation> blendFunc(TranslateTransformOperation
     return nullptr;
 }
 
-static inline RefPtr<ClipPathOperation> blendFunc(ClipPathOperation* from, ClipPathOperation* to, const CSSPropertyBlendingContext& context)
+static inline RefPtr<PathOperation> blendFunc(PathOperation* from, PathOperation* to, const CSSPropertyBlendingContext& context)
 {
-    if (!from || !to)
-        return to;
+    if (is<ShapePathOperation>(from) && is<ShapePathOperation>(to)) {
+        auto& fromShape = downcast<ShapePathOperation>(*from).basicShape();
+        auto& toShape = downcast<ShapePathOperation>(*to).basicShape();
 
-    // Other clip-path operations than BasicShapes can not be animated.
-    if (from->type() != ClipPathOperation::Shape || to->type() != ClipPathOperation::Shape)
-        return to;
+        if (fromShape.canBlend(toShape))
+            return ShapePathOperation::create(toShape.blend(fromShape, context));
+    }
 
-    const BasicShape& fromShape = downcast<ShapeClipPathOperation>(*from).basicShape();
-    const BasicShape& toShape = downcast<ShapeClipPathOperation>(*to).basicShape();
-
-    if (!fromShape.canBlend(toShape))
-        return to;
-
-    return ShapeClipPathOperation::create(toShape.blend(fromShape, context));
+    // fall back to discrete animation.
+    return context.progress < 0.5 ? from : to;
 }
 
 static inline RefPtr<ShapeValue> blendFunc(ShapeValue* from, ShapeValue* to, const CSSPropertyBlendingContext& context)
@@ -592,7 +589,7 @@ public:
 
     virtual bool isShorthandWrapper() const { return false; }
     virtual bool equals(const RenderStyle&, const RenderStyle&) const = 0;
-    virtual bool canInterpolate(const RenderStyle&, const RenderStyle&) const { return true; }
+    virtual bool canInterpolate(const RenderStyle&, const RenderStyle&, CompositeOperation) const { return true; }
     virtual void blend(RenderStyle&, const RenderStyle&, const RenderStyle&, const CSSPropertyBlendingContext&) const = 0;
     
 #if !LOG_DISABLED
@@ -693,7 +690,7 @@ public:
     }
 
 private:
-    bool canInterpolate(const RenderStyle&, const RenderStyle&) const final { return false; }
+    bool canInterpolate(const RenderStyle&, const RenderStyle&, CompositeOperation) const final { return false; }
 
     void (RenderStyle::*m_setter)(T);
 };
@@ -705,7 +702,7 @@ public:
     GridTemplateTracksWrapper();
 
 private:
-    bool canInterpolate(const RenderStyle&, const RenderStyle&) const final { return false; }
+    bool canInterpolate(const RenderStyle&, const RenderStyle&, CompositeOperation) const final { return false; }
 
     bool equals(const RenderStyle& a, const RenderStyle& b) const override
     {
@@ -777,7 +774,7 @@ public:
     }
 
 private:
-    bool canInterpolate(const RenderStyle&, const RenderStyle&) const final { return false; }
+    bool canInterpolate(const RenderStyle&, const RenderStyle&, CompositeOperation) const final { return false; }
 
     bool equals(const RenderStyle& a, const RenderStyle& b) const override
     {
@@ -854,7 +851,7 @@ public:
     }
 
 protected:
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const override
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const override
     {
         return canInterpolateLengths(value(from), value(to), m_flags.contains(Flags::IsLengthPercentage));
     }
@@ -885,7 +882,7 @@ static bool canInterpolateLengthVariants(const GapLength& from, const GapLength&
     return canInterpolateLengths(from.length(), to.length(), isLengthPercentage);
 }
 
-class LengthPointPropertyWrapper final : public PropertyWrapperGetter<LengthPoint> {
+class LengthPointPropertyWrapper : public PropertyWrapperGetter<LengthPoint> {
     WTF_MAKE_FAST_ALLOCATED;
 public:
     LengthPointPropertyWrapper(CSSPropertyID property, LengthPoint (RenderStyle::*getter)() const, void (RenderStyle::*setter)(LengthPoint&&))
@@ -903,6 +900,28 @@ private:
     void (RenderStyle::*m_setter)(LengthPoint&&);
 };
 
+// This class extends LengthPointPropertyWrapper to accommodate `auto` value expressed as
+// LengthPoint(Length(LengthType::Auto), Length(LengthType::Auto)). This is used for 
+// offset-anchor and offset-position, which allows `auto`, and is expressed like so.
+class LengthPointOrAutoPropertyWrapper final : public LengthPointPropertyWrapper {
+public:
+    LengthPointOrAutoPropertyWrapper(CSSPropertyID property, LengthPoint (RenderStyle::*getter)() const, void (RenderStyle::*setter)(LengthPoint&&))
+        : LengthPointPropertyWrapper(property, getter, setter)
+    {
+    }
+
+private:
+    // Check if it's possible to interpolate between the from and to values. In particular,
+    // it's only possible if they're both not auto.
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
+    {
+        bool fromIsAuto = value(from).x().isAuto() && value(from).y().isAuto();
+        bool toIsAuto = value(to).x().isAuto() && value(to).y().isAuto();
+
+        return (!fromIsAuto && !toIsAuto); 
+    }
+};
+
 template <typename T>
 class LengthVariantPropertyWrapper final : public PropertyWrapperGetter<const T&> {
     WTF_MAKE_FAST_ALLOCATED;
@@ -914,7 +933,7 @@ public:
     }
 
 private:
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
     {
         return canInterpolateLengthVariants(this->value(from), this->value(to));
     }
@@ -942,7 +961,7 @@ public:
     {
     }
 
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const override
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const override
     {
         if (m_flags.contains(Flags::UsesFillKeyword) && from.borderImage().fill() != to.borderImage().fill())
             return false;
@@ -984,9 +1003,9 @@ public:
     }
 
 private:
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation compositeOperation) const final
     {
-        return from.hasClip() && to.hasClip() && LengthBoxPropertyWrapper::canInterpolate(from, to);
+        return from.hasClip() && to.hasClip() && LengthBoxPropertyWrapper::canInterpolate(from, to, compositeOperation);
     }
 
     void blend(RenderStyle& destination, const RenderStyle& from, const RenderStyle& to, const CSSPropertyBlendingContext& context) const final
@@ -996,15 +1015,30 @@ private:
     }
 };
 
-class PropertyWrapperClipPath final : public RefCountedPropertyWrapper<ClipPathOperation> {
+class PropertyWrapperClipPath final : public RefCountedPropertyWrapper<PathOperation> {
     WTF_MAKE_FAST_ALLOCATED;
 public:
-    PropertyWrapperClipPath(CSSPropertyID property, ClipPathOperation* (RenderStyle::*getter)() const, void (RenderStyle::*setter)(RefPtr<ClipPathOperation>&&))
-        : RefCountedPropertyWrapper<ClipPathOperation>(property, getter, setter)
+    PropertyWrapperClipPath(CSSPropertyID property, PathOperation* (RenderStyle::*getter)() const, void (RenderStyle::*setter)(RefPtr<PathOperation>&&))
+        : RefCountedPropertyWrapper<PathOperation>(property, getter, setter)
     {
     }
 
 private:
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const override
+    {
+        auto fromPath = value(from);
+        auto toPath = value(to);
+
+        if (is<ShapePathOperation>(fromPath) && is<ShapePathOperation>(toPath)) {
+            auto& fromShape = downcast<ShapePathOperation>(*fromPath).basicShape();
+            auto& toShape = downcast<ShapePathOperation>(*toPath).basicShape();
+
+            return fromShape.canBlend(toShape);
+        }
+
+        return false;
+    }
+
     bool equals(const RenderStyle& a, const RenderStyle& b) const final
     {
         // If the style pointers are the same, don't bother doing the test.
@@ -1039,7 +1073,7 @@ private:
         return value(a) == value(b);
     }
 
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
     {
         auto fromVariationSettings = value(from);
         auto toVariationSettings = value(to);
@@ -1082,7 +1116,7 @@ private:
         return *shapeA == *shapeB;
     }
 
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
     {
         auto* fromShape = value(from);
         auto* toShape = value(to);
@@ -1119,7 +1153,7 @@ private:
         return arePointingToEqualData(imageA, imageB);
     }
 
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
     {
         return value(from) && value(to);
     }
@@ -1190,10 +1224,10 @@ static inline size_t shadowListLength(const ShadowData* shadow)
 
 static inline const ShadowData* shadowForBlending(const ShadowData* srcShadow, const ShadowData* otherShadow)
 {
-    static NeverDestroyed<ShadowData> defaultShadowData(LayoutPoint(), 0, 0, ShadowStyle::Normal, false, Color::transparentBlack);
-    static NeverDestroyed<ShadowData> defaultInsetShadowData(LayoutPoint(), 0, 0, ShadowStyle::Inset, false, Color::transparentBlack);
-    static NeverDestroyed<ShadowData> defaultWebKitBoxShadowData(LayoutPoint(), 0, 0, ShadowStyle::Normal, true, Color::transparentBlack);
-    static NeverDestroyed<ShadowData> defaultInsetWebKitBoxShadowData(LayoutPoint(), 0, 0, ShadowStyle::Inset, true, Color::transparentBlack);
+    static NeverDestroyed<ShadowData> defaultShadowData(LengthPoint(Length(LengthType::Fixed), Length(LengthType::Fixed)), Length(LengthType::Fixed), Length(LengthType::Fixed), ShadowStyle::Normal, false, Color::transparentBlack);
+    static NeverDestroyed<ShadowData> defaultInsetShadowData(LengthPoint(Length(LengthType::Fixed), Length(LengthType::Fixed)), Length(LengthType::Fixed), Length(LengthType::Fixed), ShadowStyle::Inset, false, Color::transparentBlack);
+    static NeverDestroyed<ShadowData> defaultWebKitBoxShadowData(LengthPoint(Length(LengthType::Fixed), Length(LengthType::Fixed)), Length(LengthType::Fixed), Length(LengthType::Fixed), ShadowStyle::Normal, true, Color::transparentBlack);
+    static NeverDestroyed<ShadowData> defaultInsetWebKitBoxShadowData(LengthPoint(Length(LengthType::Fixed), Length(LengthType::Fixed)), Length(LengthType::Fixed), Length(LengthType::Fixed), ShadowStyle::Inset, true, Color::transparentBlack);
 
     if (srcShadow)
         return srcShadow;
@@ -1242,7 +1276,7 @@ private:
         return true;
     }
 
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
     {
         const ShadowData* fromShadow = (from.*m_getter)();
         const ShadowData* toShadow = (to.*m_getter)();
@@ -1354,7 +1388,7 @@ private:
     void (RenderStyle::*m_setter)(std::unique_ptr<ShadowData>, bool);
 };
 
-class PropertyWrapperMaybeInvalidColor final : public AnimationPropertyWrapperBase {
+class PropertyWrapperMaybeInvalidColor : public AnimationPropertyWrapperBase {
     WTF_MAKE_FAST_ALLOCATED;
 public:
     PropertyWrapperMaybeInvalidColor(CSSPropertyID property, const Color& (RenderStyle::*getter)() const, void (RenderStyle::*setter)(const Color&))
@@ -1364,8 +1398,8 @@ public:
     {
     }
 
-private:
-    bool equals(const RenderStyle& a, const RenderStyle& b) const final
+protected:
+    bool equals(const RenderStyle& a, const RenderStyle& b) const override
     {
         if (&a == &b)
             return true;
@@ -1384,7 +1418,7 @@ private:
         return fromColor == toColor;
     }
 
-    void blend(RenderStyle& destination, const RenderStyle& from, const RenderStyle& to, const CSSPropertyBlendingContext& context) const final
+    void blend(RenderStyle& destination, const RenderStyle& from, const RenderStyle& to, const CSSPropertyBlendingContext& context) const override
     {
         Color fromColor = value(from);
         Color toColor = value(to);
@@ -1399,6 +1433,7 @@ private:
         (destination.*m_setter)(blendFunc(fromColor, toColor, context));
     }
 
+private:
     Color value(const RenderStyle& style) const
     {
         return (style.*m_getter)();
@@ -1459,6 +1494,42 @@ private:
 #endif
 };
 
+class AccentColorPropertyWrapper final : public PropertyWrapperMaybeInvalidColor {
+    WTF_MAKE_FAST_ALLOCATED;
+public:
+    AccentColorPropertyWrapper()
+        : PropertyWrapperMaybeInvalidColor(CSSPropertyAccentColor, &RenderStyle::accentColor, &RenderStyle::setAccentColor)
+    {
+    }
+
+private:
+    bool equals(const RenderStyle& a, const RenderStyle& b) const final
+    {
+        return a.hasAutoAccentColor() == b.hasAutoAccentColor()
+            && PropertyWrapperMaybeInvalidColor::equals(a, b);
+    }
+
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
+    {
+        return !from.hasAutoAccentColor() && !to.hasAutoAccentColor();
+    }
+
+    void blend(RenderStyle& destination, const RenderStyle& from, const RenderStyle& to, const CSSPropertyBlendingContext& context) const final
+    {
+        if (canInterpolate(from, to, context.compositeOperation)) {
+            PropertyWrapperMaybeInvalidColor::blend(destination, from, to, context);
+            return;
+        }
+
+        ASSERT(!context.progress || context.progress == 1.0);
+        auto& blendingRenderStyle = context.progress ? to : from;
+        if (blendingRenderStyle.hasAutoAccentColor())
+            destination.setHasAutoAccentColor();
+        else
+            destination.setAccentColor(blendingRenderStyle.accentColor());
+    }
+};
+
 static bool canInterpolateCaretColor(const RenderStyle& from, const RenderStyle& to, bool visited)
 {
     if (visited)
@@ -1482,7 +1553,7 @@ private:
             && PropertyWrapperVisitedAffectedColor::equals(a, b);
     }
 
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
     {
         return canInterpolateCaretColor(from, to, false) || canInterpolateCaretColor(from, to, true);
     }
@@ -1784,7 +1855,7 @@ private:
         return true;
     }
 
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
     {
         auto* fromLayer = &(from.*m_layersGetter)();
         auto* toLayer = &(to.*m_layersGetter)();
@@ -1899,7 +1970,7 @@ private:
         return a.flexBasis() == b.flexBasis() && a.flexGrow() == b.flexGrow() && a.flexShrink() == b.flexShrink();
     }
 
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
     {
         return from.flexGrow() != to.flexGrow() && from.flexShrink() != to.flexShrink() && canInterpolateLengths(from.flexBasis(), to.flexBasis(), false);
     }
@@ -2001,7 +2072,7 @@ public:
     }
 
 private:
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
     {
         return from.fontItalic() && to.fontItalic() && from.fontDescription().fontStyleAxis() == FontStyleAxis::slnt && to.fontDescription().fontStyleAxis() == FontStyleAxis::slnt;
     }
@@ -2040,7 +2111,7 @@ public:
     }
 
 private:
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
     {
         return !(from.*m_autoGetter)() && !(to.*m_autoGetter)();
     }
@@ -2070,11 +2141,18 @@ private:
     std::optional<T> m_minValue;
 };
 
-class NonNegativeFloatPropertyWrapper : public PropertyWrapper<float> {
+
+class FloatPropertyWrapper : public PropertyWrapper<float> {
     WTF_MAKE_FAST_ALLOCATED;
 public:
-    NonNegativeFloatPropertyWrapper(CSSPropertyID property, float (RenderStyle::*getter)() const, void (RenderStyle::*setter)(float))
+    enum class ValueRange : uint8_t {
+        All,
+        NonNegative,
+        Positive
+    };
+    FloatPropertyWrapper(CSSPropertyID property, float (RenderStyle::*getter)() const, void (RenderStyle::*setter)(float), ValueRange valueRange = ValueRange::All)
         : PropertyWrapper<float>(property, getter, setter)
+        , m_valueRange(valueRange)
     {
     }
 
@@ -2082,8 +2160,15 @@ protected:
     void blend(RenderStyle& destination, const RenderStyle& from, const RenderStyle& to, const CSSPropertyBlendingContext& context) const override
     {
         auto blendedValue = blendFunc(value(from), value(to), context);
-        (destination.*m_setter)(blendedValue > 0 ? blendedValue : 0);
+        if (m_valueRange == ValueRange::NonNegative && blendedValue <= 0)
+            blendedValue = 0;
+        else if (m_valueRange == ValueRange::Positive && blendedValue < 0)
+            blendedValue = std::numeric_limits<float>::epsilon();
+        (destination.*m_setter)(blendedValue);
     }
+
+private:
+    ValueRange m_valueRange;
 };
 
 class VerticalAlignWrapper final : public LengthPropertyWrapper {
@@ -2095,9 +2180,9 @@ public:
     }
 
 private:
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation compositeOperation) const final
     {
-        return from.verticalAlign() == VerticalAlign::Length && to.verticalAlign() == VerticalAlign::Length && LengthPropertyWrapper::canInterpolate(from, to);
+        return from.verticalAlign() == VerticalAlign::Length && to.verticalAlign() == VerticalAlign::Length && LengthPropertyWrapper::canInterpolate(from, to, compositeOperation);
     }
 
     void blend(RenderStyle& destination, const RenderStyle& from, const RenderStyle& to, const CSSPropertyBlendingContext& context) const final
@@ -2117,13 +2202,13 @@ public:
     }
 
 private:
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation compositeOperation) const final
     {
         if (from.textIndentLine() != to.textIndentLine())
             return false;
         if (from.textIndentType() != to.textIndentType())
             return false;
-        return LengthPropertyWrapper::canInterpolate(from, to);
+        return LengthPropertyWrapper::canInterpolate(from, to, compositeOperation);
     }
 
     void blend(RenderStyle& destination, const RenderStyle& from, const RenderStyle& to, const CSSPropertyBlendingContext& context) const final
@@ -2135,20 +2220,20 @@ private:
     }
 };
 
-class PerspectiveWrapper final : public NonNegativeFloatPropertyWrapper {
+class PerspectiveWrapper final : public FloatPropertyWrapper {
     WTF_MAKE_FAST_ALLOCATED;
 public:
     PerspectiveWrapper()
-        : NonNegativeFloatPropertyWrapper(CSSPropertyPerspective, &RenderStyle::perspective, &RenderStyle::setPerspective)
+        : FloatPropertyWrapper(CSSPropertyPerspective, &RenderStyle::perspective, &RenderStyle::setPerspective, FloatPropertyWrapper::ValueRange::NonNegative)
     {
     }
 
 private:
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation compositeOperation) const final
     {
         if (!from.hasPerspective() || !to.hasPerspective())
             return false;
-        return NonNegativeFloatPropertyWrapper::canInterpolate(from, to);
+        return FloatPropertyWrapper::canInterpolate(from, to, compositeOperation);
     }
 
     void blend(RenderStyle& destination, const RenderStyle& from, const RenderStyle& to, const CSSPropertyBlendingContext& context) const final
@@ -2156,7 +2241,7 @@ private:
         if (context.isDiscrete)
             (destination.*m_setter)(context.progress ? value(to) : value(from));
         else
-            NonNegativeFloatPropertyWrapper::blend(destination, from, to, context);
+            FloatPropertyWrapper::blend(destination, from, to, context);
     }
 };
 
@@ -2169,7 +2254,7 @@ public:
     }
 
 private:
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
     {
         return value(from).isSpaces() == value(to).isSpaces();
     }
@@ -2199,7 +2284,7 @@ public:
         return a.aspectRatioType() == b.aspectRatioType() && a.aspectRatioWidth() == b.aspectRatioWidth() && a.aspectRatioHeight() == b.aspectRatioHeight();
     }
 
-    bool canInterpolate(const RenderStyle& from, const RenderStyle& to) const final
+    bool canInterpolate(const RenderStyle& from, const RenderStyle& to, CompositeOperation) const final
     {
         return (from.aspectRatioType() == AspectRatioType::Ratio && to.aspectRatioType() == AspectRatioType::Ratio) || (from.aspectRatioType() == AspectRatioType::AutoAndRatio && to.aspectRatioType() == AspectRatioType::AutoAndRatio);
     }
@@ -2296,10 +2381,10 @@ CSSPropertyAnimationWrapperMap::CSSPropertyAnimationWrapperMap()
 
         new PropertyWrapperFlex(),
 
-        new NonNegativeFloatPropertyWrapper(CSSPropertyBorderLeftWidth, &RenderStyle::borderLeftWidth, &RenderStyle::setBorderLeftWidth),
-        new NonNegativeFloatPropertyWrapper(CSSPropertyBorderRightWidth, &RenderStyle::borderRightWidth, &RenderStyle::setBorderRightWidth),
-        new NonNegativeFloatPropertyWrapper(CSSPropertyBorderTopWidth, &RenderStyle::borderTopWidth, &RenderStyle::setBorderTopWidth),
-        new NonNegativeFloatPropertyWrapper(CSSPropertyBorderBottomWidth, &RenderStyle::borderBottomWidth, &RenderStyle::setBorderBottomWidth),
+        new FloatPropertyWrapper(CSSPropertyBorderLeftWidth, &RenderStyle::borderLeftWidth, &RenderStyle::setBorderLeftWidth, FloatPropertyWrapper::ValueRange::NonNegative),
+        new FloatPropertyWrapper(CSSPropertyBorderRightWidth, &RenderStyle::borderRightWidth, &RenderStyle::setBorderRightWidth, FloatPropertyWrapper::ValueRange::NonNegative),
+        new FloatPropertyWrapper(CSSPropertyBorderTopWidth, &RenderStyle::borderTopWidth, &RenderStyle::setBorderTopWidth, FloatPropertyWrapper::ValueRange::NonNegative),
+        new FloatPropertyWrapper(CSSPropertyBorderBottomWidth, &RenderStyle::borderBottomWidth, &RenderStyle::setBorderBottomWidth, FloatPropertyWrapper::ValueRange::NonNegative),
         new LengthPropertyWrapper(CSSPropertyMarginLeft, &RenderStyle::marginLeft, &RenderStyle::setMarginLeft),
         new LengthPropertyWrapper(CSSPropertyMarginRight, &RenderStyle::marginRight, &RenderStyle::setMarginRight),
         new LengthPropertyWrapper(CSSPropertyMarginTop, &RenderStyle::marginTop, &RenderStyle::setMarginTop),
@@ -2308,6 +2393,8 @@ CSSPropertyAnimationWrapperMap::CSSPropertyAnimationWrapperMap()
         new LengthPropertyWrapper(CSSPropertyPaddingRight, &RenderStyle::paddingRight, &RenderStyle::setPaddingRight, { LengthPropertyWrapper::Flags::NegativeLengthsAreInvalid }),
         new LengthPropertyWrapper(CSSPropertyPaddingTop, &RenderStyle::paddingTop, &RenderStyle::setPaddingTop, { LengthPropertyWrapper::Flags::NegativeLengthsAreInvalid }),
         new LengthPropertyWrapper(CSSPropertyPaddingBottom, &RenderStyle::paddingBottom, &RenderStyle::setPaddingBottom, { LengthPropertyWrapper::Flags::NegativeLengthsAreInvalid }),
+
+        new AccentColorPropertyWrapper,
 
         new CaretColorPropertyWrapper,
 
@@ -2344,14 +2431,14 @@ CSSPropertyAnimationWrapperMap::CSSPropertyAnimationWrapperMap()
         new LengthVariantPropertyWrapper<GapLength>(CSSPropertyRowGap, &RenderStyle::rowGap, &RenderStyle::setRowGap),
         new AutoPropertyWrapper<unsigned short>(CSSPropertyColumnCount, &RenderStyle::columnCount, &RenderStyle::setColumnCount, &RenderStyle::hasAutoColumnCount, &RenderStyle::setHasAutoColumnCount, 1),
         new AutoPropertyWrapper<float>(CSSPropertyColumnWidth, &RenderStyle::columnWidth, &RenderStyle::setColumnWidth, &RenderStyle::hasAutoColumnWidth, &RenderStyle::setHasAutoColumnWidth, 0),
-        new NonNegativeFloatPropertyWrapper(CSSPropertyWebkitBorderHorizontalSpacing, &RenderStyle::horizontalBorderSpacing, &RenderStyle::setHorizontalBorderSpacing),
-        new NonNegativeFloatPropertyWrapper(CSSPropertyWebkitBorderVerticalSpacing, &RenderStyle::verticalBorderSpacing, &RenderStyle::setVerticalBorderSpacing),
+        new FloatPropertyWrapper(CSSPropertyWebkitBorderHorizontalSpacing, &RenderStyle::horizontalBorderSpacing, &RenderStyle::setHorizontalBorderSpacing, FloatPropertyWrapper::ValueRange::NonNegative),
+        new FloatPropertyWrapper(CSSPropertyWebkitBorderVerticalSpacing, &RenderStyle::verticalBorderSpacing, &RenderStyle::setVerticalBorderSpacing, FloatPropertyWrapper::ValueRange::NonNegative),
         new AutoPropertyWrapper<int>(CSSPropertyZIndex, &RenderStyle::specifiedZIndex, &RenderStyle::setSpecifiedZIndex, &RenderStyle::hasAutoSpecifiedZIndex, &RenderStyle::setHasAutoSpecifiedZIndex),
         new PositivePropertyWrapper<unsigned short>(CSSPropertyOrphans, &RenderStyle::orphans, &RenderStyle::setOrphans),
         new PositivePropertyWrapper<unsigned short>(CSSPropertyWidows, &RenderStyle::widows, &RenderStyle::setWidows),
         new LengthPropertyWrapper(CSSPropertyLineHeight, &RenderStyle::specifiedLineHeight, &RenderStyle::setLineHeight),
         new PropertyWrapper<float>(CSSPropertyOutlineOffset, &RenderStyle::outlineOffset, &RenderStyle::setOutlineOffset),
-        new NonNegativeFloatPropertyWrapper(CSSPropertyOutlineWidth, &RenderStyle::outlineWidth, &RenderStyle::setOutlineWidth),
+        new FloatPropertyWrapper(CSSPropertyOutlineWidth, &RenderStyle::outlineWidth, &RenderStyle::setOutlineWidth, FloatPropertyWrapper::ValueRange::NonNegative),
         new PropertyWrapper<float>(CSSPropertyLetterSpacing, &RenderStyle::letterSpacing, &RenderStyle::setLetterSpacing),
         new LengthPropertyWrapper(CSSPropertyWordSpacing, &RenderStyle::wordSpacing, &RenderStyle::setWordSpacing),
         new TextIndentWrapper,
@@ -2368,7 +2455,7 @@ CSSPropertyAnimationWrapperMap::CSSPropertyAnimationWrapperMap()
         new LengthVariantPropertyWrapper<LengthSize>(CSSPropertyBorderBottomLeftRadius, &RenderStyle::borderBottomLeftRadius, &RenderStyle::setBorderBottomLeftRadius),
         new LengthVariantPropertyWrapper<LengthSize>(CSSPropertyBorderBottomRightRadius, &RenderStyle::borderBottomRightRadius, &RenderStyle::setBorderBottomRightRadius),
         new PropertyWrapper<Visibility>(CSSPropertyVisibility, &RenderStyle::visibility, &RenderStyle::setVisibility),
-        new PropertyWrapper<float>(CSSPropertyZoom, &RenderStyle::zoom, &RenderStyle::setZoomWithoutReturnValue),
+        new FloatPropertyWrapper(CSSPropertyZoom, &RenderStyle::zoom, &RenderStyle::setZoomWithoutReturnValue, FloatPropertyWrapper::ValueRange::Positive),
 
         new ClipWrapper,
 
@@ -2443,8 +2530,8 @@ CSSPropertyAnimationWrapperMap::CSSPropertyAnimationWrapperMap()
         new PropertyWrapperVisitedAffectedColor(CSSPropertyTextDecorationColor, &RenderStyle::textDecorationColor, &RenderStyle::setTextDecorationColor, &RenderStyle::visitedLinkTextDecorationColor, &RenderStyle::setVisitedLinkTextDecorationColor),
 
         new LengthPropertyWrapper(CSSPropertyFlexBasis, &RenderStyle::flexBasis, &RenderStyle::setFlexBasis, { LengthPropertyWrapper::Flags::NegativeLengthsAreInvalid }),
-        new NonNegativeFloatPropertyWrapper(CSSPropertyFlexGrow, &RenderStyle::flexGrow, &RenderStyle::setFlexGrow),
-        new NonNegativeFloatPropertyWrapper(CSSPropertyFlexShrink, &RenderStyle::flexShrink, &RenderStyle::setFlexShrink),
+        new FloatPropertyWrapper(CSSPropertyFlexGrow, &RenderStyle::flexGrow, &RenderStyle::setFlexGrow, FloatPropertyWrapper::ValueRange::NonNegative),
+        new FloatPropertyWrapper(CSSPropertyFlexShrink, &RenderStyle::flexShrink, &RenderStyle::setFlexShrink, FloatPropertyWrapper::ValueRange::NonNegative),
         new PropertyWrapper<int>(CSSPropertyOrder, &RenderStyle::order, &RenderStyle::setOrder),
 
         new TabSizePropertyWrapper,
@@ -2539,6 +2626,10 @@ CSSPropertyAnimationWrapperMap::CSSPropertyAnimationWrapperMap()
 #endif
         new PropertyWrapperAspectRatio,
         new DiscretePropertyWrapper<FontPalette>(CSSPropertyFontPalette, &RenderStyle::fontPalette, &RenderStyle::setFontPalette),
+
+        new LengthPropertyWrapper(CSSPropertyOffsetDistance, &RenderStyle::offsetDistance, &RenderStyle::setOffsetDistance, LengthPropertyWrapper::Flags::IsLengthPercentage),
+        new LengthPointOrAutoPropertyWrapper(CSSPropertyOffsetPosition, &RenderStyle::offsetPosition, &RenderStyle::setOffsetPosition),
+        new LengthPointOrAutoPropertyWrapper(CSSPropertyOffsetAnchor, &RenderStyle::offsetAnchor, &RenderStyle::setOffsetAnchor)
     };
     const unsigned animatableLonghandPropertiesCount = WTF_ARRAY_LENGTH(animatableLonghandPropertyWrappers);
 
@@ -2635,7 +2726,7 @@ static bool gatherEnclosingShorthandProperties(CSSPropertyID property, Animation
     return contained;
 }
 
-void CSSPropertyAnimation::blendProperties(const CSSPropertyBlendingClient* client, CSSPropertyID property, RenderStyle& destination, const RenderStyle& from, const RenderStyle& to, double progress)
+void CSSPropertyAnimation::blendProperties(const CSSPropertyBlendingClient* client, CSSPropertyID property, RenderStyle& destination, const RenderStyle& from, const RenderStyle& to, double progress, CompositeOperation compositeOperation)
 {
     ASSERT(property != CSSPropertyInvalid);
 
@@ -2644,10 +2735,13 @@ void CSSPropertyAnimation::blendProperties(const CSSPropertyBlendingClient* clie
         // https://drafts.csswg.org/web-animations-1/#discrete
         // The property's values cannot be meaningfully combined, thus it is not additive and
         // interpolation swaps from Va to Vb at 50% (p=0.5).
-        auto isDiscrete = !wrapper->canInterpolate(from, to);
-        if (isDiscrete)
+        auto isDiscrete = !wrapper->canInterpolate(from, to, compositeOperation);
+        if (isDiscrete) {
+            // If we want additive, we should specify progress at 0 actually and return from.
             progress = progress < 0.5 ? 0 : 1;
-        wrapper->blend(destination, from, to, { progress, isDiscrete, client });
+            compositeOperation = CompositeOperation::Replace;
+        }
+        wrapper->blend(destination, from, to, { progress, isDiscrete, compositeOperation, client });
 #if !LOG_DISABLED
         wrapper->logBlend(from, to, destination, progress);
 #endif
@@ -2689,7 +2783,7 @@ bool CSSPropertyAnimation::canPropertyBeInterpolated(CSSPropertyID property, con
 {
     AnimationPropertyWrapperBase* wrapper = CSSPropertyAnimationWrapperMap::singleton().wrapperForProperty(property);
     if (wrapper)
-        return wrapper->canInterpolate(from, to);
+        return wrapper->canInterpolate(from, to, CompositeOperation::Replace);
     return false;
 }
 

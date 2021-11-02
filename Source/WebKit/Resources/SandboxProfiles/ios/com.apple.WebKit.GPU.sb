@@ -296,9 +296,9 @@
                (subpath "/Developer"))
 
         (allow ipc-posix-shm
-               (ipc-posix-name-regex #"^stack-logs")
-               (ipc-posix-name-regex #"^OA-")
-               (ipc-posix-name-regex #"^/FSM-"))
+               (ipc-posix-name-prefix "stack-logs")
+               (ipc-posix-name-prefix "OA-")
+               (ipc-posix-name-prefix "/FSM-"))
 
         (allow ipc-posix-shm-read* ipc-posix-shm-write-data ipc-posix-shm-write-unlink
                (ipc-posix-name-regex #"^gdt-[A-Za-z0-9]+-(c|s)$"))
@@ -532,9 +532,6 @@
 (allow ipc-posix-shm-read* (with telemetry)
        (ipc-posix-name-prefix "apple.cfprefs."))
  
-(allow mach-lookup (with telemetry)
-    (global-name "com.apple.lsd.mapdb"))
-
 ;; <rdar://problem/12413942>
 (allow file-read* (with telemetry)
        (well-known-system-group-container-literal "/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist"))
@@ -765,14 +762,33 @@
 )
 
 (allow iokit-get-properties
-    (iokit-property-regex #"^AAPL,(DisplayPipe|OpenCLdisabled|IOGraphics_LER(|_RegTag_1|_RegTag_0|_Busy_2)|alias-policy|boot-display|display-alias|mux-switch-state|ndrv-dev|primary-display|slot-name)")
+    (iokit-property "AAPL,DisplayPipe")
+    (iokit-property "AAPL,OpenCLdisabled")
+    (iokit-property "AAPL,IOGraphics_LER")
+    (iokit-property "AAPL,IOGraphics_LER_RegTag_0")
+    (iokit-property "AAPL,IOGraphics_LER_RegTag_1")
+    (iokit-property "AAPL,IOGraphics_LER_Busy_2")
+    (iokit-property "AAPL,alias-policy")
+    (iokit-property "AAPL,boot-display")
+    (iokit-property "AAPL,display-alias")
+    (iokit-property "AAPL,mux-switch-state")
+    (iokit-property "AAPL,ndrv-dev")
+    (iokit-property "AAPL,primary-display")
+    (iokit-property "AAPL,slot-name")
     (iokit-property "APTDevice")
     (iokit-property "AVCSupported")
-    (iokit-property-regex #"^AppleJPEG(NumCores|Supports(AppleInterchangeFormats|MissingEOI|RSTLogging))")
+    (iokit-property "AppleJPEGNumCores")
+    (iokit-property "AppleJPEGSupportsAppleInterchangeFormats")
+    (iokit-property "AppleJPEGSupportsMissingEOI")
+    (iokit-property "AppleJPEGSupportsRSTLogging")
     (iokit-property "BaseAddressAlignmentRequirement")
-    (iokit-property-regex #"^DisplayPipe(PlaneBaseAlignment|StrideRequirements)")
+    (iokit-property "DisplayPipePlaneBaseAlignment")
+    (iokit-property "DisplayPipeStrideRequirements")
     (iokit-property "HEVCSupported")
-    (iokit-property-regex #"IOGVA(BGRAEnc|Codec|EncoderRestricted|Scaler)")
+    (iokit-property "IOGVABGRAEnc")
+    (iokit-property "IOGVACodec")
+    (iokit-property "IOGVAEncoderRestricted")
+    (iokit-property "IOGVAScaler")
     (iokit-property "IOClassNameOverride")
     (iokit-property "IOPlatformUUID")
     (iokit-property "IOSurfaceAcceleratorCapabilitiesDict")
@@ -783,7 +799,8 @@
     (iokit-property "artwork-display-gamut") ;; <rdar://problem/49497788>
     (iokit-property "artwork-dynamic-displaymode") ;; <rdar://problem/49497720>
     (iokit-property "artwork-scale-factor") ;; <rdar://problem/49497788>
-    (iokit-property-regex #"(canvas-height|canvas-width)")
+    (iokit-property "canvas-height")
+    (iokit-property "canvas-width")
     (iokit-property "chip-id") ;; <rdar://problem/52903477>
     (iokit-property "class-code")
     (iokit-property "color-accuracy-index")
@@ -864,7 +881,7 @@
 )
 
 (deny file-write-create (vnode-type SYMLINK))
-(deny file-read-xattr file-write-xattr (xattr-regex #"^com\.apple\.security\.private\."))
+(deny file-read-xattr file-write-xattr (xattr-prefix "com.apple.security.private."))
 
 ;; Allow loading injected bundles.
 (allow file-map-executable (with telemetry))
@@ -935,7 +952,7 @@
 (media-capture-support)
 
 (allow mach-lookup (with telemetry)
-  (global-name "com.apple.audio.AudioQueueServer" "com.apple.audio.AudioComponentRegistrar")
+  (global-name "com.apple.audio.AudioQueueServer")
 )
 
 ;; These services have been identified as unused during living-on.
@@ -945,3 +962,101 @@
 (deny mach-lookup
     (global-name "com.apple.webkit.camera")
 )
+
+(when (defined? 'syscall-unix)
+    (allow syscall-unix (with telemetry))
+    (allow syscall-unix (syscall-number
+        SYS___disable_threadsignal
+        SYS___mac_syscall
+        SYS___pthread_sigmask
+        SYS___semwait_signal
+        SYS_access
+        SYS_bsdthread_create
+        SYS_bsdthread_ctl
+        SYS_bsdthread_register
+        SYS_bsdthread_terminate
+        SYS_change_fdguard_np
+        SYS_chdir
+        SYS_close
+        SYS_close_nocancel
+        SYS_connect
+        SYS_csops
+        SYS_csops_audittoken
+        SYS_exit
+        SYS_fcntl
+        SYS_flock
+        SYS_fsetattrlist
+        SYS_fsetxattr
+        SYS_fsgetpath
+        SYS_fstat64
+        SYS_fstatat64
+        SYS_fstatfs64
+        SYS_ftruncate
+        SYS_getattrlist
+        SYS_getdirentries64
+        SYS_getegid
+        SYS_getentropy
+        SYS_geteuid
+        SYS_getfsstat64
+        SYS_getgid
+        SYS_getpid
+        SYS_getrlimit
+        SYS_gettid
+        SYS_gettimeofday
+        SYS_getuid
+        SYS_ioctl
+        SYS_issetugid
+        SYS_kdebug_trace64
+        SYS_kdebug_trace_string
+        SYS_kdebug_typefilter
+        SYS_kevent_id
+        SYS_kevent_qos
+        SYS_kqueue_workloop_ctl
+        SYS_lseek
+        SYS_lstat64
+        SYS_madvise
+        SYS_memorystatus_control
+        SYS_mkdir
+        SYS_mmap
+        SYS_mprotect
+        SYS_msync
+        SYS_munmap
+        SYS_objc_bp_assist_cfg_np
+        SYS_open
+        SYS_open_nocancel
+        SYS_openat
+        SYS_os_fault_with_payload
+        SYS_pathconf
+        SYS_pread
+        SYS_proc_info
+        SYS_psynch_cvbroad
+        SYS_psynch_cvclrprepost
+        SYS_psynch_cvsignal
+        SYS_psynch_cvwait
+        SYS_psynch_mutexdrop
+        SYS_psynch_mutexwait
+        SYS_psynch_rw_rdlock
+        SYS_psynch_rw_unlock
+        SYS_psynch_rw_wrlock
+        SYS_read
+        SYS_read_nocancel
+        SYS_readlink
+        SYS_rename
+        SYS_sem_close
+        SYS_sem_open
+        SYS_sendto
+        SYS_shared_region_check_np
+        SYS_shm_open
+        SYS_sigaction
+        SYS_socket
+        SYS_stat64
+        SYS_sysctl
+        SYS_sysctlbyname
+        SYS_thread_selfid
+        SYS_ulock_wait
+        SYS_ulock_wake
+        SYS_work_interval_ctl
+        SYS_workq_kernreturn
+        SYS_workq_open
+        SYS_write_nocancel
+        SYS_writev)))

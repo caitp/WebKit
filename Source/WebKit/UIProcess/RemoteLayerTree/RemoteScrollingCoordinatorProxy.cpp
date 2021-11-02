@@ -76,16 +76,16 @@ const RemoteLayerTreeHost* RemoteScrollingCoordinatorProxy::layerTreeHost() cons
     return &remoteDrawingArea.remoteLayerTreeHost();
 }
 
-void RemoteScrollingCoordinatorProxy::commitScrollingTreeState(const RemoteScrollingCoordinatorTransaction& transaction, RequestedScrollInfo& requestedScrollInfo)
+std::optional<RequestedScrollData> RemoteScrollingCoordinatorProxy::commitScrollingTreeState(const RemoteScrollingCoordinatorTransaction& transaction)
 {
-    m_requestedScrollInfo = &requestedScrollInfo;
+    m_requestedScroll = { };
 
     auto stateTree = WTFMove(const_cast<RemoteScrollingCoordinatorTransaction&>(transaction).scrollingStateTree());
 
     auto* layerTreeHost = this->layerTreeHost();
     if (!layerTreeHost) {
         ASSERT_NOT_REACHED();
-        return;
+        return { };
     }
 
     connectStateNodeLayers(*stateTree, *layerTreeHost);
@@ -93,7 +93,7 @@ void RemoteScrollingCoordinatorProxy::commitScrollingTreeState(const RemoteScrol
 
     establishLayerTreeScrollingRelations(*layerTreeHost);
 
-    m_requestedScrollInfo = nullptr;
+    return std::exchange(m_requestedScroll, { });
 }
 
 #if !PLATFORM(IOS_FAMILY)
@@ -236,13 +236,19 @@ void RemoteScrollingCoordinatorProxy::scrollingTreeNodeDidScroll(ScrollingNodeID
     m_webPageProxy.send(Messages::RemoteScrollingCoordinator::ScrollPositionChangedForNode(scrolledNodeID, newScrollPosition, scrollingLayerPositionAction == ScrollingLayerPositionAction::Sync));
 }
 
-void RemoteScrollingCoordinatorProxy::scrollingTreeNodeRequestsScroll(ScrollingNodeID scrolledNodeID, const FloatPoint& scrollPosition, ScrollType scrollType, ScrollClamping)
+void RemoteScrollingCoordinatorProxy::scrollingTreeNodeDidStopAnimatedScroll(ScrollingNodeID scrolledNodeID)
 {
-    if (scrolledNodeID == rootScrollingNodeID() && m_requestedScrollInfo) {
-        m_requestedScrollInfo->requestsScrollPositionUpdate = true;
-        m_requestedScrollInfo->requestIsProgrammaticScroll = scrollType == ScrollType::Programmatic;
-        m_requestedScrollInfo->requestedScrollPosition = scrollPosition;
+    m_webPageProxy.send(Messages::RemoteScrollingCoordinator::AnimatedScrollDidEndForNode(scrolledNodeID));
+}
+
+bool RemoteScrollingCoordinatorProxy::scrollingTreeNodeRequestsScroll(ScrollingNodeID scrolledNodeID, const RequestedScrollData& request)
+{
+    if (scrolledNodeID == rootScrollingNodeID()) {
+        m_requestedScroll = request;
+        return true;
     }
+
+    return false;
 }
 
 String RemoteScrollingCoordinatorProxy::scrollingTreeAsText() const

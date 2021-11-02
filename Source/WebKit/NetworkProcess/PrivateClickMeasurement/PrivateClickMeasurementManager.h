@@ -45,11 +45,15 @@ public:
     explicit PrivateClickMeasurementManager(UniqueRef<PCM::Client>&&, const String& storageDirectory);
     ~PrivateClickMeasurementManager();
 
-    void storeUnattributed(PrivateClickMeasurement&&) final;
-    void handleAttribution(AttributionTriggerData&&, const URL& requestURL, WebCore::RegistrableDomain&& redirectDomain, const URL& firstPartyURL) final;
+    using ApplicationBundleIdentifier = String;
+
+    void storeUnattributed(PrivateClickMeasurement&&, CompletionHandler<void()>&&) final;
+    void handleAttribution(AttributionTriggerData&&, const URL& requestURL, WebCore::RegistrableDomain&& redirectDomain, const URL& firstPartyURL, const ApplicationBundleIdentifier&) final;
     void clear(CompletionHandler<void()>&&) final;
     void clearForRegistrableDomain(const RegistrableDomain&, CompletionHandler<void()>&&) final;
     void migratePrivateClickMeasurementFromLegacyStorage(PrivateClickMeasurement&&, PrivateClickMeasurementAttributionType) final;
+    void setDebugModeIsEnabled(bool) final;
+    void firePendingAttributionRequests();
 
     void toStringForTesting(CompletionHandler<void(String)>&&) const final;
     void setOverrideTimerForTesting(bool value) final { m_isRunningTest = value; }
@@ -58,9 +62,9 @@ public:
     void setAttributionReportURLsForTesting(URL&& sourceURL, URL&& destinationURL) final;
     void markAllUnattributedAsExpiredForTesting() final;
     void markAttributedPrivateClickMeasurementsAsExpiredForTesting(CompletionHandler<void()>&&) final;
-    void setEphemeralMeasurementForTesting(bool value) final { m_isRunningEphemeralMeasurementTest = value; }
     void setPCMFraudPreventionValuesForTesting(String&& unlinkableToken, String&& secretToken, String&& signature, String&& keyID) final;
     void startTimerImmediatelyForTesting() final;
+    void setPrivateClickMeasurementAppBundleIDForTesting(ApplicationBundleIdentifier&&);
     void destroyStoreForTesting(CompletionHandler<void()>&&) final;
     void allowTLSCertificateChainForLocalPCMTesting(const WebCore::CertificateInfo&) final;
 
@@ -70,22 +74,20 @@ private:
     void startTimer(Seconds);
     void getTokenPublicKey(PrivateClickMeasurement&&, PrivateClickMeasurement::AttributionReportEndpoint, PrivateClickMeasurement::PcmDataCarried, Function<void(PrivateClickMeasurement&& attribution, const String& publicKeyBase64URL)>&&);
     void getSignedUnlinkableToken(PrivateClickMeasurement&&);
-    void insertPrivateClickMeasurement(PrivateClickMeasurement&&, PrivateClickMeasurementAttributionType);
+    void insertPrivateClickMeasurement(PrivateClickMeasurement&&, PrivateClickMeasurementAttributionType, CompletionHandler<void()>&&);
     void clearSentAttribution(PrivateClickMeasurement&&, PrivateClickMeasurement::AttributionReportEndpoint);
-    void attribute(const SourceSite&, const AttributionDestinationSite&, AttributionTriggerData&&);
+    void attribute(const SourceSite&, const AttributionDestinationSite&, AttributionTriggerData&&, const ApplicationBundleIdentifier&);
     void fireConversionRequest(const PrivateClickMeasurement&, PrivateClickMeasurement::AttributionReportEndpoint);
     void fireConversionRequestImpl(const PrivateClickMeasurement&, PrivateClickMeasurement::AttributionReportEndpoint);
-    void firePendingAttributionRequests();
     void clearExpired();
     bool featureEnabled() const;
     bool debugModeEnabled() const;
 
-    std::optional<PrivateClickMeasurement> m_ephemeralMeasurement;
-    WebCore::Timer m_firePendingAttributionRequestsTimer;
+    RunLoop::Timer<PrivateClickMeasurementManager> m_firePendingAttributionRequestsTimer;
     bool m_isRunningTest { false };
-    bool m_isRunningEphemeralMeasurementTest { false };
     std::optional<URL> m_tokenPublicKeyURLForTesting;
     std::optional<URL> m_tokenSignatureURLForTesting;
+    std::optional<ApplicationBundleIdentifier> m_privateClickMeasurementAppBundleIDForTesting;
     mutable RefPtr<PCM::Store> m_store;
     String m_storageDirectory;
     UniqueRef<PCM::Client> m_client;

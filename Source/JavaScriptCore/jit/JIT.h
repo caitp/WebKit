@@ -152,13 +152,8 @@ namespace JSC {
 
     struct CallCompilationInfo {
         MacroAssembler::Label doneLocation;
-#if USE(JSVALUE64)
         UnlinkedCallLinkInfo* unlinkedCallLinkInfo;
         JITConstantPool::Constant callLinkInfoConstant;
-#else
-        MacroAssembler::Label slowPathStart;
-        CallLinkInfo* callLinkInfo;
-#endif
     };
 
     void ctiPatchCallByReturnAddress(ReturnAddressPtr, FunctionPtr<CFunctionPtrTag> newCalleeFunction);
@@ -294,7 +289,7 @@ namespace JSC {
         void compileOpCall(const Instruction*, unsigned callLinkInfoIndex);
         template<typename Op>
         void compileOpCallSlowCase(const Instruction*, Vector<SlowCaseEntry>::iterator&, unsigned callLinkInfoIndex);
-#if USE(JSVALUE64)
+
         template<typename Op>
         std::enable_if_t<
             Op::opcodeID != op_call_varargs && Op::opcodeID != op_construct_varargs
@@ -306,19 +301,6 @@ namespace JSC {
             Op::opcodeID == op_call_varargs || Op::opcodeID == op_construct_varargs
             || Op::opcodeID == op_tail_call_varargs || Op::opcodeID == op_tail_call_forward_arguments
         , void> compileSetupFrame(const Op&, JITConstantPool::Constant callLinkInfoConstant);
-#else
-        template<typename Op>
-        std::enable_if_t<
-            Op::opcodeID != op_call_varargs && Op::opcodeID != op_construct_varargs
-            && Op::opcodeID != op_tail_call_varargs && Op::opcodeID != op_tail_call_forward_arguments
-        , void> compileSetupFrame(const Op&, CallLinkInfo*);
-
-        template<typename Op>
-        std::enable_if_t<
-            Op::opcodeID == op_call_varargs || Op::opcodeID == op_construct_varargs
-            || Op::opcodeID == op_tail_call_varargs || Op::opcodeID == op_tail_call_forward_arguments
-        , void> compileSetupFrame(const Op&, CallLinkInfo*);
-#endif
 
         template<typename Op>
         bool compileTailCall(const Op&, UnlinkedCallLinkInfo*, unsigned callLinkInfoIndex, JITConstantPool::Constant);
@@ -343,16 +325,12 @@ namespace JSC {
         void emitWriteBarrier(JSCell* owner);
         void emitWriteBarrier(GPRReg owner);
 
-        // This assumes that the value to profile is in regT0 and that regT3 is available for
-        // scratch.
 #if USE(JSVALUE64)
         template<typename Bytecode> void emitValueProfilingSite(const Bytecode&, GPRReg);
-        template<typename Bytecode> void emitValueProfilingSite(const Bytecode&, JSValueRegs);
-#else
-        void emitValueProfilingSite(ValueProfile&, JSValueRegs);
-        template<typename Metadata> void emitValueProfilingSite(Metadata&, JSValueRegs);
 #endif
+        template<typename Bytecode> void emitValueProfilingSite(const Bytecode&, JSValueRegs);
 
+        // This assumes that the value to profile is in regT0 (regT1/regT0 on JSVALUE32_64).
         void emitValueProfilingSiteIfProfiledOpcode(...);
         template<typename Op>
         std::enable_if_t<std::is_same<decltype(Op::Metadata::m_profile), ValueProfile>::value, void>
@@ -429,6 +407,9 @@ namespace JSC {
         void compileGetByIdHotPath(VirtualRegister baseReg, const Identifier*);
 
 #endif // USE(JSVALUE32_64)
+
+        void emitJumpSlowCaseIfNotJSCell(JSValueRegs);
+        void emitJumpSlowCaseIfNotJSCell(JSValueRegs, VirtualRegister);
 
         template<typename Op>
         void emit_compareAndJump(const Instruction*, RelationalCondition);
@@ -755,8 +736,10 @@ namespace JSC {
 
         static MacroAssemblerCodeRef<JITThunkPtrTag> slow_op_get_from_scopeGenerator(VM&);
         static MacroAssemblerCodeRef<JITThunkPtrTag> slow_op_resolve_scopeGenerator(VM&);
-        static MacroAssemblerCodeRef<JITThunkPtrTag> generateOpGetFromScopeThunk(VM&, std::optional<ResolveType>, const char* thunkName);
-        static MacroAssemblerCodeRef<JITThunkPtrTag> generateOpResolveScopeThunk(VM&, std::optional<ResolveType>, const char* thunkName);
+        template <ResolveType>
+        static MacroAssemblerCodeRef<JITThunkPtrTag> generateOpGetFromScopeThunk(VM&);
+        template <ResolveType>
+        static MacroAssemblerCodeRef<JITThunkPtrTag> generateOpResolveScopeThunk(VM&);
 #endif // ENABLE(EXTRA_CTI_THUNKS)
 
         Jump getSlowCase(Vector<SlowCaseEntry>::iterator& iter)
@@ -974,6 +957,8 @@ namespace JSC {
         void resetSP();
 
         JITConstantPool::Constant addToConstantPool(JITConstantPool::Type, void* payload = nullptr);
+        std::tuple<UnlinkedStructureStubInfo*, JITConstantPool::Constant> addUnlinkedStructureStubInfo();
+        std::tuple<UnlinkedCallLinkInfo*, JITConstantPool::Constant> addUnlinkedCallLinkInfo();
 
         Interpreter* m_interpreter;
 
@@ -1044,9 +1029,9 @@ namespace JSC {
 
         Vector<JITConstantPool::Value> m_constantPool;
         JITConstantPool::Constant m_globalObjectConstant { std::numeric_limits<unsigned>::max() };
-        Bag<UnlinkedCallLinkInfo> m_unlinkedCalls;
         Bag<CallLinkInfo> m_evalCallLinkInfos;
-        Bag<UnlinkedStructureStubInfo> m_unlinkedStubInfos;
+        SegmentedVector<UnlinkedCallLinkInfo> m_unlinkedCalls;
+        SegmentedVector<UnlinkedStructureStubInfo> m_unlinkedStubInfos;
         FixedVector<SimpleJumpTable> m_switchJumpTables;
         FixedVector<StringJumpTable> m_stringSwitchJumpTables;
 

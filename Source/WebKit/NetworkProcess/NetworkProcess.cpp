@@ -180,7 +180,7 @@ NetworkProcess::NetworkProcess(AuxiliaryProcessInitializationParameters&& parame
     LegacyCustomProtocolManager::networkProcessCreated(*this);
 #endif
 
-    NetworkStateNotifier::singleton().addListener([weakThis = makeWeakPtr(*this)](bool isOnLine) {
+    NetworkStateNotifier::singleton().addListener([weakThis = WeakPtr { *this }](bool isOnLine) {
         if (!weakThis)
             return;
         for (auto& webProcessConnection : weakThis->m_webProcessConnections.values())
@@ -346,7 +346,6 @@ void NetworkProcess::initializeNetworkProcess(NetworkProcessCreationParameters&&
     setCacheModel(parameters.cacheModel);
 
     setPrivateClickMeasurementEnabled(parameters.enablePrivateClickMeasurement);
-    setPrivateClickMeasurementDebugMode(parameters.enablePrivateClickMeasurementDebugMode);
     m_ftpEnabled = parameters.ftpEnabled;
 
     for (auto& supplement : m_supplements.values())
@@ -1352,24 +1351,10 @@ bool NetworkProcess::privateClickMeasurementEnabled() const
     return m_privateClickMeasurementEnabled;
 }
 
-void NetworkProcess::setPrivateClickMeasurementDebugMode(bool enabled)
+void NetworkProcess::setPrivateClickMeasurementDebugMode(PAL::SessionID sessionID, bool enabled)
 {
-    if (m_privateClickMeasurementDebugModeEnabled == enabled)
-        return;
-
-    m_privateClickMeasurementDebugModeEnabled = enabled;
-
-    String message = enabled ? "[Private Click Measurement] Turned Debug Mode on."_s : "[Private Click Measurement] Turned Debug Mode off."_s;
-    for (auto& networkConnectionToWebProcess : m_webProcessConnections.values()) {
-        if (networkConnectionToWebProcess->sessionID().isEphemeral())
-            continue;
-        networkConnectionToWebProcess->broadcastConsoleMessage(MessageSource::PrivateClickMeasurement, MessageLevel::Info, message);
-    }
-}
-
-bool NetworkProcess::privateClickMeasurementDebugModeEnabled() const
-{
-    return m_privateClickMeasurementDebugModeEnabled;
+    if (auto* networkSession = this->networkSession(sessionID))
+        networkSession->setPrivateClickMeasurementDebugMode(enabled);
 }
 
 void NetworkProcess::preconnectTo(PAL::SessionID sessionID, WebPageProxyIdentifier webPageProxyID, WebCore::PageIdentifier webPageID, const URL& url, const String& userAgent, WebCore::StoredCredentialsPolicy storedCredentialsPolicy, std::optional<NavigatingToAppBoundDomain> isNavigatingToAppBoundDomain, LastNavigationWasAppInitiated lastNavigationWasAppInitiated)
@@ -1403,8 +1388,9 @@ void NetworkProcess::preconnectTo(PAL::SessionID sessionID, WebPageProxyIdentifi
     parameters.shouldPreconnectOnly = PreconnectOnly::Yes;
 
     networkSession->networkLoadScheduler().startedPreconnectForMainResource(url, userAgent);
-    auto task = new PreconnectTask(*networkSession, WTFMove(parameters), [networkSession, url, userAgent](const WebCore::ResourceError& error) {
-        networkSession->networkLoadScheduler().finishedPreconnectForMainResource(url, userAgent, error);
+    auto task = new PreconnectTask(*networkSession, WTFMove(parameters), [weakNetworkSession = WeakPtr { *networkSession }, url, userAgent](const WebCore::ResourceError& error) {
+        if (weakNetworkSession)
+            weakNetworkSession->networkLoadScheduler().finishedPreconnectForMainResource(url, userAgent, error);
     });
     task->setTimeout(10_s);
     task->start();
@@ -1954,7 +1940,9 @@ void NetworkProcess::deleteAndRestrictWebsiteDataForRegistrableDomains(PAL::Sess
 
     if (websiteDataTypes.contains(WebsiteDataType::DiskCache)) {
         forEachNetworkSession([sessionID, fetchOptions, &domainsToDeleteAllNonCookieWebsiteDataFor, &callbackAggregator](auto& session) {
-            fetchDiskCacheEntries(session.cache(), sessionID, fetchOptions, [domainsToDeleteAllNonCookieWebsiteDataFor, callbackAggregator, session = makeWeakPtr(&session)](auto entries) mutable {
+            /* hack: gcc 8.4 will segfault if the WeakPtr is instantiated within the lambda captures */
+            auto ws = WeakPtr { session };
+            fetchDiskCacheEntries(session.cache(), sessionID, fetchOptions, [domainsToDeleteAllNonCookieWebsiteDataFor, callbackAggregator, session = WTFMove(ws)](auto entries) mutable {
                 if (!session)
                     return;
 
@@ -2236,7 +2224,7 @@ void NetworkProcess::suspendIDBServers(bool isSuspensionImminent)
     if (allSuspended)
         return;
 
-    RunLoop::main().dispatchAfter(5_s, [this, weakThis = makeWeakPtr(*this), suspensionIdentifier = m_suspensionIdentifier] {
+    RunLoop::main().dispatchAfter(5_s, [this, weakThis = WeakPtr { *this }, suspensionIdentifier = m_suspensionIdentifier] {
         if (!weakThis)
             return;
 
@@ -2486,11 +2474,14 @@ SWServer& NetworkProcess::swServerForSession(PAL::SessionID sessionID)
             completionHandler({ });
         };
 #endif
-        return makeUnique<SWServer>(makeUniqueRef<WebSWOriginStore>(), info.processTerminationDelayEnabled, WTFMove(path), sessionID, parentProcessHasServiceWorkerEntitlement(), [this, sessionID](auto&& jobData, bool shouldRefreshCache, auto&& request, auto&& completionHandler) mutable {
+        bool shouldRunServiceWorkersOnMainThreadForTesting = false;
+        if (auto* session = networkSession(sessionID))
+            shouldRunServiceWorkersOnMainThreadForTesting = session->shouldRunServiceWorkersOnMainThreadForTesting();
+        return makeUnique<SWServer>(makeUniqueRef<WebSWOriginStore>(), info.processTerminationDelayEnabled, WTFMove(path), sessionID, shouldRunServiceWorkersOnMainThreadForTesting, parentProcessHasServiceWorkerEntitlement(), [this, sessionID](auto&& jobData, bool shouldRefreshCache, auto&& request, auto&& completionHandler) mutable {
             ServiceWorkerSoftUpdateLoader::start(networkSession(sessionID), WTFMove(jobData), shouldRefreshCache, WTFMove(request), WTFMove(completionHandler));
-        }, [this, sessionID](auto& registrableDomain, auto&& completionHandler) {
+        }, [this, sessionID](auto& registrableDomain, std::optional<ServiceWorkerClientIdentifier> serviceWorkerPageIdentifier, auto&& completionHandler) {
             ASSERT(!registrableDomain.isEmpty());
-            parentProcessConnection()->sendWithAsyncReply(Messages::NetworkProcessProxy::EstablishWorkerContextConnectionToNetworkProcess { registrableDomain, sessionID }, WTFMove(completionHandler), 0);
+            parentProcessConnection()->sendWithAsyncReply(Messages::NetworkProcessProxy::EstablishWorkerContextConnectionToNetworkProcess { registrableDomain, serviceWorkerPageIdentifier, sessionID }, WTFMove(completionHandler), 0);
         }, WTFMove(appBoundDomainsCallback));
     });
     return *result.iterator->value;
@@ -2528,7 +2519,37 @@ void NetworkProcess::addServiceWorkerSession(PAL::SessionID sessionID, bool proc
     if (addResult.isNewEntry)
         SandboxExtension::consumePermanently(handle);
 }
+
+void NetworkProcess::processPushMessage(PAL::SessionID sessionID, const std::optional<IPC::DataReference>& ipcData, URL&& registrationURL, CompletionHandler<void(bool)>&& callback)
+{
+    std::optional<Vector<uint8_t>> data;
+    if (ipcData)
+        data = Vector<uint8_t> { ipcData->data(), ipcData->size() };
+    swServerForSession(sessionID).processPushMessage(WTFMove(data), WTFMove(registrationURL), WTFMove(callback));
+}
 #endif // ENABLE(SERVICE_WORKER)
+
+void NetworkProcess::deletePushAndNotificationRegistration(PAL::SessionID sessionID, const SecurityOriginData& origin, CompletionHandler<void(const String&)>&& callback)
+{
+#if ENABLE(BUILT_IN_NOTIFICATIONS)
+    if (auto* session = networkSession(sessionID)) {
+        session->notificationManager().deletePushAndNotificationRegistration(origin, WTFMove(callback));
+        return;
+    }
+#endif
+    callback("Cannot find network session");
+}
+
+void NetworkProcess::getOriginsWithPushAndNotificationPermissions(PAL::SessionID sessionID, CompletionHandler<void(const Vector<WebCore::SecurityOriginData>&)>&& callback)
+{
+#if ENABLE(BUILT_IN_NOTIFICATIONS)
+    if (auto* session = networkSession(sessionID)) {
+        session->notificationManager().getOriginsWithPushAndNotificationPermissions(WTFMove(callback));
+        return;
+    }
+#endif
+    callback({ });
+}
 
 void NetworkProcess::requestStorageSpace(PAL::SessionID sessionID, const ClientOrigin& origin, uint64_t quota, uint64_t currentSize, uint64_t spaceRequired, CompletionHandler<void(std::optional<uint64_t>)>&& callback)
 {
@@ -2548,7 +2569,7 @@ RefPtr<StorageQuotaManager> NetworkProcess::storageQuotaManager(PAL::SessionID s
 
         return CacheStorage::Engine::diskUsage(cacheRootPath, origin) + IDBServer::IDBServer::diskUsage(idbRootPath, origin);
     };
-    StorageQuotaManager::QuotaIncreaseRequester quotaIncreaseRequester = [this, weakThis = makeWeakPtr(*this), sessionID, origin] (uint64_t currentQuota, uint64_t currentSpace, uint64_t requestedIncrease, auto&& callback) {
+    StorageQuotaManager::QuotaIncreaseRequester quotaIncreaseRequester = [this, weakThis = WeakPtr { *this }, sessionID, origin] (uint64_t currentQuota, uint64_t currentSpace, uint64_t requestedIncrease, auto&& callback) {
         ASSERT(isMainRunLoop());
         if (!weakThis)
             callback({ });
@@ -2618,7 +2639,7 @@ void NetworkProcess::simulateResourceLoadStatisticsSessionRestart(PAL::SessionID
 {
     // FIXME: Rename this to simulatePrivateClickMeasurementSessionRestart.
     if (auto* session = networkSession(sessionID)) {
-        session->recreatePrivateClickMeasurementStore([session = makeWeakPtr(*session), completionHandler = WTFMove(completionHandler)] () mutable {
+        session->recreatePrivateClickMeasurementStore([session = WeakPtr { *session }, completionHandler = WTFMove(completionHandler)] () mutable {
             if (session)
                 session->firePrivateClickMeasurementTimerImmediatelyForTesting();
             completionHandler();
@@ -2682,6 +2703,14 @@ void NetworkProcess::setPCMFraudPreventionValuesForTesting(PAL::SessionID sessio
 {
     if (auto* session = networkSession(sessionID))
         session->setPCMFraudPreventionValuesForTesting(WTFMove(unlinkableToken), WTFMove(secretToken), WTFMove(signature), WTFMove(keyID));
+
+    completionHandler();
+}
+
+void NetworkProcess::setPrivateClickMeasurementAppBundleIDForTesting(PAL::SessionID sessionID, String&& appBundleIDForTesting, CompletionHandler<void()>&& completionHandler)
+{
+    if (auto* session = networkSession(sessionID))
+        session->setPrivateClickMeasurementAppBundleIDForTesting(WTFMove(appBundleIDForTesting));
 
     completionHandler();
 }
@@ -2778,7 +2807,7 @@ void NetworkProcess::updateBundleIdentifier(String&& bundleIdentifier, Completio
 {
 #if PLATFORM(COCOA)
     WebCore::clearApplicationBundleIdentifierTestingOverride();
-    WebCore::setApplicationBundleIdentifier(bundleIdentifier);
+    WebCore::setApplicationBundleIdentifierOverride(bundleIdentifier);
 #endif
     completionHandler();
 }

@@ -27,11 +27,11 @@
 #import "WKWebViewPrivateForTesting.h"
 
 #import "AudioSessionRoutingArbitratorProxy.h"
+#import "GPUProcessProxy.h"
 #import "MediaSessionCoordinatorProxyPrivate.h"
 #import "PlaybackSessionManagerProxy.h"
 #import "UserMediaProcessManager.h"
 #import "ViewGestureController.h"
-#import "WKWebViewIOS.h"
 #import "WebPageProxy.h"
 #import "WebProcessPool.h"
 #import "WebProcessProxy.h"
@@ -41,6 +41,14 @@
 #import <WebCore/RuntimeApplicationChecks.h>
 #import <WebCore/ValidationBubble.h>
 #import <wtf/RetainPtr.h>
+
+#if PLATFORM(MAC)
+#import "WKWebViewMac.h"
+#endif
+
+#if PLATFORM(IOS_FAMILY)
+#import "WKWebViewIOS.h"
+#endif
 
 #if ENABLE(MEDIA_SESSION_COORDINATOR)
 @interface WKMediaSessionCoordinatorHelper : NSObject <_WKMediaSessionCoordinatorDelegate>
@@ -55,20 +63,20 @@
 
 @implementation WKWebView (WKTesting)
 
-- (void)_addEventAttributionWithSourceID:(uint8_t)sourceID destinationURL:(NSURL *)destination sourceDescription:(NSString *)sourceDescription purchaser:(NSString *)purchaser reportEndpoint:(NSURL *)reportEndpoint optionalNonce:(NSString *)nonce applicationBundleID:(NSString *)bundleID
+- (void)_addEventAttributionWithSourceID:(uint8_t)sourceID destinationURL:(NSURL *)destination sourceDescription:(NSString *)sourceDescription purchaser:(NSString *)purchaser reportEndpoint:(NSURL *)reportEndpoint optionalNonce:(NSString *)nonce applicationBundleID:(NSString *)bundleID ephemeral:(BOOL)ephemeral
 {
     WebCore::PrivateClickMeasurement measurement(
         WebCore::PrivateClickMeasurement::SourceID(sourceID),
         WebCore::PrivateClickMeasurement::SourceSite(reportEndpoint),
         WebCore::PrivateClickMeasurement::AttributionDestinationSite(destination),
         bundleID,
-        sourceDescription,
-        purchaser
+        WallTime::now(),
+        ephemeral ? WebCore::PrivateClickMeasurement::AttributionEphemeral::Yes : WebCore::PrivateClickMeasurement::AttributionEphemeral::No
     );
     if (nonce)
         measurement.setEphemeralSourceNonce({ nonce });
 
-    _page->setPrivateClickMeasurement(WTFMove(measurement));
+    _page->setPrivateClickMeasurement({{ WTFMove(measurement), { }, { }}});
 }
 
 - (void)_setPageScale:(CGFloat)scale withOrigin:(CGPoint)origin
@@ -354,6 +362,13 @@
     });
 }
 
+- (void)_setPrivateClickMeasurementAppBundleIDForTesting:(NSString *)appBundleID completionHandler:(void(^)(void))completionHandler
+{
+    _page->setPrivateClickMeasurementAppBundleIDForTesting(appBundleID, [completionHandler = makeBlockPtr(completionHandler)] {
+        completionHandler();
+    });
+}
+
 - (void)_dumpPrivateClickMeasurement:(void(^)(NSString *))completionHandler
 {
     _page->dumpPrivateClickMeasurement([completionHandler = makeBlockPtr(completionHandler)](const String& privateClickMeasurement) {
@@ -406,6 +421,19 @@
 {
     _page->clearAppPrivacyReportTestingData([completionHandler = makeBlockPtr(completionHandler)] {
         completionHandler();
+    });
+}
+
+- (void)_gpuToWebProcessConnectionCountForTesting:(void(^)(NSUInteger))completionHandler
+{
+    RefPtr gpuProcess = _page->process().processPool().gpuProcess();
+    if (!gpuProcess) {
+        completionHandler(0);
+        return;
+    }
+
+    gpuProcess->webProcessConnectionCountForTesting([completionHandler = makeBlockPtr(completionHandler)](uint64_t count) {
+        completionHandler(count);
     });
 }
 
@@ -489,7 +517,7 @@
 
         void join(WebKit::MediaSessionCommandCompletionHandler&& callback) final
         {
-            [m_clientCoordinator joinWithCompletion:makeBlockPtr([weakThis = makeWeakPtr(this), callback = WTFMove(callback)] (BOOL success) mutable {
+            [m_clientCoordinator joinWithCompletion:makeBlockPtr([weakThis = WeakPtr { *this }, callback = WTFMove(callback)] (BOOL success) mutable {
                 if (!weakThis) {
                     callback(WebCore::ExceptionData { WebCore::InvalidStateError, String() });
                     return;
@@ -506,7 +534,7 @@
 
         void seekTo(double time, WebKit::MediaSessionCommandCompletionHandler&& callback) final
         {
-            [m_clientCoordinator seekTo:time withCompletion:makeBlockPtr([weakThis = makeWeakPtr(this), callback = WTFMove(callback)] (BOOL success) mutable {
+            [m_clientCoordinator seekTo:time withCompletion:makeBlockPtr([weakThis = WeakPtr { *this }, callback = WTFMove(callback)] (BOOL success) mutable {
                 if (!weakThis) {
                     callback(WebCore::ExceptionData { WebCore::InvalidStateError, String() });
                     return;
@@ -518,7 +546,7 @@
 
         void play(WebKit::MediaSessionCommandCompletionHandler&& callback) final
         {
-            [m_clientCoordinator playWithCompletion:makeBlockPtr([weakThis = makeWeakPtr(this), callback = WTFMove(callback)] (BOOL success) mutable {
+            [m_clientCoordinator playWithCompletion:makeBlockPtr([weakThis = WeakPtr { *this }, callback = WTFMove(callback)] (BOOL success) mutable {
                 if (!weakThis) {
                     callback(WebCore::ExceptionData { WebCore::InvalidStateError, String() });
                     return;
@@ -530,7 +558,7 @@
 
         void pause(WebKit::MediaSessionCommandCompletionHandler&& callback) final
         {
-            [m_clientCoordinator pauseWithCompletion:makeBlockPtr([weakThis = makeWeakPtr(this), callback = WTFMove(callback)] (BOOL success) mutable {
+            [m_clientCoordinator pauseWithCompletion:makeBlockPtr([weakThis = WeakPtr { *this }, callback = WTFMove(callback)] (BOOL success) mutable {
                 if (!weakThis) {
                     callback(WebCore::ExceptionData { WebCore::InvalidStateError, String() });
                     return;
@@ -542,7 +570,7 @@
 
         void setTrack(const String& track, WebKit::MediaSessionCommandCompletionHandler&& callback) final
         {
-            [m_clientCoordinator setTrack:track withCompletion:makeBlockPtr([weakThis = makeWeakPtr(this), callback = WTFMove(callback)] (BOOL success) mutable {
+            [m_clientCoordinator setTrack:track withCompletion:makeBlockPtr([weakThis = WeakPtr { *this }, callback = WTFMove(callback)] (BOOL success) mutable {
                 if (!weakThis) {
                     callback(WebCore::ExceptionData { WebCore::InvalidStateError, String() });
                     return;
@@ -622,7 +650,7 @@
     self = [super init];
     if (!self)
         return nil;
-    m_coordinatorClient = makeWeakPtr(coordinator);
+    m_coordinatorClient = coordinator;
     return self;
 }
 

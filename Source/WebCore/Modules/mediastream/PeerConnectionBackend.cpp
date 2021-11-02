@@ -177,7 +177,7 @@ void PeerConnectionBackend::setLocalDescriptionSucceeded(std::optional<Descripti
             m_peerConnection.updateDescriptions(WTFMove(*descriptionStates));
         m_peerConnection.updateTransceiversAfterSuccessfulLocalDescription();
         m_peerConnection.updateSctpBackend(WTFMove(sctpBackend));
-
+        m_peerConnection.processIceTransportChanges();
         callback({ });
     });
 }
@@ -235,6 +235,7 @@ void PeerConnectionBackend::setRemoteDescriptionSucceeded(std::optional<Descript
 
         m_peerConnection.updateTransceiversAfterSuccessfulRemoteDescription();
         m_peerConnection.updateSctpBackend(WTFMove(sctpBackend));
+        m_peerConnection.processIceTransportChanges();
         callback({ });
     });
 }
@@ -310,7 +311,7 @@ void PeerConnectionBackend::addIceCandidate(RTCIceCandidate* iceCandidate, Funct
         return;
     }
 
-    doAddIceCandidate(*iceCandidate, [weakThis = makeWeakPtr(this), callback = WTFMove(callback)](auto&& result) mutable {
+    doAddIceCandidate(*iceCandidate, [weakThis = WeakPtr { *this }, callback = WTFMove(callback)](auto&& result) mutable {
         if (!weakThis)
             return;
 
@@ -371,7 +372,7 @@ void PeerConnectionBackend::newICECandidate(String&& sdp, String&& mid, unsigned
         ALWAYS_LOG(logSiteIdentifier, "Gathered ice candidate:", sdp);
         m_finishedGatheringCandidates = false;
 
-        ASSERT(!m_shouldFilterICECandidates || sdp.contains(".local"));
+        ASSERT(!m_shouldFilterICECandidates || sdp.contains(".local") || sdp.contains(" srflx "));
         auto candidate = RTCIceCandidate::create(WTFMove(sdp), WTFMove(mid), sdpMLineIndex);
         m_peerConnection.dispatchEvent(RTCPeerConnectionIceEvent::create(Event::CanBubble::No, Event::IsCancelable::No, WTFMove(candidate), WTFMove(serverURL)));
     });

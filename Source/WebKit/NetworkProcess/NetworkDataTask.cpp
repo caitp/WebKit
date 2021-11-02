@@ -64,7 +64,7 @@ Ref<NetworkDataTask> NetworkDataTask::create(NetworkSession& session, NetworkDat
 }
 
 NetworkDataTask::NetworkDataTask(NetworkSession& session, NetworkDataTaskClient& client, const ResourceRequest& requestWithCredentials, StoredCredentialsPolicy storedCredentialsPolicy, bool shouldClearReferrerOnHTTPSToHTTPRedirect, bool dataTaskIsForMainFrameNavigation)
-    : m_session(makeWeakPtr(session))
+    : m_session(session)
     , m_client(&client)
     , m_partition(requestWithCredentials.cachePartition())
     , m_storedCredentialsPolicy(storedCredentialsPolicy)
@@ -94,7 +94,7 @@ NetworkDataTask::~NetworkDataTask()
 
 void NetworkDataTask::scheduleFailure(FailureType type)
 {
-    RunLoop::main().dispatch([this, weakThis = makeWeakPtr(*this), type] {
+    RunLoop::main().dispatch([this, weakThis = WeakPtr { *this }, type] {
         if (!weakThis || !m_client)
             return;
 
@@ -173,6 +173,13 @@ void NetworkDataTask::restrictRequestReferrerToOriginIfNeeded(WebCore::ResourceR
     if ((m_session->sessionID().isEphemeral() || m_session->isResourceLoadStatisticsEnabled()) && m_session->shouldDowngradeReferrer() && isThirdPartyRequest(request))
         request.setExistingHTTPReferrerToOriginString();
 #endif
+}
+
+String NetworkDataTask::attributedBundleIdentifier(WebPageProxyIdentifier pageID)
+{
+    if (auto* session = networkSession())
+        return session->attributedBundleIdentifierFromPageIdentifier(pageID);
+    return { };
 }
 
 } // namespace WebKit

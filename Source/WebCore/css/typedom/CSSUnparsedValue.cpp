@@ -36,8 +36,8 @@
 #include "CSSParserToken.h"
 #include "CSSParserTokenRange.h"
 #include "ExceptionOr.h"
+#include <variant>
 #include <wtf/IsoMallocInlines.h>
-#include <wtf/Variant.h>
 #include <wtf/text/StringBuilder.h>
 #include <wtf/text/StringView.h>
 #include <wtf/text/WTFString.h>
@@ -130,7 +130,7 @@ String CSSUnparsedValue::toString() const
 void CSSUnparsedValue::serialize(StringBuilder& builder) const
 {
     for (auto& segment : m_segments) {
-        WTF::visit(WTF::makeVisitor([&] (const String& value) {
+        std::visit(WTF::makeVisitor([&] (const String& value) {
             builder.append(value);
         }, [&] (const RefPtr<CSSOMVariableReferenceValue>& value) {
             value->serialize(builder);

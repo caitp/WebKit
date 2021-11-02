@@ -2,6 +2,7 @@
 
 PASS setup
 PASS stylesheet takes effect
+PASS accent-color
 PASS align-content
 PASS align-items
 PASS align-self
@@ -16,6 +17,7 @@ PASS animation-iteration-count
 PASS animation-name
 PASS animation-play-state
 PASS animation-timing-function
+PASS appearance
 PASS aspect-ratio
 PASS backface-visibility
 PASS background-attachment
@@ -84,7 +86,6 @@ PASS clip-rule
 PASS color
 PASS color-interpolation
 PASS color-interpolation-filters
-PASS color-rendering
 PASS color-scheme
 PASS column-count
 PASS column-fill
@@ -193,6 +194,9 @@ PASS min-width
 PASS mix-blend-mode
 PASS object-fit
 PASS object-position
+PASS offset-anchor
+PASS offset-distance
+PASS offset-position
 PASS opacity
 PASS order
 PASS orphans
@@ -316,7 +320,6 @@ PASS -apple-color-filter
 PASS -apple-pay-button-style
 PASS -apple-pay-button-type
 PASS -apple-trailing-word
-PASS -webkit-appearance
 PASS -webkit-backdrop-filter
 PASS -webkit-background-clip
 PASS -webkit-background-composite

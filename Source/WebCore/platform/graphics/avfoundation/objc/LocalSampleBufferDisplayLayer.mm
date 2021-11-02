@@ -64,7 +64,7 @@ using namespace WebCore;
     if (!(self = [super init]))
         return nil;
 
-    _parent = makeWeakPtr(parent);
+    _parent = parent;
 
     return self;
 }
@@ -163,7 +163,7 @@ LocalSampleBufferDisplayLayer::LocalSampleBufferDisplayLayer(RetainPtr<AVSampleB
 
 void LocalSampleBufferDisplayLayer::initialize(bool hideRootLayer, IntSize size, CompletionHandler<void(bool didSucceed)>&& callback)
 {
-    m_sampleBufferDisplayLayer.get().backgroundColor = cachedCGColor(Color::black);
+    m_sampleBufferDisplayLayer.get().backgroundColor = cachedCGColor(Color::black).get();
     m_sampleBufferDisplayLayer.get().anchorPoint = { .5, .5 };
     m_sampleBufferDisplayLayer.get().needsDisplayOnBoundsChange = YES;
     m_sampleBufferDisplayLayer.get().videoGravity = AVLayerVideoGravityResizeAspectFill;
@@ -171,7 +171,7 @@ void LocalSampleBufferDisplayLayer::initialize(bool hideRootLayer, IntSize size,
     m_rootLayer = adoptNS([[CALayer alloc] init]);
     m_rootLayer.get().hidden = hideRootLayer;
 
-    m_rootLayer.get().backgroundColor = cachedCGColor(Color::black);
+    m_rootLayer.get().backgroundColor = cachedCGColor(Color::black).get();
     m_rootLayer.get().needsDisplayOnBoundsChange = YES;
 
     m_rootLayer.get().bounds = CGRectMake(0, 0, size.width(), size.height());
@@ -361,7 +361,7 @@ void LocalSampleBufferDisplayLayer::enqueueSampleBuffer(MediaSample& sample)
 #if !RELEASE_LOG_DISABLED
 void LocalSampleBufferDisplayLayer::onIrregularFrameRateNotification(MonotonicTime frameTime, MonotonicTime lastFrameTime)
 {
-    callOnMainThread([frameTime = frameTime.secondsSinceEpoch().value(), lastFrameTime = lastFrameTime.secondsSinceEpoch().value(), observedFrameRate = m_frameRateMonitor.observedFrameRate(), frameCount = m_frameRateMonitor.frameCount(), weakThis = makeWeakPtr(this)] {
+    callOnMainThread([frameTime = frameTime.secondsSinceEpoch().value(), lastFrameTime = lastFrameTime.secondsSinceEpoch().value(), observedFrameRate = m_frameRateMonitor.observedFrameRate(), frameCount = m_frameRateMonitor.frameCount(), weakThis = WeakPtr { *this }] {
         if (!weakThis)
             return;
         RELEASE_LOG(WebRTC, "LocalSampleBufferDisplayLayer::enqueueSampleBuffer (%{public}s) at %f, previous frame was at %f, observed frame rate is %f, delay since last frame is %f ms, frame count is %lu", weakThis->m_logIdentifier.utf8().data(), frameTime, lastFrameTime, observedFrameRate, (frameTime - lastFrameTime) * 1000, frameCount);
@@ -407,7 +407,7 @@ void LocalSampleBufferDisplayLayer::clearEnqueuedSamples()
 
 void LocalSampleBufferDisplayLayer::requestNotificationWhenReadyForVideoData()
 {
-    auto weakThis = makeWeakPtr(*this);
+    WeakPtr weakThis { *this };
     [m_sampleBufferDisplayLayer requestMediaDataWhenReadyOnQueue:dispatch_get_main_queue() usingBlock:^{
         if (!weakThis)
             return;

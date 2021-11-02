@@ -529,7 +529,7 @@ void WebPageProxy::scheduleActivityStateUpdate()
     // If there is no active transaction, likely there is no root layer change or change is committed,
     // then schedule dispatch on runloop observer to collect changes in the same runloop cycle before dispatching.
     if (hasActiveCATransaction) {
-        [CATransaction addCommitHandler:[weakThis = makeWeakPtr(*this)] {
+        [CATransaction addCommitHandler:[weakThis = WeakPtr { *this }] {
             // We can't call dispatchActivityStateChange directly underneath this commit handler, because it has side-effects
             // that may result in other frameworks trying to install commit handlers for the same phase, which is not allowed.
             // So, dispatch_async here; we only care that the activity state change doesn't apply until after the active commit is complete.
@@ -614,7 +614,7 @@ void WebPageProxy::setUpHighlightsObserver()
     if (m_appHighlightsObserver)
         return;
 
-    auto weakThis = makeWeakPtr(*this);
+    WeakPtr weakThis { *this };
     auto updateAppHighlightsVisibility = ^(BOOL isVisible) {
         ensureOnMainRunLoop([weakThis, isVisible] {
             if (!weakThis)
@@ -634,11 +634,7 @@ Vector<SandboxExtension::Handle> WebPageProxy::createNetworkExtensionsSandboxExt
     if (!process.hasNetworkExtensionSandboxAccess() && NetworkExtensionContentFilter::isRequired()) {
         process.markHasNetworkExtensionSandboxAccess();
         constexpr ASCIILiteral neHelperService { "com.apple.nehelper"_s };
-#if PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED < 101500
-        constexpr ASCIILiteral neSessionManagerService { "com.apple.nesessionmanager"_s };
-#else
         constexpr ASCIILiteral neSessionManagerService { "com.apple.nesessionmanager.content-filter"_s };
-#endif
         return SandboxExtension::createHandlesForMachLookup({ neHelperService, neSessionManagerService }, std::nullopt);
     }
 #endif

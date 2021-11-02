@@ -343,9 +343,9 @@ sub addProperty($$)
                 }
             }
         } elsif ($optionName eq "animatable") {
-             $propertiesWithStyleBuilderOptions{$name}{"animatable"} = $optionsHashRef->{"animatable"};
+            $propertiesWithStyleBuilderOptions{$name}{"animatable"} = $optionsHashRef->{"animatable"};
         } elsif ($optionName eq "inherited") {
-            $nameIsInherited{$name} = 1;
+            $nameIsInherited{$name} = $optionsHashRef->{"inherited"};
         } elsif ($optionName eq "values") {
             # FIXME: Implement.
         }
@@ -505,7 +505,7 @@ EOF
 
 foreach my $name (keys %settingsFlags) {
   print GPERF "    case CSSPropertyID::CSSProperty" . $nameToId{$name} . ":\n";
-  print GPERF "        return settings->" . $settingsFlags{$name} . "Enabled();\n";
+  print GPERF "        return settings->" . $settingsFlags{$name} . "();\n";
 }
 
 print GPERF << "EOF";
@@ -567,7 +567,7 @@ String getJSPropertyName(CSSPropertyID id)
         *resultPointer++ = character;
     }
     *resultPointer = '\\0';
-    return WTF::String(result);
+    return String(result);
 }
 
 static const bool isInheritedPropertyTable[numCSSProperties + $numPredefinedProperties] = {
@@ -846,9 +846,9 @@ bool isInternalCSSProperty(const CSSPropertyID);
 bool isEnabledCSSProperty(const CSSPropertyID);
 bool isCSSPropertyEnabledBySettings(const CSSPropertyID, const Settings* = nullptr);
 const char* getPropertyName(CSSPropertyID);
-const WTF::AtomString& getPropertyNameAtomString(CSSPropertyID id);
-WTF::String getPropertyNameString(CSSPropertyID id);
-WTF::String getJSPropertyName(CSSPropertyID);
+const AtomString& getPropertyNameAtomString(CSSPropertyID id);
+String getPropertyNameString(CSSPropertyID id);
+String getJSPropertyName(CSSPropertyID);
 CSSPropertyID getRelatedPropertyId(CSSPropertyID id);
 
 inline CSSPropertyID convertToCSSPropertyID(int value)
@@ -1313,6 +1313,8 @@ sub generateValueSetter {
   } elsif (exists($propertiesWithStyleBuilderOptions{$name}{"conditional-converter"})) {
     $setterContent .= $indent . "    auto convertedValue = BuilderConverter::convert" . $propertiesWithStyleBuilderOptions{$name}{"conditional-converter"} . "(builderState, value);\n";
     $convertedValue = "WTFMove(convertedValue.value())";
+  } elsif ($nameIsColorProperty{$name}) {
+    $convertedValue = colorFromPrimitiveValue("downcast<CSSPrimitiveValue>(value)");
   } else {
     $convertedValue = "downcast<CSSPrimitiveValue>(value)";
   }
@@ -1664,7 +1666,7 @@ foreach my $nameOrAlias (@namesAndAliases) {
 
     my @extendedAttributeValues = ("DelegateToSharedSyntheticAttribute=propertyValueForCamelCasedIDLAttribute", "CallWith=PropertyName");
     push(@extendedAttributeValues, "EnabledBySetting=${settingsFlags{$name}}") if $settingsFlags{$name};
-    push(@extendedAttributeValues, "EnabledAtRuntime=${runtimeFlags{$name}}") if $runtimeFlags{$name};
+    push(@extendedAttributeValues, "EnabledAtRuntime=Enabled${runtimeFlags{$name}}") if $runtimeFlags{$name};
     my $extendedAttributes = join(", ", @extendedAttributeValues);
 
     print CSS_STYLE_DECLARATION_PROPERTY_NAMES_IDL "    [CEReactions, ${extendedAttributes}] attribute [LegacyNullToEmptyString] CSSOMString ${camelCasedAttributeName};\n";
@@ -1687,7 +1689,7 @@ foreach my $nameOrAlias (grep { $_ =~ /^\-webkit\-/ } @namesAndAliases) {
 
     my @extendedAttributeValues = ("DelegateToSharedSyntheticAttribute=propertyValueForWebKitCasedIDLAttribute", "CallWith=PropertyName");
     push(@extendedAttributeValues, "EnabledBySetting=${settingsFlags{$name}}") if $settingsFlags{$name};
-    push(@extendedAttributeValues, "EnabledAtRuntime=${runtimeFlags{$name}}") if $runtimeFlags{$name};
+    push(@extendedAttributeValues, "EnabledAtRuntime=Enabled${runtimeFlags{$name}}") if $runtimeFlags{$name};
     my $extendedAttributes = join(", ", @extendedAttributeValues);
 
     print CSS_STYLE_DECLARATION_PROPERTY_NAMES_IDL "    [CEReactions, ${extendedAttributes}] attribute [LegacyNullToEmptyString] CSSOMString ${webkitCasedAttributeName};\n";
@@ -1709,7 +1711,7 @@ foreach my $nameOrAlias (grep { $_ =~ /\-/ } @namesAndAliases) {
 
     my @extendedAttributeValues = ("DelegateToSharedSyntheticAttribute=propertyValueForDashedIDLAttribute", "CallWith=PropertyName");
     push(@extendedAttributeValues, "EnabledBySetting=${settingsFlags{$name}}") if $settingsFlags{$name};
-    push(@extendedAttributeValues, "EnabledAtRuntime=${runtimeFlags{$name}}") if $runtimeFlags{$name};
+    push(@extendedAttributeValues, "EnabledAtRuntime=Enabled${runtimeFlags{$name}}") if $runtimeFlags{$name};
     my $extendedAttributes = join(", ", @extendedAttributeValues);
 
     print CSS_STYLE_DECLARATION_PROPERTY_NAMES_IDL "    [CEReactions, ${extendedAttributes}] attribute [LegacyNullToEmptyString] CSSOMString ${dashedAttributeName};\n";
@@ -1731,7 +1733,7 @@ foreach my $nameOrAlias (grep { $_ =~ /^\-epub\-/ } @namesAndAliases) {
 
     my @extendedAttributeValues = ("DelegateToSharedSyntheticAttribute=propertyValueForEpubCasedIDLAttribute", "CallWith=PropertyName");
     push(@extendedAttributeValues, "EnabledBySetting=${settingsFlags{$name}}") if $settingsFlags{$name};
-    push(@extendedAttributeValues, "EnabledAtRuntime=${runtimeFlags{$name}}") if $runtimeFlags{$name};
+    push(@extendedAttributeValues, "EnabledAtRuntime=Enabled${runtimeFlags{$name}}") if $runtimeFlags{$name};
     my $extendedAttributes = join(", ", @extendedAttributeValues);
 
     print CSS_STYLE_DECLARATION_PROPERTY_NAMES_IDL "    [CEReactions, ${extendedAttributes}] attribute [LegacyNullToEmptyString] CSSOMString ${epubCasedAttributeName};\n";

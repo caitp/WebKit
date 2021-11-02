@@ -612,7 +612,8 @@ LLINT_SLOW_PATH_DECL(slow_path_new_regexp)
     auto bytecode = pc->as<OpNewRegexp>();
     RegExp* regExp = jsCast<RegExp*>(getOperand(callFrame, bytecode.m_regexp));
     ASSERT(regExp->isValid());
-    LLINT_RETURN(RegExpObject::create(vm, globalObject->regExpStructure(), regExp));
+    static constexpr bool areLegacyFeaturesEnabled = true;
+    LLINT_RETURN(RegExpObject::create(vm, globalObject->regExpStructure(), regExp, areLegacyFeaturesEnabled));
 }
 
 LLINT_SLOW_PATH_DECL(slow_path_instanceof)
@@ -974,7 +975,7 @@ LLINT_SLOW_PATH_DECL(slow_path_put_by_id)
                             metadata.m_offset = slot.cachedOffset();
                             metadata.m_newStructureID = newStructure->id();
                             if (!(bytecode.m_flags.isDirect())) {
-                                StructureChain* chain = newStructure->prototypeChain(globalObject, asObject(baseCell));
+                                StructureChain* chain = newStructure->prototypeChain(vm, globalObject, asObject(baseCell));
                                 ASSERT(chain);
                                 metadata.m_structureChain.set(vm, codeBlock, chain);
                             }
@@ -1046,8 +1047,8 @@ static ALWAYS_INLINE JSValue getByVal(VM& vm, JSGlobalObject* globalObject, Code
             arrayProfile->setOutOfBounds();
         } else if (baseValue.isObject()) {
             JSObject* object = asObject(baseValue);
-            if (object->canGetIndexQuickly(i))
-                return object->getIndexQuickly(i);
+            if (JSValue result = object->tryGetIndexQuickly(i, arrayProfile))
+                return result;
 
             bool skipMarkingOutOfBounds = false;
 
@@ -1169,14 +1170,13 @@ LLINT_SLOW_PATH_DECL(slow_path_put_by_val)
     JSValue subscript = getOperand(callFrame, bytecode.m_property);
     JSValue value = getOperand(callFrame, bytecode.m_value);
     bool isStrictMode = bytecode.m_ecmaMode.isStrict();
+    auto& metadata = bytecode.metadata(codeBlock);
     
     if (std::optional<uint32_t> index = subscript.tryGetAsUint32Index()) {
         uint32_t i = *index;
         if (baseValue.isObject()) {
             JSObject* object = asObject(baseValue);
-            if (object->canSetIndexQuickly(i, value))
-                object->setIndexQuickly(vm, i, value);
-            else
+            if (!object->trySetIndexQuickly(vm, i, value, &metadata.m_arrayProfile))
                 object->methodTable(vm)->putByIndex(object, globalObject, i, value, isStrictMode);
             LLINT_END();
         }
@@ -2409,7 +2409,7 @@ static void handleIteratorNextCheckpoint(VM& vm, CallFrame* callFrame, JSGlobalO
         valueRegister = iteratorResultObject.get(globalObject, vm.propertyNames->value);
 }
 
-inline SlowPathReturnType dispatchToNextInstruction(ThrowScope& scope, CodeBlock* codeBlock, InstructionStream::Ref pc)
+inline SlowPathReturnType dispatchToNextInstructionDuringExit(ThrowScope& scope, CodeBlock* codeBlock, InstructionStream::Ref pc)
 {
     if (scope.exception())
         return encodeResult(returnToThrow(scope.vm()), nullptr);
@@ -2427,7 +2427,7 @@ inline SlowPathReturnType dispatchToNextInstruction(ThrowScope& scope, CodeBlock
     ASSERT(codeBlock->jitType() == JITType::BaselineJIT);
     BytecodeIndex nextBytecodeIndex = pc.next().index();
     auto nextBytecode = codeBlock->jitCodeMap().find(nextBytecodeIndex);
-    return encodeResult(nullptr, nextBytecode.executableAddress());
+    return encodeResult(bitwise_cast<void*>(static_cast<uintptr_t>(1)), nextBytecode.executableAddress());
 #endif
     RELEASE_ASSERT_NOT_REACHED();
 }
@@ -2479,7 +2479,7 @@ extern "C" SlowPathReturnType llint_slow_path_checkpoint_osr_exit_from_inlined_c
         break;
     }
 
-    return dispatchToNextInstruction(scope, codeBlock, pc);
+    return dispatchToNextInstructionDuringExit(scope, codeBlock, pc);
 }
 
 extern "C" SlowPathReturnType llint_slow_path_checkpoint_osr_exit(CallFrame* callFrame, EncodedJSValue /* needed for cCall2 in CLoop */)
@@ -2524,7 +2524,7 @@ extern "C" SlowPathReturnType llint_slow_path_checkpoint_osr_exit(CallFrame* cal
         break;
     }
 
-    return dispatchToNextInstruction(scope, codeBlock, pc);
+    return dispatchToNextInstructionDuringExit(scope, codeBlock, pc);
 }
 
 extern "C" SlowPathReturnType llint_throw_stack_overflow_error(VM* vm, ProtoCallFrame* protoFrame)

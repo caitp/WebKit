@@ -69,9 +69,6 @@ const OptionSet<WebsiteDataType>& WebResourceLoadStatisticsStore::monitoredDataT
         WebsiteDataType::LocalStorage,
         WebsiteDataType::MediaKeys,
         WebsiteDataType::OfflineWebApplicationCache,
-#if ENABLE(NETSCAPE_PLUGIN_API)
-        WebsiteDataType::PlugInData,
-#endif
         WebsiteDataType::SearchFieldRecentSearches,
         WebsiteDataType::SessionStorage,
 #if ENABLE(SERVICE_WORKER)
@@ -150,7 +147,7 @@ static Ref<SuspendableWorkQueue> sharedStatisticsQueue()
 }
 
 WebResourceLoadStatisticsStore::WebResourceLoadStatisticsStore(NetworkSession& networkSession, const String& resourceLoadStatisticsDirectory, ShouldIncludeLocalhost shouldIncludeLocalhost, ResourceLoadStatistics::IsEphemeral isEphemeral)
-    : m_networkSession(makeWeakPtr(networkSession))
+    : m_networkSession(networkSession)
     , m_statisticsQueue(sharedStatisticsQueue())
     , m_dailyTasksTimer(RunLoop::main(), this, &WebResourceLoadStatisticsStore::performDailyTasks)
     , m_isEphemeral(isEphemeral)

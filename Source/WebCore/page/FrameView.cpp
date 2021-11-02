@@ -38,6 +38,7 @@
 #include "DOMWindow.h"
 #include "DebugPageOverlays.h"
 #include "DeprecatedGlobalSettings.h"
+#include "DocumentInlines.h"
 #include "DocumentLoader.h"
 #include "DocumentMarkerController.h"
 #include "DocumentSVG.h"
@@ -95,6 +96,7 @@
 #include "ResizeObserver.h"
 #include "RuntimeEnabledFeatures.h"
 #include "SVGDocument.h"
+#include "SVGElementTypeHelpers.h"
 #include "SVGSVGElement.h"
 #include "ScriptRunner.h"
 #include "ScriptedAnimationController.h"
@@ -350,6 +352,12 @@ void FrameView::detachCustomScrollbars()
         setHasVerticalScrollbar(false);
 
     m_scrollCorner = nullptr;
+}
+
+void FrameView::willBeDestroyed()
+{
+    setHasHorizontalScrollbar(false);
+    setHasVerticalScrollbar(false);
 }
 
 void FrameView::recalculateScrollbarOverlayStyle()
@@ -2081,7 +2089,7 @@ bool FrameView::useDarkAppearance() const
     return false;
 }
 
-OptionSet<StyleColor::Options> FrameView::styleColorOptions() const
+OptionSet<StyleColorOptions> FrameView::styleColorOptions() const
 {
 #if ENABLE(DARK_MODE_CSS)
     if (auto* renderer = rendererForColorScheme())
@@ -2306,7 +2314,7 @@ void FrameView::scrollElementToRect(const Element& element, const IntRect& rect)
 
 void FrameView::setScrollPosition(const ScrollPosition& scrollPosition, const ScrollPositionChangeOptions& options)
 {
-    LOG_WITH_STREAM(Scrolling, stream << "FrameView::setScrollPosition " << scrollPosition << " , clearing anchor");
+    LOG_WITH_STREAM(Scrolling, stream << "FrameView::setScrollPosition " << scrollPosition << " animated " << (options.animated == ScrollIsAnimated::Yes) << ", clearing anchor");
 
     auto oldScrollType = currentScrollType();
     setCurrentScrollType(options.type);
@@ -2321,7 +2329,7 @@ void FrameView::setScrollPosition(const ScrollPosition& scrollPosition, const Sc
     ScrollOffset snappedOffset = ceiledIntPoint(scrollAnimator().scrollOffsetAdjustedForSnapping(scrollOffsetFromPosition(scrollPosition), options.snapPointSelectionMethod));
     auto snappedPosition = scrollPositionFromOffset(snappedOffset);
 
-    if (options.animated == AnimatedScroll::Yes)
+    if (options.animated == ScrollIsAnimated::Yes)
         scrollToPositionWithAnimation(snappedPosition, currentScrollType(), options.clamping);
     else
         ScrollView::setScrollPosition(snappedPosition, options);
@@ -2523,7 +2531,7 @@ void FrameView::scrollPositionChanged(const ScrollPosition& oldPosition, const S
     }
 }
 
-void FrameView::applyRecursivelyWithVisibleRect(const WTF::Function<void (FrameView& frameView, const IntRect& visibleRect)>& apply)
+void FrameView::applyRecursivelyWithVisibleRect(const Function<void(FrameView& frameView, const IntRect& visibleRect)>& apply)
 {
     IntRect windowClipRect = this->windowClipRect();
     auto visibleRect = windowToContents(windowClipRect);
@@ -2685,6 +2693,30 @@ bool FrameView::requestScrollPositionUpdate(const ScrollPosition& position, Scro
 #endif
 
     return false;
+}
+
+bool FrameView::requestAnimatedScrollToPosition(const ScrollPosition& destinationPosition, ScrollClamping clamping)
+{
+    LOG_WITH_STREAM(Scrolling, stream << "FrameView::requestAnimatedScrollToPosition " << destinationPosition);
+
+#if ENABLE(ASYNC_SCROLLING)
+    if (auto scrollingCoordinator = this->scrollingCoordinator())
+        return scrollingCoordinator->requestAnimatedScrollToPosition(*this, destinationPosition, clamping);
+#else
+    UNUSED_PARAM(destinationPosition);
+#endif
+
+    return false;
+}
+
+void FrameView::stopAsyncAnimatedScroll()
+{
+#if ENABLE(ASYNC_SCROLLING)
+    LOG_WITH_STREAM(Scrolling, stream << "FrameView::stopAsyncAnimatedScroll");
+
+    if (auto scrollingCoordinator = this->scrollingCoordinator())
+        return scrollingCoordinator->stopAnimatedScroll(*this);
+#endif
 }
 
 HostWindow* FrameView::hostWindow() const
@@ -2860,6 +2892,9 @@ void FrameView::unobscuredContentSizeChanged()
 #if PLATFORM(IOS_FAMILY)
     updateTiledBackingAdaptiveSizing();
 #endif
+
+    if (auto* document = frame().document())
+        document->updateViewportUnitsOnResize();
 }
 
 void FrameView::loadProgressingStatusChanged()
@@ -3238,7 +3273,7 @@ void FrameView::updateEmbeddedObject(RenderEmbeddedObject& embeddedObject)
 
     auto& element = embeddedObject.frameOwnerElement();
 
-    auto weakRenderer = makeWeakPtr(embeddedObject);
+    WeakPtr weakRenderer { embeddedObject };
 
     if (is<HTMLPlugInImageElement>(element)) {
         auto& pluginElement = downcast<HTMLPlugInImageElement>(element);
@@ -3534,7 +3569,9 @@ void FrameView::performSizeToContentAutoSize()
         document.updateLayout();
     };
 
-    resetOverriddenViewportWidthForCSSViewportUnits();
+    resetOverriddenWidthForCSSSmallViewportUnits();
+    resetOverriddenWidthForCSSLargeViewportUnits();
+
     // Start from the minimum size and allow it to grow.
     auto minAutoSize = IntSize { 1, 1 };
     resize(minAutoSize);
@@ -3594,7 +3631,8 @@ void FrameView::performSizeToContentAutoSize()
         resize(newSize.width(), i ? newSize.height() : minAutoSize.height());
         // Protect the content from evergrowing layout.
         auto preferredViewportWidth = std::min(newSize.width(), m_autoSizeConstraint.width());
-        overrideViewportWidthForCSSViewportUnits(preferredViewportWidth);
+        overrideWidthForCSSSmallViewportUnits(preferredViewportWidth);
+        overrideWidthForCSSLargeViewportUnits(preferredViewportWidth);
         // Force the scrollbar state to avoid the scrollbar code adding them and causing them to be needed. For example,
         // a vertical scrollbar may cause text to wrap and thus increase the height (which is the only reason the scollbar is needed).
         setVerticalScrollbarLock(false);
@@ -3768,9 +3806,10 @@ void FrameView::scrollToPositionWithAnimation(const ScrollPosition& position, Sc
     auto previousScrollType = currentScrollType();
     setCurrentScrollType(scrollType);
 
-    if (currentScrollBehaviorStatus() == ScrollBehaviorStatus::InNonNativeAnimation)
+    if (scrollAnimationStatus() == ScrollAnimationStatus::Animating)
         scrollAnimator().cancelAnimations();
-    if (position != this->scrollPosition())
+
+    if (position != scrollPosition())
         ScrollableArea::scrollToPositionWithAnimation(position);
 
     setCurrentScrollType(previousScrollType);
@@ -4673,11 +4712,13 @@ void FrameView::enableAutoSizeMode(bool enable, const IntSize& viewSize, AutoSiz
     setNeedsLayoutAfterViewConfigurationChange();
     layoutContext().scheduleLayout();
     if (m_shouldAutoSize) {
-        overrideViewportWidthForCSSViewportUnits(m_autoSizeConstraint.width());
+        overrideWidthForCSSSmallViewportUnits(m_autoSizeConstraint.width());
+        overrideWidthForCSSLargeViewportUnits(m_autoSizeConstraint.width());
         return;
     }
 
-    clearViewportSizeOverrideForCSSViewportUnits();
+    clearSizeOverrideForCSSSmallViewportUnits();
+    clearSizeOverrideForCSSLargeViewportUnits();
     // Since autosize mode forces the scrollbar mode, change them to being auto.
     setVerticalScrollbarLock(false);
     setHorizontalScrollbarLock(false);
@@ -5506,52 +5547,107 @@ void FrameView::setViewExposedRect(std::optional<FloatRect> viewExposedRect)
     }
 }
 
-void FrameView::clearViewportSizeOverrideForCSSViewportUnits()
+void FrameView::clearSizeOverrideForCSSSmallViewportUnits()
 {
-    if (!m_overrideViewportSize)
+    if (!m_smallViewportSizeOverride)
         return;
 
-    m_overrideViewportSize = std::nullopt;
+    m_smallViewportSizeOverride = std::nullopt;
     if (auto* document = frame().document())
         document->styleScope().didChangeStyleSheetEnvironment();
 }
 
-void FrameView::setViewportSizeForCSSViewportUnits(IntSize size)
+void FrameView::setSizeForCSSSmallViewportUnits(IntSize size)
 {
-    overrideViewportSizeForCSSViewportUnits({ size.width(), size.height() });
+    overrideSizeForCSSSmallViewportUnits({ size.width(), size.height() });
 }
 
-void FrameView::overrideViewportWidthForCSSViewportUnits(int width)
+void FrameView::overrideWidthForCSSSmallViewportUnits(int width)
 {
-    overrideViewportSizeForCSSViewportUnits({ width, m_overrideViewportSize ? m_overrideViewportSize->height : std::nullopt });
+    overrideSizeForCSSSmallViewportUnits({ width, m_smallViewportSizeOverride ? m_smallViewportSizeOverride->height : std::nullopt });
 }
 
-void FrameView::resetOverriddenViewportWidthForCSSViewportUnits()
+void FrameView::resetOverriddenWidthForCSSSmallViewportUnits()
 {
-    overrideViewportSizeForCSSViewportUnits({ { }, m_overrideViewportSize ? m_overrideViewportSize->height : std::nullopt });
+    overrideSizeForCSSSmallViewportUnits({ { }, m_smallViewportSizeOverride ? m_smallViewportSizeOverride->height : std::nullopt });
 }
 
-void FrameView::overrideViewportSizeForCSSViewportUnits(OverrideViewportSize size)
+void FrameView::overrideSizeForCSSSmallViewportUnits(OverrideViewportSize size)
 {
-    if (m_overrideViewportSize && *m_overrideViewportSize == size)
+    if (m_smallViewportSizeOverride && *m_smallViewportSizeOverride == size)
         return;
 
-    m_overrideViewportSize = size;
+    m_smallViewportSizeOverride = size;
 
     if (auto* document = frame().document())
         document->styleScope().didChangeStyleSheetEnvironment();
 }
 
-IntSize FrameView::viewportSizeForCSSViewportUnits() const
+IntSize FrameView::sizeForCSSSmallViewportUnits() const
+{
+    return calculateSizeForCSSViewportUnitsOverride(m_smallViewportSizeOverride);
+}
+
+void FrameView::clearSizeOverrideForCSSLargeViewportUnits()
+{
+    if (!m_largeViewportSizeOverride)
+        return;
+
+    m_largeViewportSizeOverride = std::nullopt;
+    if (auto* document = frame().document())
+        document->styleScope().didChangeStyleSheetEnvironment();
+}
+
+void FrameView::setSizeForCSSLargeViewportUnits(IntSize size)
+{
+    overrideSizeForCSSLargeViewportUnits({ size.width(), size.height() });
+}
+
+void FrameView::overrideWidthForCSSLargeViewportUnits(int width)
+{
+    overrideSizeForCSSLargeViewportUnits({ width, m_largeViewportSizeOverride ? m_largeViewportSizeOverride->height : std::nullopt });
+}
+
+void FrameView::resetOverriddenWidthForCSSLargeViewportUnits()
+{
+    overrideSizeForCSSLargeViewportUnits({ { }, m_largeViewportSizeOverride ? m_largeViewportSizeOverride->height : std::nullopt });
+}
+
+void FrameView::overrideSizeForCSSLargeViewportUnits(OverrideViewportSize size)
+{
+    if (m_largeViewportSizeOverride && *m_largeViewportSizeOverride == size)
+        return;
+
+    m_largeViewportSizeOverride = size;
+
+    if (auto* document = frame().document())
+        document->styleScope().didChangeStyleSheetEnvironment();
+}
+
+IntSize FrameView::sizeForCSSLargeViewportUnits() const
+{
+    return calculateSizeForCSSViewportUnitsOverride(m_largeViewportSizeOverride);
+}
+
+IntSize FrameView::calculateSizeForCSSViewportUnitsOverride(std::optional<OverrideViewportSize> override) const
 {
     OverrideViewportSize viewportSize;
 
-    if (m_overrideViewportSize) {
-        viewportSize = *m_overrideViewportSize;
-        // auto-size overrides the width only, so we can't always bail out early here.
-        if (viewportSize.width && viewportSize.height)
-            return { *viewportSize.width, *viewportSize.height };
-    }
+    if (override)
+        viewportSize = *override;
+
+    // Use the large size if no override is given since it's considered the default size.
+    // if (m_largeViewportSizeOverride) {
+    //     if (!viewportSize.width)
+    //         viewportSize.width = m_largeViewportSizeOverride->width;
+
+    //     if (!viewportSize.height)
+    //         viewportSize.height = m_largeViewportSizeOverride->height;
+    // }
+
+    // auto-size overrides the width only, so we can't always bail out early here.
+    if (viewportSize.width && viewportSize.height)
+        return { *viewportSize.width, *viewportSize.height };
 
     if (useFixedLayout()) {
         auto fixedLayoutSize = this->fixedLayoutSize();
@@ -5566,6 +5662,16 @@ IntSize FrameView::viewportSizeForCSSViewportUnits() const
     viewportSize.width = viewportSize.width.value_or(visibleContentSizeIncludingScrollbars.width());
     viewportSize.height = viewportSize.height.value_or(visibleContentSizeIncludingScrollbars.height());
     return { *viewportSize.width, *viewportSize.height };
+}
+
+IntSize FrameView::sizeForCSSDynamicViewportUnits() const
+{
+    return unobscuredContentRectIncludingScrollbars().size();
+}
+
+IntSize FrameView::sizeForCSSDefaultViewportUnits() const
+{
+    return sizeForCSSLargeViewportUnits();
 }
 
 bool FrameView::shouldPlaceVerticalScrollbarOnLeft() const

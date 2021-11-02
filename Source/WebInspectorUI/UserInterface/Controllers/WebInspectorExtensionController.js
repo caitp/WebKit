@@ -33,9 +33,16 @@ WI.WebInspectorExtensionController = class WebInspectorExtensionController exten
         this._extensionTabContentViewForExtensionTabIDMap = new Map;
         this._tabIDsForExtensionIDMap = new Multimap;
         this._nextExtensionTabID = 1;
+
+        WI.Frame.addEventListener(WI.Frame.Event.MainResourceDidChange, this._handleMainResourceDidChange, this);
     }
 
     // Public
+
+    get registeredExtensionIDs()
+    {
+        return new Set(this._extensionForExtensionIDMap.keys());
+    }
 
     registerExtension(extensionID, displayName)
     {
@@ -61,7 +68,10 @@ WI.WebInspectorExtensionController = class WebInspectorExtensionController exten
         let extensionTabIDsToRemove = this._tabIDsForExtensionIDMap.take(extensionID) || [];
         for (let extensionTabID of extensionTabIDsToRemove) {
             let tabContentView = this._extensionTabContentViewForExtensionTabIDMap.take(extensionTabID);
-            WI.tabBrowser.closeTabForContentView(tabContentView);
+
+            // Ensure that the iframe is actually detached and does not leak.
+            WI.tabBrowser.closeTabForContentView(tabContentView, {suppressAnimations: true});
+            tabContentView.dispose();
         }
 
         this.dispatchEventToListeners(WI.WebInspectorExtensionController.Event.ExtensionRemoved, {extension});
@@ -80,7 +90,7 @@ WI.WebInspectorExtensionController = class WebInspectorExtensionController exten
 
         this._tabIDsForExtensionIDMap.add(extensionID, extensionTabID);
         this._extensionTabContentViewForExtensionTabIDMap.set(extensionTabID, tabContentView);
-        WI.tabBrowser.addTabForContentView(tabContentView);
+        WI.tabBrowser.addTabForContentView(tabContentView, {suppressAnimations: true});
 
         // The calling convention is to return an error string or a result object.
         return {extensionTabID};
@@ -153,7 +163,7 @@ WI.WebInspectorExtensionController = class WebInspectorExtensionController exten
         return target.PageAgent.reload.invoke({ignoreCache});
     }
     
-    showExtensionTab(extensionTabID)
+    showExtensionTab(extensionTabID, options = {})
     {
         let tabContentView = this._extensionTabContentViewForExtensionTabIDMap.get(extensionTabID);
         if (!tabContentView) {
@@ -161,13 +171,64 @@ WI.WebInspectorExtensionController = class WebInspectorExtensionController exten
             return WI.WebInspectorExtension.ErrorCode.InvalidRequest;
         }
 
+        tabContentView.visible = true;
         let success = WI.tabBrowser.showTabForContentView(tabContentView, {
+            ...options,
             initiatorHint: WI.TabBrowser.TabNavigationInitiator.FrontendAPI,
         });
 
         if (!success) {
             WI.reportInternalError("Unable to show extension tab with extensionTabID: " + extensionTabID);
             return WI.WebInspectorExtension.ErrorCode.InternalError;
+        }
+
+        tabContentView.visible = true;
+    }
+
+    hideExtensionTab(extensionTabID, options = {})
+    {
+        let tabContentView = this._extensionTabContentViewForExtensionTabIDMap.get(extensionTabID);
+        if (!tabContentView) {
+            WI.reportInternalError("Unable to show extension tab with unknown extensionTabID: " + extensionTabID);
+            return WI.WebInspectorExtension.ErrorCode.InvalidRequest;
+        }
+
+        tabContentView.visible = false;
+        WI.tabBrowser.closeTabForContentView(tabContentView, options);
+
+        console.assert(!tabContentView.visible);
+        console.assert(!tabContentView.isClosed);
+    }
+
+    addContextMenuItemsForClosedExtensionTabs(contextMenu)
+    {
+        contextMenu.appendSeparator();
+
+        for (let tabContentView of this._extensionTabContentViewForExtensionTabIDMap.values()) {
+            // If the extension tab has been unchecked in the TabBar context menu, then the tabBarItem
+            // for the extension tab will not be connected to a parent TabBar.
+            let shouldIncludeTab = !tabContentView.visible || !tabContentView.tabBarItem.parentTabBar;
+            if (!shouldIncludeTab)
+                continue;
+
+            contextMenu.appendItem(tabContentView.tabInfo().displayName, () => {
+                this.showExtensionTab(tabContentView.extensionTabID);
+            });
+        }
+    }
+
+    addContextMenuItemsForAllExtensionTabs(contextMenu)
+    {
+        contextMenu.appendSeparator();
+
+        for (let tabContentView of this._extensionTabContentViewForExtensionTabIDMap.values()) {
+            let checked = tabContentView.visible || !!tabContentView.tabBarItem.parentTabBar;
+            contextMenu.appendCheckboxItem(tabContentView.tabInfo().displayName, () => {
+                if (!checked)
+                    this.showExtensionTab(tabContentView.extensionTabID);
+                else
+                    this.hideExtensionTab(tabContentView.extensionTabID);
+            }, checked);
         }
     }
 
@@ -185,11 +246,45 @@ WI.WebInspectorExtensionController = class WebInspectorExtensionController exten
             return WI.WebInspectorExtension.ErrorCode.InvalidRequest;
         }
 
-        try {
-            return {result: InspectorFrontendHost.evaluateScriptInExtensionTab(iframe, scriptSource)};
-        } catch (error) {
-            return {error: error.message};
-        }
+        return new Promise((resolve, reject) => {
+            try {
+                // If `result` is a promise, then it came from a different frame and `instanceof Promise` won't work.
+                let result = InspectorFrontendHost.evaluateScriptInExtensionTab(iframe, scriptSource);
+                if (result?.then) {
+                    result.then((resolvedValue) => resolve({result: resolvedValue}), (errorValue) => reject({error: errorValue}));
+                    return;
+                }
+
+                resolve({result});
+            } catch (error) {
+                // Include more context in the stringification of the error.
+                const stackIndent = "  ";
+                let stackLines = (error.stack?.split("\n") || []).map((line) => `${stackIndent}${line}`);
+                let formattedMessage = [
+                    `Caught Exception: ${error.name}`,
+                    `at ${error.sourceURL || "(unknown)"}:${error.line || 0}:${error.column || 0}:`,
+                    error.message,
+                    "",
+                    "Backtrace:",
+                    ...stackLines,
+                ].join("\n");
+                reject({error: formattedMessage});
+            }
+        });
+    }
+
+    // Private
+
+    _handleMainResourceDidChange(event)
+    {
+        if (!event.target.isMainFrame())
+            return;
+
+        // Don't fire the event unless one or more extensions are registered.
+        if (!this._extensionForExtensionIDMap.size)
+            return;
+
+        InspectorFrontendHost.inspectedPageDidNavigate(WI.networkManager.mainFrame.url);
     }
 };
 

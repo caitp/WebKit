@@ -49,10 +49,6 @@
 #include <WebCore/RenderThemeIOS.h>
 #endif
 
-#if ENABLE(NETSCAPE_PLUGIN_API)
-#include <WebCore/PluginData.h>
-#endif
-
 #if PLATFORM(GTK) || PLATFORM(WPE)
 #include <wtf/MemoryPressureHandler.h>
 #endif
@@ -173,10 +169,6 @@ struct WebProcessCreationParameters {
     HashMap<String, bool> notificationPermissions;
 #endif
 
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    HashMap<String, HashMap<String, HashMap<String, WebCore::PluginLoadClientPolicy>>> pluginLoadClientPolicies;
-#endif
-
 #if PLATFORM(COCOA)
     RetainPtr<CFDataRef> networkATSContext;
 #endif
@@ -229,7 +221,7 @@ struct WebProcessCreationParameters {
 #endif
 
 #if PLATFORM(IOS_FAMILY)
-    bool currentUserInterfaceIdiomIsPhoneOrWatch { false };
+    bool currentUserInterfaceIdiomIsSmallScreen { false };
     bool supportsPictureInPicture { false };
     WebCore::RenderThemeIOS::CSSValueToSystemColorMap cssValueToSystemColorMap;
     WebCore::Color focusRingColor;
@@ -264,6 +256,10 @@ struct WebProcessCreationParameters {
 #if USE(GLIB)
     String applicationID;
     String applicationName;
+#endif
+
+#if USE(ATSPI)
+    String accessibilityBusAddress;
 #endif
 };
 

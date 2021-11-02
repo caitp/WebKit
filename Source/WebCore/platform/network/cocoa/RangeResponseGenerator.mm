@@ -73,13 +73,13 @@ RangeResponseGenerator::~RangeResponseGenerator()
     ASSERT(isMainThread());
 }
 
-static ResourceResponse synthesizedResponseForRange(const ResourceResponse& originalResponse, const ParsedRequestRange& parsedRequestRange, std::optional<size_t> totalContentLength)
+static ResourceResponse synthesizedResponseForRange(const ResourceResponse& originalResponse, const ParsedRequestRange& parsedRequestRange, size_t totalContentLength)
 {
     ASSERT(isMainThread());
     auto begin = parsedRequestRange.begin;
     auto end = parsedRequestRange.end;
 
-    auto newContentRange = makeString("bytes ", begin, "-", end, "/", (totalContentLength ? makeString(*totalContentLength) : "*"));
+    auto newContentRange = makeString("bytes ", begin, "-", end, "/", totalContentLength);
     auto newContentLength = makeString(end - begin + 1);
 
     ResourceResponse newResponse = originalResponse;
@@ -87,6 +87,9 @@ static ResourceResponse synthesizedResponseForRange(const ResourceResponse& orig
     newResponse.setHTTPHeaderField(HTTPHeaderName::ContentLength, newContentLength);
     constexpr auto partialContent = 206;
     newResponse.setHTTPStatusCode(partialContent);
+    
+    // Values from setHTTPStatusCode and setHTTPHeaderField are not reflected in the newly generated response without this.
+    newResponse.initNSURLResponse();
 
     return newResponse;
 }
@@ -106,6 +109,11 @@ void RangeResponseGenerator::giveResponseToTaskIfBytesInRangeReceived(WebCoreNSU
     auto buffer = data.buffer;
     auto bufferSize = buffer->size();
 
+    // FIXME: We ought to be able to just make a range with a * after the / but AVFoundation doesn't accept such ranges.
+    // Instead, we just wait until the load has completed, at which time we will know the content length from the buffer length.
+    if (!expectedContentLength)
+        return;
+
     if (bufferSize < range.begin)
         return;
     
@@ -113,7 +121,7 @@ void RangeResponseGenerator::giveResponseToTaskIfBytesInRangeReceived(WebCoreNSU
     if (!taskData)
         return;
     
-    auto giveBytesToTask = [task = retainPtr(task), buffer, taskData = makeWeakPtr(*taskData), generator = makeWeakPtr(*this)] {
+    auto giveBytesToTask = [task = retainPtr(task), buffer, taskData = WeakPtr { *taskData }, generator = WeakPtr { *this }] {
         ASSERT(isMainThread());
         if ([task state] != NSURLSessionTaskStateRunning)
             return;
@@ -130,7 +138,7 @@ void RangeResponseGenerator::giveResponseToTaskIfBytesInRangeReceived(WebCoreNSU
 
             size_t bytesFromThisViewToDeliver = std::min(bufferView.size(), range.end - byteIndex + 1);
             byteIndex += bytesFromThisViewToDeliver;
-            [task resource:nullptr receivedData:bufferView.data() length:bytesFromThisViewToDeliver];
+            [task resource:nullptr receivedData:SharedBufferDataView(bufferView, bytesFromThisViewToDeliver).createSharedBuffer()];
         }
         if (byteIndex >= range.end) {
             [task resourceFinished:nullptr metrics:NetworkLoadMetrics { }];
@@ -143,8 +151,8 @@ void RangeResponseGenerator::giveResponseToTaskIfBytesInRangeReceived(WebCoreNSU
 
     switch (taskData->responseState) {
     case Data::TaskData::ResponseState::NotSynthesizedYet: {
-        auto response = synthesizedResponseForRange(data.originalResponse, range, expectedContentLength);
-        [task resource:nullptr receivedResponse:response completionHandler:[giveBytesToTask = WTFMove(giveBytesToTask), taskData = makeWeakPtr(taskData), task = retainPtr(task)] (WebCore::ShouldContinuePolicyCheck shouldContinue) {
+        auto response = synthesizedResponseForRange(data.originalResponse, range, *expectedContentLength);
+        [task resource:nullptr receivedResponse:response completionHandler:[giveBytesToTask = WTFMove(giveBytesToTask), taskData = WeakPtr { taskData }, task = retainPtr(task)] (WebCore::ShouldContinuePolicyCheck shouldContinue) {
             if (taskData)
                 taskData->responseState = Data::TaskData::ResponseState::SessionCalledCompletionHandler;
             if (shouldContinue == ShouldContinuePolicyCheck::Yes)
@@ -206,14 +214,14 @@ bool RangeResponseGenerator::willHandleRequest(WebCoreNSURLSessionDataTask *task
 class RangeResponseGenerator::MediaResourceClient : public PlatformMediaResourceClient {
 public:
     MediaResourceClient(RangeResponseGenerator& generator, URL&& url)
-        : m_generator(makeWeakPtr(generator))
+        : m_generator(generator)
         , m_urlString(WTFMove(url).string()) { }
 private:
 
     // These methods should have been called before changing the client to this.
     void responseReceived(PlatformMediaResource&, const ResourceResponse&, CompletionHandler<void(ShouldContinuePolicyCheck)>&& completionHandler) final
     {
-        RELEASE_ASSERT_NOT_REACHED();
+        ASSERT_NOT_REACHED();
         completionHandler(ShouldContinuePolicyCheck::No);
     }
     void redirectReceived(PlatformMediaResource&, ResourceRequest&&, const ResourceResponse&, CompletionHandler<void(ResourceRequest&&)>&& completionHandler) final
@@ -236,7 +244,7 @@ private:
         return false;
     }
 
-    void dataReceived(PlatformMediaResource&, const uint8_t* bytes, int length) final
+    void dataReceived(PlatformMediaResource&, Ref<SharedBuffer>&& buffer) final
     {
         ASSERT(isMainThread());
         if (!m_generator)
@@ -244,7 +252,7 @@ private:
         auto* data = m_generator->m_map.get(m_urlString);
         if (!data)
             return;
-        data->buffer->append(bytes, length);
+        data->buffer->append(WTFMove(buffer));
         m_generator->giveResponseToTasksWithFinishedRanges(*data);
     }
 

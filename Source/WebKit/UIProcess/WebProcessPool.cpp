@@ -50,7 +50,6 @@
 #include "NetworkProcessMessages.h"
 #include "NetworkProcessProxy.h"
 #include "PerActivityStateCPUUsageSampler.h"
-#include "PluginProcessManager.h"
 #include "SandboxExtension.h"
 #include "TextChecker.h"
 #include "UIGamepad.h"
@@ -387,9 +386,6 @@ void WebProcessPool::sendMemoryPressureEvent(bool isCritical)
     sendToAllProcesses(Messages::AuxiliaryProcess::DidReceiveMemoryPressureEvent(isCritical));
     for (auto networkProcess : NetworkProcessProxy::allNetworkProcesses())
         networkProcess->send(Messages::AuxiliaryProcess::DidReceiveMemoryPressureEvent(isCritical), 0);
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    PluginProcessManager::singleton().sendMemoryPressureEvent(isCritical);
-#endif
 }
 #endif
 
@@ -468,7 +464,7 @@ void WebProcessPool::getGPUProcessConnection(WebProcessProxy& webProcessProxy, G
 #if ENABLE(IPC_TESTING_API)
     parameters.ignoreInvalidMessageForTesting = webProcessProxy.ignoreInvalidMessageForTesting();
 #endif
-    ensureGPUProcess().getGPUProcessConnection(webProcessProxy, parameters, [this, weakThis = makeWeakPtr(*this), parameters, webProcessProxy = makeWeakPtr(webProcessProxy), reply = WTFMove(reply)] (auto& connectionInfo) mutable {
+    ensureGPUProcess().getGPUProcessConnection(webProcessProxy, parameters, [this, weakThis = WeakPtr { *this }, parameters, webProcessProxy = WeakPtr { webProcessProxy }, reply = WTFMove(reply)] (auto& connectionInfo) mutable {
         if (UNLIKELY(!IPC::Connection::identifierIsValid(connectionInfo.identifier()))) {
             // Retry on the next RunLoop iteration because we may be inside the WebProcessPool destructor.
             RunLoop::main().dispatch([this, weakThis = WTFMove(weakThis), webProcessProxy = WTFMove(webProcessProxy), parameters = WTFMove(parameters), reply = WTFMove(reply)] () mutable {
@@ -488,7 +484,7 @@ void WebProcessPool::getGPUProcessConnection(WebProcessProxy& webProcessProxy, G
 #if ENABLE(WEB_AUTHN)
 void WebProcessPool::getWebAuthnProcessConnection(WebProcessProxy& webProcessProxy, Messages::WebProcessProxy::GetWebAuthnProcessConnection::DelayedReply&& reply)
 {
-    WebAuthnProcessProxy::singleton().getWebAuthnProcessConnection(webProcessProxy, [this, weakThis = makeWeakPtr(*this), webProcessProxy = makeWeakPtr(webProcessProxy), reply = WTFMove(reply)] (auto& connectionInfo) mutable {
+    WebAuthnProcessProxy::singleton().getWebAuthnProcessConnection(webProcessProxy, [this, weakThis = WeakPtr { *this }, webProcessProxy = WeakPtr { webProcessProxy }, reply = WTFMove(reply)] (auto& connectionInfo) mutable {
         if (UNLIKELY(!IPC::Connection::identifierIsValid(connectionInfo.identifier()) && webProcessProxy && weakThis)) {
             WEBPROCESSPOOL_RELEASE_LOG_ERROR(Process, "getWebAuthnProcessConnection: Failed first attempt, retrying");
             WebAuthnProcessProxy::singleton().getWebAuthnProcessConnection(*webProcessProxy, WTFMove(reply));
@@ -502,7 +498,7 @@ void WebProcessPool::getWebAuthnProcessConnection(WebProcessProxy& webProcessPro
 bool WebProcessPool::s_useSeparateServiceWorkerProcess = false;
 
 #if ENABLE(SERVICE_WORKER)
-void WebProcessPool::establishWorkerContextConnectionToNetworkProcess(NetworkProcessProxy& proxy, RegistrableDomain&& registrableDomain, PAL::SessionID sessionID, CompletionHandler<void()>&& completionHandler)
+void WebProcessPool::establishWorkerContextConnectionToNetworkProcess(NetworkProcessProxy& proxy, RegistrableDomain&& registrableDomain, std::optional<ServiceWorkerClientIdentifier> serviceWorkerPageIdentifier, PAL::SessionID sessionID, CompletionHandler<void()>&& completionHandler)
 {
     auto* websiteDataStore = WebsiteDataStore::existingDataStoreForSessionID(sessionID);
     if (!websiteDataStore)
@@ -516,7 +512,18 @@ void WebProcessPool::establishWorkerContextConnectionToNetworkProcess(NetworkPro
 
     WebProcessProxy* serviceWorkerProcessProxy { nullptr };
 
-    if (!s_useSeparateServiceWorkerProcess) {
+    if (serviceWorkerPageIdentifier) {
+        // This is a service worker for a service worker page so we need to make sure we use use the page's WebProcess for the service worker.
+        if ((serviceWorkerProcessProxy = WebProcessProxy::processForIdentifier(serviceWorkerPageIdentifier->serverConnectionIdentifier))) {
+            serviceWorkerProcessProxy->enableServiceWorkers(processPool->userContentControllerIdentifierForServiceWorkers());
+            if (serviceWorkerProcessProxy->isInProcessCache()) {
+                processPool->webProcessCache().removeProcess(*serviceWorkerProcessProxy, WebProcessCache::ShouldShutDownProcess::No);
+                ASSERT(!serviceWorkerProcessProxy->isInProcessCache());
+            }
+        }
+    }
+
+    if (!serviceWorkerProcessProxy && !s_useSeparateServiceWorkerProcess) {
         for (auto& process : processPool->m_processes) {
             if (process.ptr() == processPool->m_prewarmedProcess.get() || process->isDummyProcessProxy())
                 continue;
@@ -539,7 +546,7 @@ void WebProcessPool::establishWorkerContextConnectionToNetworkProcess(NetworkPro
     }
 
     if (!serviceWorkerProcessProxy) {
-        auto newProcessProxy = WebProcessProxy::createForServiceWorkers(*processPool, WTFMove(registrableDomain), *websiteDataStore);
+        auto newProcessProxy = WebProcessProxy::createForServiceWorkers(*processPool, RegistrableDomain  { registrableDomain }, *websiteDataStore);
         serviceWorkerProcessProxy = newProcessProxy.ptr();
 
         WEBPROCESSPOOL_RELEASE_LOG_STATIC(ServiceWorker, "establishWorkerContextConnectionToNetworkProcess creating a new service worker process (proces=%p, PID=%d)", serviceWorkerProcessProxy, serviceWorkerProcessProxy->processIdentifier());
@@ -551,7 +558,7 @@ void WebProcessPool::establishWorkerContextConnectionToNetworkProcess(NetworkPro
     ASSERT(!serviceWorkerProcesses().contains(*serviceWorkerProcessProxy));
     serviceWorkerProcesses().add(*serviceWorkerProcessProxy);
 
-    serviceWorkerProcessProxy->establishServiceWorkerContext(processPool->m_serviceWorkerPreferences ? processPool->m_serviceWorkerPreferences.value() : processPool->m_defaultPageGroup->preferences().store(), WTFMove(completionHandler));
+    serviceWorkerProcessProxy->establishServiceWorkerContext(processPool->m_serviceWorkerPreferences ? processPool->m_serviceWorkerPreferences.value() : processPool->m_defaultPageGroup->preferences().store(), registrableDomain, serviceWorkerPageIdentifier, WTFMove(completionHandler));
     if (!processPool->m_serviceWorkerUserAgent.isNull())
         serviceWorkerProcessProxy->setServiceWorkerUserAgent(processPool->m_serviceWorkerUserAgent);
 }
@@ -843,7 +850,7 @@ void WebProcessPool::initializeNewWebProcess(WebProcessProxy& process, WebsiteDa
 
     if (isPrewarmed == WebProcessProxy::IsPrewarmed::Yes) {
         ASSERT(!m_prewarmedProcess);
-        m_prewarmedProcess = makeWeakPtr(process);
+        m_prewarmedProcess = process;
     }
 
 #if PLATFORM(IOS_FAMILY) && !PLATFORM(MACCATALYST)
@@ -1056,7 +1063,7 @@ Ref<WebPageProxy> WebProcessPool::createWebPage(PageClient& pageClient, Ref<API:
         process = dummyProcessProxy(pageConfiguration->websiteDataStore()->sessionID());
         if (!process) {
             process = WebProcessProxy::create(*this, pageConfiguration->websiteDataStore(), WebProcessProxy::IsPrewarmed::No, CrossOriginMode::Shared, WebProcessProxy::ShouldLaunchProcess::No);
-            m_dummyProcessProxies.add(pageConfiguration->websiteDataStore()->sessionID(), makeWeakPtr(*process));
+            m_dummyProcessProxies.add(pageConfiguration->websiteDataStore()->sessionID(), *process);
             m_processes.append(*process);
         }
     } else
@@ -1236,23 +1243,6 @@ void WebProcessPool::handleMemoryPressureWarning(Critical)
         m_prewarmedProcess->shutDown();
     ASSERT(!m_prewarmedProcess);
 }
-
-#if ENABLE(NETSCAPE_PLUGIN_API)
-void WebProcessPool::setAdditionalPluginsDirectory(const String& directory)
-{
-    Vector<String> directories;
-    directories.append(directory);
-
-    m_pluginInfoStore.setAdditionalPluginsDirectories(directories);
-}
-
-void WebProcessPool::refreshPlugins()
-{
-    m_pluginInfoStore.refresh();
-    sendToAllProcesses(Messages::WebProcess::RefreshPlugins());
-}
-
-#endif // ENABLE(NETSCAPE_PLUGIN_API)
 
 ProcessID WebProcessPool::prewarmedProcessIdentifier()
 {
@@ -1591,7 +1581,7 @@ void WebProcessPool::startedUsingGamepads(IPC::Connection& connection)
     bool wereAnyProcessesUsingGamepads = !m_processesUsingGamepads.computesEmpty();
 
     ASSERT(!m_processesUsingGamepads.contains(*proxy));
-    m_processesUsingGamepads.add(proxy);
+    m_processesUsingGamepads.add(*proxy);
 
     if (!wereAnyProcessesUsingGamepads)
         UIGamepadProvider::singleton().processPoolStartedUsingGamepads(*this);
@@ -1682,21 +1672,14 @@ void WebProcessPool::setJavaScriptGarbageCollectorTimerEnabled(bool flag)
 
 void WebProcessPool::addSupportedPlugin(String&& matchingDomain, String&& name, HashSet<String>&& mimeTypes, HashSet<String> extensions)
 {
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    m_pluginInfoStore.addSupportedPlugin(WTFMove(matchingDomain), WTFMove(name), WTFMove(mimeTypes), WTFMove(extensions));
-#else
     UNUSED_PARAM(matchingDomain);
     UNUSED_PARAM(name);
     UNUSED_PARAM(mimeTypes);
     UNUSED_PARAM(extensions);
-#endif
 }
 
 void WebProcessPool::clearSupportedPlugins()
 {
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    m_pluginInfoStore.clearSupportedPlugins();
-#endif
 }
 
 void WebProcessPool::setMemoryCacheDisabled(bool disabled)
@@ -1803,9 +1786,9 @@ void WebProcessPool::removeProcessFromOriginCacheSet(WebProcessProxy& process)
         m_swappedProcessesPerRegistrableDomain.remove(registrableDomain);
 }
 
-void WebProcessPool::processForNavigation(WebPageProxy& page, const API::Navigation& navigation, Ref<WebProcessProxy>&& sourceProcess, const URL& sourceURL, ProcessSwapRequestedByClient processSwapRequestedByClient, Ref<WebsiteDataStore>&& dataStore, CompletionHandler<void(Ref<WebProcessProxy>&&, SuspendedPageProxy*, const String&)>&& completionHandler)
+void WebProcessPool::processForNavigation(WebPageProxy& page, const API::Navigation& navigation, Ref<WebProcessProxy>&& sourceProcess, const URL& sourceURL, ProcessSwapRequestedByClient processSwapRequestedByClient, const FrameInfoData& frameInfo, Ref<WebsiteDataStore>&& dataStore, CompletionHandler<void(Ref<WebProcessProxy>&&, SuspendedPageProxy*, const String&)>&& completionHandler)
 {
-    processForNavigationInternal(page, navigation, sourceProcess.copyRef(), sourceURL, processSwapRequestedByClient, WTFMove(dataStore), [this, page = Ref { page }, navigation = Ref { navigation }, sourceProcess = sourceProcess.copyRef(), sourceURL, processSwapRequestedByClient, completionHandler = WTFMove(completionHandler)](Ref<WebProcessProxy>&& process, SuspendedPageProxy* suspendedPage, const String& reason) mutable {
+    processForNavigationInternal(page, navigation, sourceProcess.copyRef(), sourceURL, processSwapRequestedByClient, frameInfo, WTFMove(dataStore), [this, page = Ref { page }, navigation = Ref { navigation }, sourceProcess = sourceProcess.copyRef(), sourceURL, processSwapRequestedByClient, completionHandler = WTFMove(completionHandler)](Ref<WebProcessProxy>&& process, SuspendedPageProxy* suspendedPage, const String& reason) mutable {
         // We are process-swapping so automatic process prewarming would be beneficial if the client has not explicitly enabled / disabled it.
         bool doingAnAutomaticProcessSwap = processSwapRequestedByClient == ProcessSwapRequestedByClient::No && process.ptr() != sourceProcess.ptr();
         if (doingAnAutomaticProcessSwap && !configuration().wasAutomaticProcessWarmingSetByClient() && !configuration().clientWouldBenefitFromAutomaticProcessPrewarming()) {
@@ -1828,7 +1811,7 @@ void WebProcessPool::processForNavigation(WebPageProxy& page, const API::Navigat
     });
 }
 
-void WebProcessPool::processForNavigationInternal(WebPageProxy& page, const API::Navigation& navigation, Ref<WebProcessProxy>&& sourceProcess, const URL& pageSourceURL, ProcessSwapRequestedByClient processSwapRequestedByClient, Ref<WebsiteDataStore>&& dataStore, CompletionHandler<void(Ref<WebProcessProxy>&&, SuspendedPageProxy*, const String&)>&& completionHandler)
+void WebProcessPool::processForNavigationInternal(WebPageProxy& page, const API::Navigation& navigation, Ref<WebProcessProxy>&& sourceProcess, const URL& pageSourceURL, ProcessSwapRequestedByClient processSwapRequestedByClient, const FrameInfoData& frameInfo, Ref<WebsiteDataStore>&& dataStore, CompletionHandler<void(Ref<WebProcessProxy>&&, SuspendedPageProxy*, const String&)>&& completionHandler)
 {
     auto& targetURL = navigation.currentRequest().url();
     auto targetRegistrableDomain = WebCore::RegistrableDomain { targetURL };
@@ -1885,6 +1868,13 @@ void WebProcessPool::processForNavigationInternal(WebPageProxy& page, const API:
             }
         }
     }
+
+    // If it is the first navigation in a DOM popup and there is no opener, then force a process swap no matter what since
+    // popup windows are originally created in their opener's process.
+    // Note that we currently do not process swap if the window popup has a name. In theory, we should be able to swap in this case too
+    // but we would need to transfer over the name to the new process. At this point, it is not clear it is worth the extra complexity.
+    if (page.openedByDOM() && !navigation.openedByDOMWithOpener() && !page.hasCommittedAnyProvisionalLoads() && frameInfo.frameName.isEmpty() && !targetURL.protocolIsBlob())
+        return completionHandler(createNewProcess(), nullptr, "Process swap because this is a first navigation in a DOM popup without opener"_s);
 
     if (navigation.treatAsSameOriginNavigation())
         return completionHandler(WTFMove(sourceProcess), nullptr, "The treatAsSameOriginNavigation flag is set"_s);

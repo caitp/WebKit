@@ -29,14 +29,13 @@ list(APPEND WebCore_SOURCES
     page/scrolling/nicosia/ScrollingTreeOverflowScrollingNodeNicosia.cpp
     page/scrolling/nicosia/ScrollingTreePositionedNode.cpp
     page/scrolling/nicosia/ScrollingTreeScrollingNodeDelegateNicosia.cpp
-    page/scrolling/nicosia/ScrollingTreeStickyNode.cpp
+    page/scrolling/nicosia/ScrollingTreeStickyNodeNicosia.cpp
 
     platform/ScrollAnimationKinetic.cpp
     platform/ScrollAnimationSmooth.cpp
 
     platform/generic/KeyedDecoderGeneric.cpp
     platform/generic/KeyedEncoderGeneric.cpp
-    platform/generic/ScrollAnimatorGeneric.cpp
 
     platform/graphics/GLContext.cpp
     platform/graphics/PlatformDisplay.cpp

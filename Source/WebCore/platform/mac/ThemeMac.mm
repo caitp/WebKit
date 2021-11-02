@@ -381,8 +381,8 @@ static bool drawCellFocusRingWithFrameAtTime(NSCell *cell, NSRect cellFrame, NSV
 
     // FIXME: This color should be shared with RenderThemeMac. For now just use the same NSColor color.
     // The color is expected to be opaque, since CoreGraphics will apply opacity when drawing (because opacity is normally animated).
-    auto color = colorFromNSColor([NSColor keyboardFocusIndicatorColor]).opaqueColor();
-    auto style = adoptCF(CGStyleCreateFocusRingWithColor(&focusRingStyle, cachedCGColor(color)));
+    auto color = colorFromCocoaColor([NSColor keyboardFocusIndicatorColor]).opaqueColor();
+    auto style = adoptCF(CGStyleCreateFocusRingWithColor(&focusRingStyle, cachedCGColor(color).get()));
     CGContextSetStyle(cgContext, style.get());
 
     CGContextBeginTransparencyLayerWithRect(cgContext, NSRectToCGRect(cellFrame), nullptr);
@@ -936,12 +936,12 @@ void ThemeMac::inflateControlPaintRect(ControlPart part, const ControlStates& st
     END_BLOCK_OBJC_EXCEPTIONS
 }
 
-void ThemeMac::paint(ControlPart part, ControlStates& states, GraphicsContext& context, const FloatRect& zoomedRect, float zoomFactor, ScrollView* scrollView, float deviceScaleFactor, float pageScaleFactor, bool useSystemAppearance, bool useDarkAppearance)
+void ThemeMac::paint(ControlPart part, ControlStates& states, GraphicsContext& context, const FloatRect& zoomedRect, float zoomFactor, ScrollView* scrollView, float deviceScaleFactor, float pageScaleFactor, bool useSystemAppearance, bool useDarkAppearance, const Color& tintColor)
 {
     UNUSED_PARAM(useSystemAppearance);
     UNUSED_PARAM(pageScaleFactor);
 
-    LocalDefaultSystemAppearance localAppearance(useDarkAppearance);
+    LocalDefaultSystemAppearance localAppearance(useDarkAppearance, tintColor);
 
     switch (part) {
         case CheckboxPart:

@@ -110,6 +110,12 @@ static bool isAppearanceDependent(const AtomString& mediaFeature)
     ;
 }
 
+MediaQueryViewportState mediaQueryViewportStateForDocument(const Document& document)
+{
+    // These things affect evaluation of viewport dependent media queries.
+    return { document.view()->layoutSize(), document.frame()->pageZoomFactor(), document.printing() };
+}
+
 MediaQueryEvaluator::MediaQueryEvaluator(bool mediaFeatureResult)
     : m_fallbackResult(mediaFeatureResult)
 {
@@ -123,7 +129,7 @@ MediaQueryEvaluator::MediaQueryEvaluator(const String& acceptedMediaType, bool m
 
 MediaQueryEvaluator::MediaQueryEvaluator(const String& acceptedMediaType, const Document& document, const RenderStyle* style)
     : m_mediaType(acceptedMediaType)
-    , m_document(makeWeakPtr(document))
+    , m_document(document)
     , m_style(style)
 {
 }

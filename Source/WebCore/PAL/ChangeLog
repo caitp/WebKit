@@ -1,3 +1,347 @@
+2021-10-29  Alex Christensen  <achristensen@webkit.org>
+
+        Unreviewed, reverting r284917.
+
+        Likely caused significant performance regression
+
+        Reverted changeset:
+
+        "Remove properties set by NSURLProtocol on NSURLRequest before
+        serializing"
+        https://bugs.webkit.org/show_bug.cgi?id=232332
+        https://commits.webkit.org/r284917
+
+2021-10-26  Alex Christensen  <achristensen@webkit.org>
+
+        Remove properties set by NSURLProtocol on NSURLRequest before serializing
+        https://bugs.webkit.org/show_bug.cgi?id=232332
+        <rdar://79227845>
+
+        Reviewed by Geoff Garen.
+
+        * pal/spi/cf/CFNetworkSPI.h:
+
+2021-10-26  Fujii Hironori  <Hironori.Fujii@sony.com>
+
+        [WebCore] Remove unneeded WTF:: namespace prefix
+        https://bugs.webkit.org/show_bug.cgi?id=232226
+
+        Reviewed by Myles C. Maxfield.
+
+        * pal/HysteresisActivity.h:
+        (PAL::HysteresisActivity::HysteresisActivity):
+        * pal/Logging.cpp:
+        (PAL::registerNotifyCallback):
+        * pal/Logging.h:
+
+2021-10-25  Ayumi Kojima  <ayumi_kojima@apple.com>
+
+        Unreviewed, reverting r284742.
+
+        Reverting because this commit may have casued a regression on
+        imported/w3c/web-platform-tests/speech-api/SpeechSynthesis-
+        speak-events.html
+
+        Reverted changeset:
+
+        "AX: Unify speech synthesizer platform usage for Mac/iOS"
+        https://bugs.webkit.org/show_bug.cgi?id=231895
+        https://commits.webkit.org/r284742
+
+2021-10-23  Chris Fleizach  <cfleizach@apple.com>
+
+        AX: Unify speech synthesizer platform usage for Mac/iOS
+        https://bugs.webkit.org/show_bug.cgi?id=231895
+        <rdar://problem/84372479>
+
+        Reviewed by Andres Gonzalez.
+
+        * PAL.xcodeproj/project.pbxproj:
+        * pal/cocoa/AVFoundationSoftLink.h:
+        * pal/cocoa/AVFoundationSoftLink.mm:
+        * pal/spi/cocoa/AXSpeechManagerSPI.h:
+        * pal/spi/mac/SpeechSynthesisSPI.h: Removed.
+
+2021-10-21  Aditya Keerthi  <akeerthi@apple.com>
+
+        [macOS] Update appearance of <datalist> indicator
+        https://bugs.webkit.org/show_bug.cgi?id=232031
+        rdar://84474135
+
+        Reviewed by Wenson Hsieh.
+
+        * pal/spi/mac/CoreUISPI.h:
+
+2021-10-20  Ross Kirsling  <ross.kirsling@sony.com>
+
+        Mac CMake build should not need to include iOS headers
+        https://bugs.webkit.org/show_bug.cgi?id=231998
+
+        Reviewed by Alex Christensen.
+
+        * pal/PlatformMac.cmake:
+
+2021-10-19  David Kilzer  <ddkilzer@apple.com>
+
+        REGRESSION (r284220): [PAL] TCCSPI.h should be a project header, not a private header
+        <https://webkit.org/b/231977>
+        <rdar://problem/84425384>
+
+        Reviewed by Wenson Hsieh.
+
+        * PAL.xcodeproj/project.pbxproj:
+        - Change TCCSPI.h from a private header to a project header.
+          PAL uses a build phase script to install its headers.
+
+2021-10-18  David Kilzer  <ddkilzer@apple.com>
+
+        Bug 231882: WebKit::GPUConnectionToWebProcess::setTCCIdentity() leaks a tcc_identity_t
+        <https://webkit.org/b/231882>
+        <rdar://problem/84350854>
+
+        Reviewed by Chris Dumez.
+
+        * pal/spi/cocoa/TCCSPI.h:
+        - Properly declare tcc_identity_t as an OSObject.
+
+2021-10-18  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GLIB] Simplify SleepDisabler by checking if we are under sandbox
+        https://bugs.webkit.org/show_bug.cgi?id=231670
+
+        Reviewed by Adrian Perez de Castro.
+
+        Current implementation always tries to connect to ScreenSaver interface and if that fails tries with the portal
+        one. It's simpler to check if we are under sandbox and it avoids a connection that we know is always going to
+        fail.
+
+        * pal/system/glib/SleepDisablerGLib.cpp:
+        (PAL::SleepDisablerGLib::SleepDisablerGLib):
+        (PAL::SleepDisablerGLib::acquireInhibitor):
+        (PAL::SleepDisablerGLib::releaseInhibitor):
+        (PAL::SleepDisablerGLib::acquireInhibitorViaScreenSaverProxy): Deleted.
+        (PAL::SleepDisablerGLib::acquireInhibitorViaInhibitPortalProxy): Deleted.
+        (PAL::SleepDisablerGLib::releaseInhibitorViaScreenSaverProxy): Deleted.
+        (PAL::SleepDisablerGLib::releaseInhibitorViaInhibitPortalProxy): Deleted.
+        * pal/system/glib/SleepDisablerGLib.h:
+
+2021-10-17  David Kilzer  <ddkilzer@apple.com>
+
+        Build fix #3: Adopt attribution AVCaptureSession SPI for GPU process
+        https://bugs.webkit.org/show_bug.cgi?id=231621
+        <rdar://problem/80748535>
+
+        Unreviewed build fix.
+
+        * pal/spi/cocoa/TCCSPI.h:
+        - Use HAVE(TCC_IOS_14_BIG_SUR_SPI).
+
+2021-10-15  Ross Kirsling  <ross.kirsling@sony.com>
+
+        Realize Mac CMake build of WebCore and WebKit
+        https://bugs.webkit.org/show_bug.cgi?id=231749
+
+        Reviewed by Alex Christensen.
+
+        * pal/PlatformMac.cmake:
+
+2021-10-15  Eric Carlson  <eric.carlson@apple.com>
+
+        [iOS] Support getDisplayMedia
+        https://bugs.webkit.org/show_bug.cgi?id=231455
+        <rdar://problem/84044495>
+
+        Reviewed by Youenn Fablet and Jer Noble.
+
+        * PAL.xcodeproj/project.pbxproj:
+        * pal/ios/ReplayKitSoftLink.h: Added.
+        * pal/ios/ReplayKitSoftLink.mm: Added.
+
+2021-10-14  Alex Christensen  <achristensen@webkit.org>
+
+        Fix non-internal iOS builds after r284220
+        https://bugs.webkit.org/show_bug.cgi?id=231621
+
+        * pal/spi/cocoa/TCCSPI.h:
+
+2021-10-14  Kate Cheney  <katherine_cheney@apple.com>
+
+        Adopt attribution AVCaptureSession SPI for GPU process
+        https://bugs.webkit.org/show_bug.cgi?id=231621
+        <rdar://problem/80748535>
+
+        Reviewed by Eric Carlson.
+
+        * PAL.xcodeproj/project.pbxproj:
+        * pal/spi/cocoa/AVFoundationSPI.h:
+        * pal/spi/cocoa/TCCSPI.h: Renamed from Source/WebKit/Platform/spi/ios/TCCSPI.h.
+
+2021-10-14  Myles C. Maxfield  <mmaxfield@apple.com>
+
+        All the SDKVariant.xcconfig files should match
+        https://bugs.webkit.org/show_bug.cgi?id=231663
+
+        Reviewed by Youenn Fablet.
+
+        * Configurations/SDKVariant.xcconfig:
+
+2021-10-13  Wenson Hsieh  <wenson_hsieh@apple.com>
+
+        Support both VK and VKC-prefixed SPI when softlinking VisionKitCore classes
+        https://bugs.webkit.org/show_bug.cgi?id=231683
+        rdar://83744729
+
+        Reviewed by Tim Horton.
+
+        See WebKit/ChangeLog for more details.
+
+        * pal/cocoa/VisionKitCoreSoftLink.h:
+        * pal/cocoa/VisionKitCoreSoftLink.mm:
+
+2021-10-13  Aditya Keerthi  <akeerthi@apple.com>
+
+        [macOS] Add support for accent-color
+        https://bugs.webkit.org/show_bug.cgi?id=231464
+        rdar://84049511
+
+        Reviewed by Tim Horton.
+
+        * pal/spi/mac/NSAppearanceSPI.h:
+
+2021-10-12  Wenson Hsieh  <wenson_hsieh@apple.com>
+
+        Move some staged VisionKitCore SPI into VisionKitCoreSPI.h
+        https://bugs.webkit.org/show_bug.cgi?id=231648
+
+        Reviewed by Tim Horton.
+
+        See WebKit/ChangeLog for more details.
+
+        * pal/spi/cocoa/VisionKitCoreSPI.h:
+
+2021-10-12  Sihui Liu  <sihui_liu@apple.com>
+
+        Implement FileSystemSyncAccessHandle read() and write()
+        https://bugs.webkit.org/show_bug.cgi?id=231466
+        <rdar://problem/84050394>
+
+        Reviewed by Youenn Fablet.
+
+        * PAL.xcodeproj/project.pbxproj:
+        * pal/spi/cocoa/FilePortSPI.h: Added.
+
+2021-10-12  Chris Dumez  <cdumez@apple.com>
+
+        Allow direct construction of WeakPtr without makeWeakPtr()
+        https://bugs.webkit.org/show_bug.cgi?id=231580
+
+        Reviewed by Darin Adler.
+
+        Allow direct construction of WeakPtr without makeWeakPtr(), and deprecate makeWeakPtr().
+
+        * pal/system/mac/SystemSleepListenerMac.mm:
+        (PAL::SystemSleepListenerMac::SystemSleepListenerMac):
+
+2021-10-12  Alex Christensen  <achristensen@webkit.org>
+
+        Remove non-HAVE(CFNETWORK_NSURLSESSION_STRICTRUSTEVALUATE) code
+        https://bugs.webkit.org/show_bug.cgi?id=231579
+
+        Reviewed by Chris Dumez.
+
+        * pal/spi/cf/CFNetworkSPI.h:
+
+2021-10-08  Devin Rousso  <drousso@apple.com>
+
+        [iOS][GPU Process] support `<attachment>`
+        https://bugs.webkit.org/show_bug.cgi?id=230781
+        <rdar://problem/70884096>
+
+        Reviewed by Myles Maxfield.
+
+        * pal/spi/cg/CoreGraphicsSPI.h:
+
+2021-10-05  Aditya Keerthi  <akeerthi@apple.com>
+
+        [iOS] Transcode videos selected from UIImagePickerController
+        https://bugs.webkit.org/show_bug.cgi?id=230639
+        rdar://79665678
+
+        Reviewed by Tim Horton.
+
+        Add AVFoundation API needed to transcode video.
+
+        * pal/cocoa/AVFoundationSoftLink.h:
+        * pal/cocoa/AVFoundationSoftLink.mm:
+
+2021-10-05  Ayumi Kojima  <ayumi_kojima@apple.com>
+
+        Unreviewed, reverting r283339.
+
+        Reverting because this commit may have caused fast/attachment
+        tests to crash
+
+        Reverted changeset:
+
+        "[iOS][GPU Process] support `<attachment>`"
+        https://bugs.webkit.org/show_bug.cgi?id=230781
+        https://commits.webkit.org/r283339
+
+2021-10-03  David Kilzer  <ddkilzer@apple.com>
+
+        Build fix: Attribute IOSurfaces created by camera and decoders to responsible WebProcess
+        <https://bugs.webkit.org/show_bug.cgi?id=231075>
+        <rdar://problem/83767168>
+
+        Unreviewed build fix.
+
+        * pal/spi/cocoa/IOSurfaceSPI.h:
+        (IOSurfaceMemoryLedgerTags):
+        - Define enums for both HAVE(IOSURFACE_SET_OWNERSHIP)
+          and HAVE(IOSURFACE_SET_OWNERSHIP_IDENTITY).
+
+2021-10-03  David Kilzer  <ddkilzer@apple.com>
+
+        Build fix: GPU Process microphone attribution SPI adoption
+        <https://bugs.webkit.org/show_bug.cgi?id=231034>
+        <rdar://problem/83732537>
+
+        * pal/spi/cocoa/AVFoundationSPI.h:
+        (-[AVAudioSession setHostProcessAttribution:error:]):
+        - Add SPI declaration for open source bots.
+
+2021-10-01  Chris Dumez  <cdumez@apple.com>
+
+        Drop support for macOS < 10.15
+        https://bugs.webkit.org/show_bug.cgi?id=231085
+
+        Reviewed by Darin Adler.
+
+        * pal/cocoa/AVFoundationSoftLink.mm:
+        * pal/spi/cocoa/AVFoundationSPI.h:
+        * pal/spi/mac/NSMenuSPI.h:
+        * pal/spi/mac/NSViewSPI.h:
+
+2021-10-01  Kate Cheney  <katherine_cheney@apple.com>
+
+        GPU Process microphone attribution SPI adoption
+        https://bugs.webkit.org/show_bug.cgi?id=231034
+        <rdar://problem/83732537>
+
+        Reviewed by Youenn Fablet.
+
+        * pal/spi/cocoa/LaunchServicesSPI.h:
+
+2021-09-30  Devin Rousso  <drousso@apple.com>
+
+        [iOS][GPU Process] support `<attachment>`
+        https://bugs.webkit.org/show_bug.cgi?id=230781
+        <rdar://problem/70884096>
+
+        Reviewed by Myles Maxfield.
+
+        * pal/spi/cg/CoreGraphicsSPI.h:
+
 2021-09-29  Eric Carlson  <eric.carlson@apple.com>
 
         [Cocoa] Support in-band chapter tracks

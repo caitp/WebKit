@@ -38,7 +38,7 @@
 #include "GPUProcessCreationParameters.h"
 #include "GPUProcessProxyMessages.h"
 #include "GPUProcessSessionParameters.h"
-#include "Logging.h"
+#include "LogInitialization.h"
 #include "SandboxExtension.h"
 #include "WebPageProxyMessages.h"
 #include "WebProcessPoolMessages.h"
@@ -75,7 +75,6 @@
 #endif
 
 namespace WebKit {
-using namespace WebCore;
 
 // We wouldn't want the GPUProcess to repeatedly exit then relaunch when under memory pressure. In particular, we need to make sure the
 // WebProcess has a change to schedule work after the GPUProcess get launched. For this reason, we make sure that the GPUProcess never
@@ -420,7 +419,7 @@ RemoteAudioSessionProxyManager& GPUProcess::audioSessionManager() const
 WorkQueue& GPUProcess::videoMediaStreamTrackRendererQueue()
 {
     if (!m_videoMediaStreamTrackRendererQueue)
-        m_videoMediaStreamTrackRendererQueue = WorkQueue::create("RemoteVideoMediaStreamTrackRenderer", WorkQueue::Type::Serial, WorkQueue::QOS::UserInitiated);
+        m_videoMediaStreamTrackRendererQueue = WorkQueue::create("RemoteVideoMediaStreamTrackRenderer", WorkQueue::QOS::UserInitiated);
     return *m_videoMediaStreamTrackRendererQueue;
 }
 #endif
@@ -429,7 +428,7 @@ WorkQueue& GPUProcess::videoMediaStreamTrackRendererQueue()
 WorkQueue& GPUProcess::libWebRTCCodecsQueue()
 {
     if (!m_libWebRTCCodecsQueue)
-        m_libWebRTCCodecsQueue = WorkQueue::create("LibWebRTCCodecsQueue", WorkQueue::Type::Serial, WorkQueue::QOS::UserInitiated);
+        m_libWebRTCCodecsQueue = WorkQueue::create("LibWebRTCCodecsQueue", WorkQueue::QOS::UserInitiated);
     return *m_libWebRTCCodecsQueue;
 }
 #endif
@@ -497,6 +496,11 @@ void GPUProcess::setVorbisDecoderEnabled(bool enabled)
     PlatformMediaSessionManager::setVorbisDecoderEnabled(m_vorbisEnabled);
 }
 #endif
+
+void GPUProcess::webProcessConnectionCountForTesting(CompletionHandler<void(uint64_t)>&& completionHandler)
+{
+    completionHandler(GPUConnectionToWebProcess::objectCountForTesting());
+}
 
 } // namespace WebKit
 

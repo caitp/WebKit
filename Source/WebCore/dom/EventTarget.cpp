@@ -66,6 +66,8 @@ Ref<EventTarget> EventTarget::create(ScriptExecutionContext& context)
     return EventTargetConcrete::create(context);
 }
 
+EventTarget::~EventTarget() = default;
+
 bool EventTarget::isNode() const
 {
     return false;
@@ -96,7 +98,7 @@ bool EventTarget::addEventListener(const AtomString& eventType, Ref<EventListene
         return false;
 
     if (options.signal) {
-        options.signal->addAlgorithm([weakThis = makeWeakPtr(*this), eventType, listener = makeWeakPtr(listener.get()), capture = options.capture] {
+        options.signal->addAlgorithm([weakThis = WeakPtr { *this }, eventType, listener = WeakPtr { listener }, capture = options.capture] {
             if (weakThis && listener)
                 weakThis->removeEventListener(eventType, *listener, capture);
         });
@@ -123,7 +125,7 @@ void EventTarget::addEventListenerForBindings(const AtomString& eventType, RefPt
         addEventListener(eventType, listener.releaseNonNull(), capture);
     });
 
-    WTF::visit(visitor, variant);
+    std::visit(visitor, variant);
 }
 
 void EventTarget::removeEventListenerForBindings(const AtomString& eventType, RefPtr<EventListener>&& listener, EventListenerOptionsOrBoolean&& variant)
@@ -137,7 +139,7 @@ void EventTarget::removeEventListenerForBindings(const AtomString& eventType, Re
         removeEventListener(eventType, *listener, capture);
     });
 
-    WTF::visit(visitor, variant);
+    std::visit(visitor, variant);
 }
 
 bool EventTarget::removeEventListener(const AtomString& eventType, EventListener& listener, const EventListenerOptions& options)

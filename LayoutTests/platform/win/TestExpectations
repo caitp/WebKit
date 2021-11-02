@@ -274,6 +274,7 @@ http/tests/misc/image-checks-for-accept.html [ Skip ]
 accessibility/aria-listbox-clear-selection-crash.html [ Skip ]
 accessibility/listbox-clear-selection.html [ Skip ]
 accessibility/embedded-image-description.html [ Skip ]
+accessibility/img-no-alt-not-ignored-with-title.html [ Skip ]
 
 # TODO Conic gradients
 http/wpt/css/css-images-4/conic-gradient-parsing.html [ Skip ]
@@ -1248,6 +1249,8 @@ webkit.org/b/21796 editing/selection/drag-in-iframe.html [ Skip ]
 # These test fail due to 'notifyDone' not being executed.
 webkit.org/b/121509 editing/spelling/grammar-paste.html [ Skip ]
 
+webkit.org/b/231962 editing/selection/modal-dialog-select-paragraph.html [ Failure ]
+
 ###### Command enabling
 editing/execCommand/enabling-and-selection-2.html [ Failure ]
 webkit.org/b/101539 editing/execCommand/switch-list-type-with-orphaned-li.html [ Failure ]
@@ -2205,7 +2208,6 @@ http/tests/security/referrer-policy-https-unsafe-url.html [ Skip ] # Timeout
 http/tests/security/referrer-policy-https-never.html [ Skip ] # Timeout
 http/tests/security/referrer-policy-invalid.html [ Skip ] # Timeout
 http/tests/security/referrer-policy-rel-noreferrer.html [ Skip ] # Timeout
-http/tests/security/frameNavigation/xss-DENIED-plugin-navigation.html [ Skip ] # Timeout
 webkit.org/b/95530 http/tests/security/inactive-document-with-empty-security-origin.html [ Skip ] # Timeout
 http/tests/security/mixedContent/insecure-xhr-in-main-frame.html [ Skip ] # Timeout
 http/tests/security/mixedContent/insecure-iframe-in-main-frame.html [ Skip ] # Timeout
@@ -2911,6 +2913,8 @@ http/tests/misc/large-js-program.py [ Crash Timeout ]
 fast/repaint/block-inputrange-repaint.html [ Pass Failure ]
 
 fast/inline/padding-ellipsis-right.html [ ImageOnlyFailure ]
+fast/inline/inline-background-clip-text.html [ ImageOnlyFailure ]
+fast/inline/inline-background-clip-text-multiline.html [ ImageOnlyFailure ]
 
 # This test hardcodes the result of a platform-dependent font lookup algorithm.
 fast/text/fallback-language-han.html [ Skip ]
@@ -2939,8 +2943,9 @@ fast/history/page-cache-geolocation-active-watcher.html [ Skip ]
 fast/forms/indeterminate-progress-inline-height.html [ Failure ]
 fast/forms/listbox-scrollbar-hit-test.html [ Failure ]
 
-# This test uses an MPEG-4 video
+# These tests use an MPEG-4 video
 media/video-seek-to-current-time.html [ Skip ]
+accessibility/video-element-url-attribute.html [ Skip ]
 
 # Weird black image sometimes
 webkit.org/b/148144 fast/css/will-change/will-change-creates-stacking-context.html [ ImageOnlyFailure ]
@@ -3712,6 +3717,7 @@ http/tests/cache-storage [ Skip ]
 http/tests/inspector/network/resource-response-service-worker.html [ Skip ]
 http/tests/workers/service [ Skip ]
 http/wpt/cache-storage [ Skip ]
+http/wpt/push-api [ Skip ]
 http/wpt/service-workers [ Skip ]
 imported/w3c/web-platform-tests/content-security-policy/securitypolicyviolation/inside-service-worker.https.html [ Skip ]
 imported/w3c/web-platform-tests/content-security-policy/worker-src/service-worker-src-child-fallback-blocked.https.sub.html [ Skip ]
@@ -3719,15 +3725,35 @@ imported/w3c/web-platform-tests/content-security-policy/worker-src/service-worke
 imported/w3c/web-platform-tests/content-security-policy/worker-src/service-worker-src-default-fallback.https.sub.html [ Skip ]
 imported/w3c/web-platform-tests/content-security-policy/worker-src/service-worker-src-script-fallback.https.sub.html [ Skip ]
 imported/w3c/web-platform-tests/content-security-policy/worker-src/service-worker-src-self-fallback.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/dom/idlharness.any.serviceworker.html [ Skip ]
 imported/w3c/web-platform-tests/fetch/api/policies/referrer-no-referrer-service-worker.https.html [ Skip ]
 imported/w3c/web-platform-tests/fetch/api/policies/referrer-origin-service-worker.https.html [ Skip ]
 imported/w3c/web-platform-tests/fetch/api/policies/referrer-origin-when-cross-origin-service-worker.https.html [ Skip ]
 imported/w3c/web-platform-tests/fetch/api/policies/referrer-unsafe-url-service-worker.https.html [ Skip ]
 imported/w3c/web-platform-tests/fetch/api/request/destination [ Skip ]
 imported/w3c/web-platform-tests/fetch/cross-origin-resource-policy [ Skip ]
+imported/w3c/web-platform-tests/push-api [ Skip ]
 imported/w3c/web-platform-tests/server-timing/service_worker_idl.html [ Skip ]
 imported/w3c/web-platform-tests/service-workers [ Skip ]
 imported/w3c/web-platform-tests/html/webappapis/scripting/processing-model-2/integration-with-the-javascript-agent-formalism/requires-failure.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/acquire.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/clientids.tentative.https.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/held.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/idlharness.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/ifAvailable.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/lock-attributes.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/mode-exclusive.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/mode-mixed.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/mode-shared.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/query-empty.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/resource-names.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/secure-context.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/signal.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/web-locks/steal.tentative.https.any.serviceworker.html [ Skip ]
+imported/w3c/web-platform-tests/worklets/animation-worklet-service-worker-interception.https.html [ Skip ]
+imported/w3c/web-platform-tests/worklets/audio-worklet-service-worker-interception.https.html [ Skip ]
+imported/w3c/web-platform-tests/worklets/layout-worklet-service-worker-interception.https.html [ Skip ]
+imported/w3c/web-platform-tests/worklets/paint-worklet-service-worker-interception.https.html [ Skip ]
 imported/w3c/web-platform-tests/worklets/animation-worklet-service-worker-interception.https.html [ Skip ]
 imported/w3c/web-platform-tests/worklets/audio-worklet-service-worker-interception.https.html [ Skip ]
 imported/w3c/web-platform-tests/worklets/layout-worklet-service-worker-interception.https.html [ Skip ]
@@ -3897,6 +3923,15 @@ webkit.org/b/182159 webanimations/opacity-animation-yields-compositing.html [ Fa
 
 webkit.org/b/182239 js/dom/array-with-double-assign.html [ Failure ]
 webkit.org/b/182239 js/dom/array-with-double-push.html [ Failure ]
+
+webkit.org/b/231703 js/dom/toInt32UInt32.html [ Pass Crash ]
+webkit.org/b/231703 js/dom/implicit-call-with-global-reentry.html [ Pass Crash ]
+webkit.org/b/231703 js/dom/document-all-class-extends.html [ Pass Crash ]
+webkit.org/b/231703 js/dom/reserved-words-as-property.html [ Pass Crash ]
+webkit.org/b/231703 js/dfg-inlining-reg-alloc.html [ Pass Crash ]
+webkit.org/b/231703 js/dfg-inline-many-blocks.html [ Pass Crash ]
+webkit.org/b/231703 js/dfg-float32array.html [ Pass Crash ]
+webkit.org/b/231703 js/dfg-uint16array.html [ Pass Crash ]
 
 webkit.org/b/182626 [ Release ] accessibility/aria-hidden-updates-alldescendants.html [ Failure ]
 
@@ -4604,7 +4639,7 @@ fast/dom/focus-shift-crash.html [ Timeout ]
 fast/events/wheel/redispatched-wheel-event.html [ Timeout ]
 fast/inline/crash-when-negative-spacing-produce-nan.html [ Timeout ]
 imported/blink/fast/dom/Window/open-window-features-fuzz.html [ Timeout ]
-
+fast/forms/form-submission-crash-3.html [ Timeout ]
 
 webkit.org/b/227896 fast/text/pua-charactersTreatedAsSpace.html [ ImageOnlyFailure ]
 
@@ -4639,7 +4674,6 @@ fast/text/offsetForPosition-complex-fallback.html [ Pass Failure ]
 # No BroadcastChannel support on Windows.
 fast/html/broadcast-channel-between-different-sessions.html [ Skip ]
 http/tests/messaging/broadcastchannel-partitioning.html [ Skip ]
-http/tests/messaging/broadcastchannel-partitioning-with-storage-access.html [ Skip ]
 
 # This test is skipped because the necessary feature flag functionality specific to the Windows WebKit legacy port is
 # not implemented.  The feature flags in question are CSSCounterStyleAtRulesEnabled and CSSCounterStyleAtRuleImageSymbolsEnabled.
@@ -4690,6 +4724,8 @@ webkit.org/b/229379 fast/visual-viewport/resize-event-fired-window-resized.html 
 
 webkit.org/b/215318 fast/text/zwj-ligature.html [ ImageOnlyFailure ]
 
+webkit.org/b/231690 fast/text/hanging-punctuation-allow-end-basic.html [ ImageOnlyFailure ]
+
 webkit.org/b/229594 js/dfg-int16array.html [ Pass Crash ]
 webkit.org/b/229594 js/dfg-int32array-overflow-values.html [ Pass Crash ]
 webkit.org/b/229594 js/dfg-int8array.html [ Pass Crash ]
@@ -4704,3 +4740,12 @@ webkit.org/b/230727 fast/images/exif-orientation-composited.html [ Pass ImageOnl
 
 webkit.org/b/230838 svg/as-background-image/svg-as-background-body.html [ Pass Crash ]
 
+webkit.org/b/231921 http/wpt/webxr/xrHandInput_gc.html [ Pass Failure ]
+
+webkit.org/b/232188 fast/ruby/generated-before-counter-doesnt-crash.html [ Pass Failure ]
+
+webkit.org/b/232317 js/function-apply-aliased.html [ Pass Crash ]
+
+webkit.org/b/232319 fast/ruby/before-block-doesnt-crash.html [ Pass Failure ]
+
+webkit.org/b/232321 imported/mozilla/svg/viewBox-and-pattern-03.svg [ Pass Crash ]

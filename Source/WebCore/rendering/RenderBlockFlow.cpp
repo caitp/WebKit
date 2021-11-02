@@ -25,6 +25,7 @@
 #include "RenderBlockFlow.h"
 
 #include "Editor.h"
+#include "ElementInlines.h"
 #include "FloatingObjects.h"
 #include "Frame.h"
 #include "FrameSelection.h"
@@ -33,10 +34,12 @@
 #include "HTMLParserIdioms.h"
 #include "HTMLTextAreaElement.h"
 #include "HitTestLocation.h"
-#include "InlineIterator.h"
-#include "LayoutIntegrationLineIterator.h"
+#include "InlineIteratorBox.h"
+#include "InlineIteratorLine.h"
+#include "InlineIteratorLogicalOrderTraversal.h"
+#include "InlineIteratorTextBox.h"
+#include "InlineWalker.h"
 #include "LayoutIntegrationLineLayout.h"
-#include "LayoutIntegrationRunIterator.h"
 #include "LayoutRepainter.h"
 #include "LegacyInlineTextBox.h"
 #include "LegacyLineLayout.h"
@@ -465,7 +468,7 @@ void RenderBlockFlow::setChildrenInline(bool value)
 {
     if (childrenInline() && !value) {
         setLineLayoutPath(UndeterminedPath);
-        m_lineLayout = WTF::Monostate();
+        m_lineLayout = std::monostate();
     }
 
     RenderBlock::setChildrenInline(value);
@@ -522,6 +525,7 @@ void RenderBlockFlow::layoutBlock(bool relayoutChildren, LayoutUnit pageLogicalH
         }
         if (!firstChild() && !isAnonymousBlock())
             setChildrenInline(true);
+        dirtyForLayoutFromPercentageHeightDescendants();
         if (childrenInline())
             layoutInlineChildren(relayoutChildren, repaintLogicalTop, repaintLogicalBottom);
         else
@@ -628,8 +632,6 @@ void RenderBlockFlow::layoutBlock(bool relayoutChildren, LayoutUnit pageLogicalH
 
 void RenderBlockFlow::layoutBlockChildren(bool relayoutChildren, LayoutUnit& maxFloatLogicalBottom)
 {
-    dirtyForLayoutFromPercentageHeightDescendants();
-
     LayoutUnit beforeEdge = borderAndPaddingBefore();
     LayoutUnit afterEdge = borderAndPaddingAfter() + scrollbarLogicalHeight();
 
@@ -688,7 +690,7 @@ void RenderBlockFlow::layoutInlineChildren(bool relayoutChildren, LayoutUnit& re
         if (LayoutIntegration::LineLayout::canUseFor(*this))
             return ModernPath;
 #endif
-        return LineBoxesPath;
+        return LegacyPath;
     };
 
     if (lineLayoutPath() == UndeterminedPath)
@@ -2179,7 +2181,7 @@ void RenderBlockFlow::styleWillChange(StyleDifference diff, const RenderStyle& n
 
 void RenderBlockFlow::deleteLines()
 {
-    m_lineLayout = WTF::Monostate();
+    m_lineLayout = std::monostate();
 
     RenderBlock::deleteLines();
 }
@@ -3042,7 +3044,7 @@ void RenderBlockFlow::adjustForBorderFit(LayoutUnit x, LayoutUnit& left, LayoutU
     // We don't deal with relative positioning.  Our assumption is that you shrink to fit the lines without accounting
     // for either overflow or translations via relative positioning.
     if (childrenInline()) {
-        for (auto line = LayoutIntegration::firstLineFor(*this); line; line.traverseNext()) {
+        for (auto line = InlineIterator::firstLineFor(*this); line; line.traverseNext()) {
             left = std::min(left, x + LayoutUnit(line->contentLogicalLeft()));
             right = std::max(right, x + LayoutUnit(ceilf(line->contentLogicalRight())));
         }
@@ -3249,7 +3251,7 @@ LayoutUnit RenderBlockFlow::adjustSelectionTopForPrecedingBlock(LayoutUnit top) 
     if (!offsetToBlockBefore.height())
         return top;
 
-    if (auto lastLine = LayoutIntegration::lastLineFor(*blockBefore)) {
+    if (auto lastLine = InlineIterator::lastLineFor(*blockBefore)) {
         RenderObject::HighlightState lastLineSelectionState = lastLine->selectionState();
         if (lastLineSelectionState != RenderObject::HighlightState::Inside && lastLineSelectionState != RenderObject::HighlightState::Start)
             return top;
@@ -3275,11 +3277,11 @@ GapRects RenderBlockFlow::inlineSelectionGaps(RenderBlock& rootBlock, const Layo
         return { };
     }
 
-    auto hasSelectedChildren = [&](const LayoutIntegration::LineIterator& line) {
+    auto hasSelectedChildren = [&](const InlineIterator::LineIterator& line) {
         return line->selectionState() != RenderObject::HighlightState::None;
     };
 
-    auto lineSelectionGap = [&](const LayoutIntegration::LineIterator& line, LayoutUnit selTop, LayoutUnit selHeight) -> GapRects {
+    auto lineSelectionGap = [&](const InlineIterator::LineIterator& line, LayoutUnit selTop, LayoutUnit selHeight) -> GapRects {
         RenderObject::HighlightState lineState = line->selectionState();
 
         bool leftGap, rightGap;
@@ -3332,8 +3334,8 @@ GapRects RenderBlockFlow::inlineSelectionGaps(RenderBlock& rootBlock, const Layo
         return result;
     };
 
-    LayoutIntegration::LineIterator lastSelectedLine;
-    LayoutIntegration::LineIterator line = LayoutIntegration::firstLineFor(*this);
+    InlineIterator::LineIterator lastSelectedLine;
+    InlineIterator::LineIterator line = InlineIterator::firstLineFor(*this);
     for (; line && !hasSelectedChildren(line); line.traverseNext()) { }
 
     GapRects result;
@@ -3359,7 +3361,7 @@ GapRects RenderBlockFlow::inlineSelectionGaps(RenderBlock& rootBlock, const Layo
 
     if (containsStart && !lastSelectedLine)
         // VisibleSelection must start just after our last line.
-        lastSelectedLine = LayoutIntegration::lastLineFor(*this);
+        lastSelectedLine = InlineIterator::lastLineFor(*this);
 
     if (lastSelectedLine && selectionState() != HighlightState::End && selectionState() != HighlightState::Both) {
         // Update our lastY to be the bottom of the last selected line.
@@ -3384,7 +3386,7 @@ bool RenderBlockFlow::needsLayoutAfterFragmentRangeChange() const
 void RenderBlockFlow::setMultiColumnFlow(RenderMultiColumnFlow& fragmentedFlow)
 {
     ASSERT(!hasRareBlockFlowData() || !rareBlockFlowData()->m_multiColumnFlow);
-    ensureRareBlockFlowData().m_multiColumnFlow = makeWeakPtr(fragmentedFlow);
+    ensureRareBlockFlowData().m_multiColumnFlow = fragmentedFlow;
 }
 
 void RenderBlockFlow::clearMultiColumnFlow()
@@ -3456,7 +3458,7 @@ bool RenderBlockFlow::containsNonZeroBidiLevel() const
     return false;
 }
 
-static Position positionForRun(const RenderBlockFlow& flow, LayoutIntegration::RunIterator run, bool start)
+static Position positionForRun(const RenderBlockFlow& flow, InlineIterator::BoxIterator run, bool start)
 {
     if (!run)
         return Position();
@@ -3464,10 +3466,10 @@ static Position positionForRun(const RenderBlockFlow& flow, LayoutIntegration::R
     if (!run->renderer().nonPseudoNode())
         return makeDeprecatedLegacyPosition(flow.nonPseudoElement(), start ? flow.caretMinOffset() : flow.caretMaxOffset());
 
-    if (!is<LayoutIntegration::TextRunIterator>(run))
+    if (!is<InlineIterator::TextBoxIterator>(run))
         return makeDeprecatedLegacyPosition(run->renderer().nonPseudoNode(), start ? run->renderer().caretMinOffset() : run->renderer().caretMaxOffset());
 
-    auto& textRun = downcast<LayoutIntegration::TextRunIterator>(run);
+    auto& textRun = downcast<InlineIterator::TextBoxIterator>(run);
     return makeDeprecatedLegacyPosition(textRun->renderer().nonPseudoNode(), start ? textRun->start() : textRun->end());
 }
 
@@ -3520,7 +3522,7 @@ RenderText* RenderBlockFlow::findClosestTextAtAbsolutePoint(const FloatPoint& po
     // Only check the gaps between the root line boxes. We deliberately ignore overflow because
     // experience has shown that hit tests on an exploded text node can fail when within the
     // overflow fragment.
-    for (auto current = LayoutIntegration::firstLineFor(blockFlow), last = LayoutIntegration::lastLineFor(blockFlow); current && current != last; current.traverseNext()) {
+    for (auto current = InlineIterator::firstLineFor(blockFlow), last = InlineIterator::lastLineFor(blockFlow); current && current != last; current.traverseNext()) {
         float currentBottom = current->y() + current->logicalHeight();
         if (localPoint.y() < currentBottom)
             return nullptr;
@@ -3540,7 +3542,7 @@ VisiblePosition RenderBlockFlow::positionForPointWithInlineChildren(const Layout
 {
     ASSERT(childrenInline());
 
-    auto firstLine = LayoutIntegration::firstLineFor(*this);
+    auto firstLine = InlineIterator::firstLineFor(*this);
 
     if (!firstLine)
         return createVisiblePosition(0, Affinity::Downstream);
@@ -3549,9 +3551,9 @@ VisiblePosition RenderBlockFlow::positionForPointWithInlineChildren(const Layout
     bool blocksAreFlipped = style().isFlippedBlocksWritingMode();
 
     // look for the closest line box in the root box which is at the passed-in y coordinate
-    LayoutIntegration::RunIterator closestRun;
-    LayoutIntegration::LineIterator firstLineWithChildren;
-    LayoutIntegration::LineIterator lastLineWithChildren;
+    InlineIterator::LeafBoxIterator closestRun;
+    InlineIterator::LineIterator firstLineWithChildren;
+    InlineIterator::LineIterator lastLineWithChildren;
     for (auto line = firstLine; line; line.traverseNext()) {
         if (fragment && line->legacyRootInlineBox() && line->legacyRootInlineBox()->containingFragment() != fragment)
             continue;
@@ -3618,7 +3620,8 @@ VisiblePosition RenderBlockFlow::positionForPointWithInlineChildren(const Layout
     if (lastLineWithChildren) {
         // We hit this case for Mac behavior when the Y coordinate is below the last box.
         ASSERT(moveCaretToBoundary);
-        if (auto logicallyLastRun = lastLineWithChildren->logicalEndRunWithNode())
+        InlineIterator::LineLogicalOrderCache orderCache;
+        if (auto logicallyLastRun = InlineIterator::lastLeafOnLineInLogicalOrderWithNode(lastLineWithChildren, orderCache))
             return positionForRun(*this, logicallyLastRun, false);
     }
 
@@ -3726,9 +3729,9 @@ void RenderBlockFlow::invalidateLineLayoutPath()
 {
     switch (lineLayoutPath()) {
     case UndeterminedPath:
-    case ForceLineBoxesPath:
+    case ForcedLegacyPath:
         return;
-    case LineBoxesPath:
+    case LegacyPath:
         setLineLayoutPath(UndeterminedPath);
         return;
     case ModernPath: {
@@ -3736,9 +3739,9 @@ void RenderBlockFlow::invalidateLineLayoutPath()
         auto path = UndeterminedPath;
 #if ENABLE(LAYOUT_FORMATTING_CONTEXT)
         if (modernLineLayout() && modernLineLayout()->shouldSwitchToLegacyOnInvalidation())
-            path = ForceLineBoxesPath;
+            path = ForcedLegacyPath;
 #endif
-        m_lineLayout = WTF::Monostate();
+        m_lineLayout = std::monostate();
         setLineLayoutPath(path);
         if (needsLayout())
             return;
@@ -4552,6 +4555,9 @@ void RenderBlockFlow::computeInlinePreferredLogicalWidths(LayoutUnit& minLogical
                     inlineMax = widths.endMax;
                     addedTextIndent = true;
                     addedStartPunctuationHang = true;
+                    if (widths.endsWithBreak)
+                        stripFrontSpaces = true;
+
                 } else
                     inlineMax += std::max<float>(0, childMax);
             }

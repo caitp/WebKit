@@ -232,6 +232,17 @@ AllowsPictureInPictureMediaPlayback:
     WebCore:
       default: true
 
+AlternateFormControlDesignEnabled:
+  type: bool
+  condition: PLATFORM(IOS_FAMILY)
+  defaultValue:
+    WebKitLegacy:
+      default: false
+    WebKit:
+      default: false
+    WebCore:
+      default: false
+
 AlwaysUseAcceleratedOverflowScroll:
   type: bool
   defaultValue:
@@ -1894,10 +1905,10 @@ ScrollAnimatorEnabled:
       "PLATFORM(MAC)": true
       default: false
     WebKit:
-      "PLATFORM(MAC)": true
+      "PLATFORM(MAC) || PLATFORM(GTK) || PLATFORM(WPE)": true
       default: false
     WebCore:
-      "PLATFORM(MAC)": true
+      "PLATFORM(MAC) || PLATFORM(GTK) || PLATFORM(WPE)": true
       default: false
 
 # FIXME: This is handled via WebView SPI rather than WebPreferences for WebKitLegacy. We should change the SPI to lookup the WebPreferences value instead.

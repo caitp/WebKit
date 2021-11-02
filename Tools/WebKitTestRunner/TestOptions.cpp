@@ -65,6 +65,7 @@ const TestFeatures& TestOptions::defaults()
             { "AsyncFrameScrollingEnabled", false },
             { "AsyncOverflowScrollingEnabled", false },
             { "BroadcastChannelOriginPartitioningEnabled", false },
+            { "BuiltInNotificationsEnabled", false },
             { "CSSOMViewScrollingAPIEnabled", true },
             { "CaptureAudioInGPUProcessEnabled", captureAudioInGPUProcessEnabledValue },
             { "CaptureAudioInUIProcessEnabled", false },
@@ -97,6 +98,7 @@ const TestFeatures& TestOptions::defaults()
             { "MediaDevicesEnabled", true },
             { "MediaPreloadingEnabled", true },
             { "MediaSourceEnabled", mediaSourceEnabledValue },
+            { "MockScrollAnimatorEnabled", false },
             { "MockCaptureDevicesEnabled", true },
             { "MockScrollbarsEnabled", true },
             { "ModernMediaControlsEnabled", true },
@@ -179,7 +181,7 @@ const TestFeatures& TestOptions::defaults()
             { "standaloneWebApplicationURL", { } },
         };
         features.stringVectorTestRunnerFeatures = {
-            { "language", { } },
+            { "language", { "en-US" } },
         };
     }
     

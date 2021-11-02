@@ -37,7 +37,6 @@
     RetainPtr<NSArray<PKPaymentSummaryItem *>> _summaryItems;
     RetainPtr<NSArray<PKShippingMethod *>> _shippingMethods;
     RetainPtr<NSError> _sessionError;
-    WeakPtr<WebKit::PaymentAuthorizationPresenter> _presenter;
     WebKit::DidAuthorizePaymentCompletion _didAuthorizePaymentCompletion;
     WebKit::DidRequestMerchantSessionCompletion _didRequestMerchantSessionCompletion;
     WebKit::DidSelectPaymentMethodCompletion _didSelectPaymentMethodCompletion;
@@ -117,7 +116,7 @@
     if (!(self = [super init]))
         return nil;
 
-    _presenter = makeWeakPtr(presenter);
+    _presenter = presenter;
     _request = request;
     _shippingMethods = request.shippingMethods;
     _summaryItems = request.paymentSummaryItems;

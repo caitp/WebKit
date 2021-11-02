@@ -44,6 +44,13 @@ class String
     end
 end
 
+Signal.trap("TERM") {
+    # Occasionally, the jscore-test step fails to produce any output for 10' at
+    # which point it gets killed by the buildbot code. Try to diagnose.
+    puts("Received SIGTERM")
+    puts(Thread.current.backtrace)
+}
+
 RemoteHost = Struct.new(:name, :user, :host, :port, :remoteDirectory)
 
 THIS_SCRIPT_PATH = Pathname.new(__FILE__).realpath
@@ -1227,16 +1234,21 @@ def runWebAssemblySuite(*optionalTestSpecificOptions)
     modules = Dir[WASMTESTS_PATH + "*.js"].map { |f| File.basename(f) }
     prepareExtraAbsoluteFiles(WASMTESTS_PATH, ["wasm.json"])
     prepareExtraRelativeFiles(modules.map { |f| "../" + f }, $collection)
-    run("default-wasm", "-m", *(FTL_OPTIONS + optionalTestSpecificOptions))
+    if optionalTestSpecificOptions[0] == :no_module
+      optionalTestSpecificOptions.shift
+    else
+      optionalTestSpecificOptions.unshift "-m"
+    end
+    run("default-wasm", *(FTL_OPTIONS + optionalTestSpecificOptions))
     if $mode != "quick"
-        run("wasm-no-cjit-yes-tls-context", "-m", "--useFastTLSForWasmContext=true", *(FTL_OPTIONS + NO_CJIT_OPTIONS + optionalTestSpecificOptions))
-        run("wasm-eager", "-m", *(FTL_OPTIONS + EAGER_OPTIONS + optionalTestSpecificOptions))
-        run("wasm-eager-jettison", "-m", "--forceCodeBlockToJettisonDueToOldAge=true", "--useRandomizingExecutableIslandAllocation=true", "--verifyGC=true", *(FTL_OPTIONS + optionalTestSpecificOptions))
-        run("wasm-no-tls-context", "-m", "--useFastTLSForWasmContext=false", *(FTL_OPTIONS + optionalTestSpecificOptions))
-        run("wasm-slow-memory", "-m", "--useWebAssemblyFastMemory=false", *(FTL_OPTIONS + optionalTestSpecificOptions))
-        run("wasm-b3", "-m", "--useWasmLLInt=false", "--wasmBBQUsesAir=false", *(FTL_OPTIONS + optionalTestSpecificOptions))
-        run("wasm-air", "-m", "--useWasmLLInt=false", "--useRandomizingExecutableIslandAllocation=true", *(FTL_OPTIONS + optionalTestSpecificOptions))
-        run("wasm-collect-continuously", "-m", "--collectContinuously=true", "--verifyGC=true", *(FTL_OPTIONS + optionalTestSpecificOptions)) if shouldCollectContinuously?
+        run("wasm-no-cjit-yes-tls-context", "--useFastTLSForWasmContext=true", *(FTL_OPTIONS + NO_CJIT_OPTIONS + optionalTestSpecificOptions))
+        run("wasm-eager", *(FTL_OPTIONS + EAGER_OPTIONS + optionalTestSpecificOptions))
+        run("wasm-eager-jettison", "--forceCodeBlockToJettisonDueToOldAge=true", "--useRandomizingExecutableIslandAllocation=true", "--verifyGC=true", *(FTL_OPTIONS + optionalTestSpecificOptions))
+        run("wasm-no-tls-context", "--useFastTLSForWasmContext=false", *(FTL_OPTIONS + optionalTestSpecificOptions))
+        run("wasm-slow-memory", "--useWebAssemblyFastMemory=false", *(FTL_OPTIONS + optionalTestSpecificOptions))
+        run("wasm-b3", "--useWasmLLInt=false", "--wasmBBQUsesAir=false", *(FTL_OPTIONS + optionalTestSpecificOptions))
+        run("wasm-air", "--useWasmLLInt=false", "--useRandomizingExecutableIslandAllocation=true", *(FTL_OPTIONS + optionalTestSpecificOptions))
+        run("wasm-collect-continuously", "--collectContinuously=true", "--verifyGC=true", *(FTL_OPTIONS + optionalTestSpecificOptions)) if shouldCollectContinuously?
     end
 end
 
@@ -1323,6 +1335,10 @@ end
 
 def runWebAssemblyReferenceSpecTest(mode)
     runWebAssemblySpecTestBase(mode, "ref-spec-harness")
+end
+
+def runWebAssemblyFunctionReferenceSpecTest(mode)
+    runWebAssemblySpecTestBase(mode, "spec-harness", "--useWebAssemblyTypedFunctionReferences=true")
 end
 
 def runWebAssemblyLowExecutableMemory(*optionalTestSpecificOptions)
@@ -2349,10 +2365,12 @@ def getStatusMap(map={})
         }
     else
         Dir.chdir($runnerDir) {
-            IO.popen(find_cmd).each_line {
-                | line |
-                processStatusLine(map, line)
-            }
+            Dir.glob("#{STATUS_FILE_PREFIX}*").each do |name|
+                if File.size(name) > 0
+                    line = File.open(name).first
+                    processStatusLine(map, "./#{name} #{line}")
+                end
+            end
         }
     end
     map

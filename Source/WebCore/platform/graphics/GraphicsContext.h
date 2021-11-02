@@ -160,6 +160,8 @@ std::optional<DocumentMarkerLineStyle> DocumentMarkerLineStyle::decode(Decoder& 
     return {{ *mode, *shouldUseDarkAppearance }};
 }
 
+struct GraphicsContextStateChange;
+
 struct GraphicsContextState {
     WEBCORE_EXPORT GraphicsContextState();
     WEBCORE_EXPORT ~GraphicsContextState();
@@ -196,6 +198,8 @@ struct GraphicsContextState {
 #endif
     };
     using StateChangeFlags = OptionSet<Change>;
+
+    void mergeChanges(const GraphicsContextState&, GraphicsContextState::StateChangeFlags);
 
     RefPtr<Gradient> strokeGradient;
     RefPtr<Pattern> strokePattern;
@@ -283,10 +287,10 @@ public:
 
     // Context State
 
-    void setStrokeThickness(float thickness) { m_state.strokeThickness = thickness; updateState(m_state, GraphicsContextState::StrokeThicknessChange); }
+    void setStrokeThickness(float thickness) { m_state.strokeThickness = thickness; didUpdateState(m_state, GraphicsContextState::StrokeThicknessChange); }
     float strokeThickness() const { return m_state.strokeThickness; }
 
-    void setStrokeStyle(StrokeStyle style) { m_state.strokeStyle = style; updateState(m_state, GraphicsContextState::StrokeStyleChange); }
+    void setStrokeStyle(StrokeStyle style) { m_state.strokeStyle = style; didUpdateState(m_state, GraphicsContextState::StrokeStyleChange); }
     StrokeStyle strokeStyle() const { return m_state.strokeStyle; }
 
     WEBCORE_EXPORT void setStrokeColor(const Color&);
@@ -298,7 +302,7 @@ public:
     WEBCORE_EXPORT void setStrokeGradient(Ref<Gradient>&&, const AffineTransform& = { });
     Gradient* strokeGradient() const { return m_state.strokeGradient.get(); }
 
-    void setFillRule(WindRule fillRule) { m_state.fillRule = fillRule; updateState(m_state, GraphicsContextState::FillRuleChange); }
+    void setFillRule(WindRule fillRule) { m_state.fillRule = fillRule; didUpdateState(m_state, GraphicsContextState::FillRuleChange); }
     WindRule fillRule() const { return m_state.fillRule; }
 
     WEBCORE_EXPORT void setFillColor(const Color&);
@@ -310,34 +314,34 @@ public:
     WEBCORE_EXPORT void setFillGradient(Ref<Gradient>&&, const AffineTransform& = { });
     Gradient* fillGradient() const { return m_state.fillGradient.get(); }
 
-    void setShadowsIgnoreTransforms(bool shadowsIgnoreTransforms) { m_state.shadowsIgnoreTransforms = shadowsIgnoreTransforms; updateState(m_state, GraphicsContextState::ShadowsIgnoreTransformsChange); }
+    void setShadowsIgnoreTransforms(bool shadowsIgnoreTransforms) { m_state.shadowsIgnoreTransforms = shadowsIgnoreTransforms; didUpdateState(m_state, GraphicsContextState::ShadowsIgnoreTransformsChange); }
     bool shadowsIgnoreTransforms() const { return m_state.shadowsIgnoreTransforms; }
 
-    void setShouldAntialias(bool shouldAntialias) { m_state.shouldAntialias = shouldAntialias; updateState(m_state, GraphicsContextState::ShouldAntialiasChange); }
+    void setShouldAntialias(bool shouldAntialias) { m_state.shouldAntialias = shouldAntialias; didUpdateState(m_state, GraphicsContextState::ShouldAntialiasChange); }
     bool shouldAntialias() const { return m_state.shouldAntialias; }
 
-    void setShouldSmoothFonts(bool shouldSmoothFonts) { m_state.shouldSmoothFonts = shouldSmoothFonts; updateState(m_state, GraphicsContextState::ShouldSmoothFontsChange); }
+    void setShouldSmoothFonts(bool shouldSmoothFonts) { m_state.shouldSmoothFonts = shouldSmoothFonts; didUpdateState(m_state, GraphicsContextState::ShouldSmoothFontsChange); }
     bool shouldSmoothFonts() const { return m_state.shouldSmoothFonts; }
 
     // Normally CG enables subpixel-quantization because it improves the performance of aligning glyphs.
     // In some cases we have to disable to to ensure a high-quality output of the glyphs.
-    void setShouldSubpixelQuantizeFonts(bool shouldSubpixelQuantizeFonts) { m_state.shouldSubpixelQuantizeFonts = shouldSubpixelQuantizeFonts; updateState(m_state, GraphicsContextState::ShouldSubpixelQuantizeFontsChange); }
+    void setShouldSubpixelQuantizeFonts(bool shouldSubpixelQuantizeFonts) { m_state.shouldSubpixelQuantizeFonts = shouldSubpixelQuantizeFonts; didUpdateState(m_state, GraphicsContextState::ShouldSubpixelQuantizeFontsChange); }
     bool shouldSubpixelQuantizeFonts() const { return m_state.shouldSubpixelQuantizeFonts; }
 
-    void setImageInterpolationQuality(InterpolationQuality quality) { m_state.imageInterpolationQuality = quality; updateState(m_state, GraphicsContextState::ImageInterpolationQualityChange); }
+    void setImageInterpolationQuality(InterpolationQuality quality) { m_state.imageInterpolationQuality = quality; didUpdateState(m_state, GraphicsContextState::ImageInterpolationQualityChange); }
     InterpolationQuality imageInterpolationQuality() const { return m_state.imageInterpolationQuality; }
 
-    void setAlpha(float alpha) { m_state.alpha = alpha; updateState(m_state, GraphicsContextState::AlphaChange); }
+    void setAlpha(float alpha) { m_state.alpha = alpha; didUpdateState(m_state, GraphicsContextState::AlphaChange); }
     float alpha() const { return m_state.alpha; }
 
     WEBCORE_EXPORT void setCompositeOperation(CompositeOperator, BlendMode = BlendMode::Normal);
     CompositeOperator compositeOperation() const { return m_state.compositeOperator; }
     BlendMode blendModeOperation() const { return m_state.blendMode; }
 
-    void setDrawLuminanceMask(bool drawLuminanceMask) { m_state.drawLuminanceMask = drawLuminanceMask; updateState(m_state, GraphicsContextState::DrawLuminanceMaskChange); }
+    void setDrawLuminanceMask(bool drawLuminanceMask) { m_state.drawLuminanceMask = drawLuminanceMask; didUpdateState(m_state, GraphicsContextState::DrawLuminanceMaskChange); }
     bool drawLuminanceMask() const { return m_state.drawLuminanceMask; }
 
-    void setTextDrawingMode(TextDrawingModeFlags mode) { m_state.textDrawingMode = mode; updateState(m_state, GraphicsContextState::TextDrawingModeChange); }
+    void setTextDrawingMode(TextDrawingModeFlags mode) { m_state.textDrawingMode = mode; didUpdateState(m_state, GraphicsContextState::TextDrawingModeChange); }
     TextDrawingModeFlags textDrawingMode() const { return m_state.textDrawingMode; }
 
     WEBCORE_EXPORT void setShadow(const FloatSize&, float blur, const Color&, ShadowRadiusMode = ShadowRadiusMode::Default);
@@ -349,13 +353,17 @@ public:
     bool hasBlurredShadow() const { return hasVisibleShadow() && m_state.shadowBlur; }
 
 #if HAVE(OS_DARK_MODE_SUPPORT)
-    void setUseDarkAppearance(bool useDarkAppearance) { m_state.useDarkAppearance = useDarkAppearance; updateState(m_state, GraphicsContextState::UseDarkAppearanceChange); }
+    void setUseDarkAppearance(bool useDarkAppearance) { m_state.useDarkAppearance = useDarkAppearance; didUpdateState(m_state, GraphicsContextState::UseDarkAppearanceChange); }
     bool useDarkAppearance() const { return m_state.useDarkAppearance; }
 #endif
 
     virtual const GraphicsContextState& state() const { return m_state; }
 
-    virtual void updateState(const GraphicsContextState&, GraphicsContextState::StateChangeFlags) = 0;
+    void updateState(const GraphicsContextState&, GraphicsContextState::StateChangeFlags);
+
+    // Called *after* any change to GraphicsContextState; generally used to propagate changes
+    // to the platform context's state.
+    virtual void didUpdateState(const GraphicsContextState&, GraphicsContextState::StateChangeFlags) = 0;
 
     WEBCORE_EXPORT virtual void save();
     WEBCORE_EXPORT virtual void restore();
@@ -407,7 +415,7 @@ public:
 
     virtual void fillRect(const FloatRect&) = 0;
     virtual void fillRect(const FloatRect&, const Color&) = 0;
-    virtual void fillRect(const FloatRect&, Gradient&);
+    WEBCORE_EXPORT virtual void fillRect(const FloatRect&, Gradient&);
     WEBCORE_EXPORT virtual void fillRect(const FloatRect&, const Color&, CompositeOperator, BlendMode = BlendMode::Normal);
     virtual void fillRoundedRectImpl(const FloatRoundedRect&, const Color&) = 0;
     WEBCORE_EXPORT virtual void fillRoundedRect(const FloatRoundedRect&, const Color&, BlendMode = BlendMode::Normal);
@@ -426,9 +434,11 @@ public:
 
     virtual void drawNativeImage(NativeImage&, const FloatSize& selfSize, const FloatRect& destRect, const FloatRect& srcRect, const ImagePaintingOptions& = { }) = 0;
 
-    WEBCORE_EXPORT virtual ImageDrawResult drawImage(Image&, const FloatPoint& destination, const ImagePaintingOptions& = { ImageOrientation::FromImage });
-    WEBCORE_EXPORT virtual ImageDrawResult drawImage(Image&, const FloatRect& destination, const ImagePaintingOptions& = { ImageOrientation::FromImage });
+    WEBCORE_EXPORT ImageDrawResult drawImage(Image&, const FloatPoint& destination, const ImagePaintingOptions& = { ImageOrientation::FromImage });
+    WEBCORE_EXPORT ImageDrawResult drawImage(Image&, const FloatRect& destination, const ImagePaintingOptions& = { ImageOrientation::FromImage });
     WEBCORE_EXPORT virtual ImageDrawResult drawImage(Image&, const FloatRect& destination, const FloatRect& source, const ImagePaintingOptions& = { ImageOrientation::FromImage });
+
+    WEBCORE_EXPORT virtual ImageDrawResult drawImageForCanvas(Image&, const FloatRect& destination, const FloatRect& source, const ImagePaintingOptions&, DestinationColorSpace canvasColorSpace);
 
     WEBCORE_EXPORT virtual ImageDrawResult drawTiledImage(Image&, const FloatRect& destination, const FloatPoint& source, const FloatSize& tileSize, const FloatSize& spacing, const ImagePaintingOptions& = { });
     WEBCORE_EXPORT virtual ImageDrawResult drawTiledImage(Image&, const FloatRect& destination, const FloatRect& source, const FloatSize& tileScaleFactor, Image::TileRule, Image::TileRule, const ImagePaintingOptions& = { });

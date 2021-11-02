@@ -26,6 +26,7 @@
 #include "RenderTableCell.h"
 
 #include "CollapsedBorderValue.h"
+#include "ElementInlines.h"
 #include "FloatQuad.h"
 #include "GraphicsContext.h"
 #include "HTMLNames.h"
@@ -1347,7 +1348,7 @@ void RenderTableCell::paintMask(PaintInfo& paintInfo, const LayoutPoint& paintOf
     paintMaskImages(paintInfo, paintRect);
 }
 
-bool RenderTableCell::boxShadowShouldBeAppliedToBackground(const LayoutPoint&, BackgroundBleedAvoidance, const LegacyInlineFlowBox*) const
+bool RenderTableCell::boxShadowShouldBeAppliedToBackground(const LayoutPoint&, BackgroundBleedAvoidance, const InlineIterator::InlineBoxIterator&) const
 {
     return false;
 }

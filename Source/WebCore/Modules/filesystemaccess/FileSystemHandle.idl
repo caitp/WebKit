@@ -29,13 +29,15 @@ enum FileSystemHandleKind {
 };
 
 [
+    ActiveDOMObject,
     CustomToJSObject,
     Exposed=(Window,Worker),
-    EnabledBySetting=FileSystemAccess,
+    EnabledBySetting=FileSystemAccessEnabled,
     SecureContext
 ] interface FileSystemHandle {
     readonly attribute FileSystemHandleKind kind;
     readonly attribute USVString name;
 
     Promise<boolean> isSameEntry(FileSystemHandle other);
+    Promise<undefined> move(FileSystemHandle destination, USVString newName);
 };

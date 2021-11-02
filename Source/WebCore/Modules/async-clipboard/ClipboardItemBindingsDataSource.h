@@ -28,7 +28,7 @@
 #include "ClipboardItemDataSource.h"
 #include "ExceptionCode.h"
 #include "FileReaderLoaderClient.h"
-#include <wtf/Variant.h>
+#include <variant>
 #include <wtf/WeakPtr.h>
 
 namespace WebCore {
@@ -53,7 +53,7 @@ private:
 
     void invokeCompletionHandler();
 
-    using BufferOrString = Variant<String, Ref<SharedBuffer>>;
+    using BufferOrString = std::variant<String, Ref<SharedBuffer>>;
     class ClipboardItemTypeLoader : public FileReaderLoaderClient, public RefCounted<ClipboardItemTypeLoader> {
     public:
         static Ref<ClipboardItemTypeLoader> create(const String& type, CompletionHandler<void()>&& completionHandler)

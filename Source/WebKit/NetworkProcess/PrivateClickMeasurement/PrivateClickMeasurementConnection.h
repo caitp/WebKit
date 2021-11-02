@@ -25,36 +25,37 @@
 
 #pragma once
 
-#include <wtf/CompletionHandler.h>
-#include <wtf/Vector.h>
-#include <wtf/WeakPtr.h>
-
-#if PLATFORM(COCOA)
-#include <wtf/OSObjectPtr.h>
-#include <wtf/spi/darwin/XPCSPI.h>
-#endif
+#include "DaemonConnection.h"
+#include "PrivateClickMeasurementManagerInterface.h"
 
 namespace WebKit {
+
+class NetworkSession;
 
 namespace PCM {
 
 enum class MessageType : uint8_t;
-using EncodedMessage = Vector<uint8_t>;
 
-class Connection : public CanMakeWeakPtr<Connection> {
+struct ConnectionTraits {
+    using MessageType = WebKit::PCM::MessageType;
+    static constexpr const char* protocolVersionKey { PCM::protocolVersionKey };
+    static constexpr uint64_t protocolVersionValue { PCM::protocolVersionValue };
+    static constexpr const char* protocolEncodedMessageKey { PCM::protocolEncodedMessageKey };
+};
+
+class Connection : public Daemon::ConnectionToMachService<ConnectionTraits> {
 public:
-    explicit Connection(CString&& machServiceName);
-
-    void send(MessageType, EncodedMessage&&) const;
-    void sendWithReply(MessageType, EncodedMessage&&, CompletionHandler<void(EncodedMessage&&)>&&) const;
+    Connection(CString&& machServiceName, NetworkSession&);
 
 private:
+    void newConnectionWasInitialized() const final;
 #if PLATFORM(COCOA)
-    void initializeConnectionIfNeeded() const;
-
-    const CString m_machServiceName;
-    mutable OSObjectPtr<xpc_connection_t> m_connection;
+    RetainPtr<xpc_object_t> dictionaryFromMessage(MessageType, Daemon::EncodedMessage&&) const final;
+    void connectionReceivedEvent(xpc_object_t) const final;
 #endif
+    void sendDebugModeIsEnabledMessageIfNecessary() const;
+
+    WeakPtr<NetworkSession> m_networkSession;
 };
 
 } // namespace PCM

@@ -61,7 +61,6 @@
 #import "WebNSPrintOperationExtras.h"
 #import "WebNSURLExtras.h"
 #import "WebNSViewExtras.h"
-#import "WebNetscapePluginView.h"
 #import "WebNodeHighlight.h"
 #import "WebPluginController.h"
 #import "WebPreferences.h"
@@ -222,24 +221,6 @@
 
 - (id)_newFirstResponderAfterResigning;
 @end
-
-#if !HAVE(SUBVIEWS_IVAR_SPI)
-@implementation NSView (SubviewsIvar)
-
-- (void)_setSubviewsIvar:(NSMutableArray<__kindof NSView *> *)subviews {
-    ALLOW_DEPRECATED_DECLARATIONS_BEGIN
-    _subviews = subviews;
-    ALLOW_DEPRECATED_DECLARATIONS_END
-}
-
-- (NSMutableArray<__kindof NSView *> *)_subviewsIvar {
-    ALLOW_DEPRECATED_DECLARATIONS_BEGIN
-    return (NSMutableArray *)_subviews;
-    ALLOW_DEPRECATED_DECLARATIONS_END
-}
-
-@end
-#endif
 
 using WebEvent = NSEvent;
 const auto WebEventMouseDown = NSEventTypeLeftMouseDown;
@@ -713,12 +694,6 @@ static bool needsCursorRectsSupportAtPoint(NSWindow* window, NSPoint point)
     if ([view isKindOfClass:[WebHTMLView class]])
         return false;
 
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    // Neither do NPAPI plug-ins.
-    if ([view isKindOfClass:[WebBaseNetscapePluginView class]])
-        return false;
-#endif
-
     // Non-Web content, WebPDFView, and WebKit plug-ins use normal cursor handling.
     return true;
 }
@@ -737,11 +712,8 @@ static void setCursor(NSWindow *self, SEL cmd, NSPoint point)
 @interface NSView ()
 - (void)_recursiveDisplayRectIfNeededIgnoringOpacity:(NSRect)rect isVisibleRect:(BOOL)isVisibleRect rectIsVisibleRectForView:(NSView *)visibleView topView:(BOOL)topView;
 - (void)_recursiveDisplayAllDirtyWithLockFocus:(BOOL)needsLockFocus visRect:(NSRect)visRect;
-#if PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500
+#if PLATFORM(MAC)
 - (void)_recursive:(BOOL)recursive displayRectIgnoringOpacity:(NSRect)displayRect inContext:(NSGraphicsContext *)graphicsContext stopAtLayerBackedViews:(BOOL)stopAtLayerBackedViews;
-#endif
-#if PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED < 101500
-- (void)_recursive:(BOOL)recursive displayRectIgnoringOpacity:(NSRect)displayRect inContext:(NSGraphicsContext *)graphicsContext shouldChangeFontReferenceColor:(BOOL)shouldChangeFontReferenceColor stopAtLayerBackedViews:(BOOL)stopAtLayerBackedViews;
 #endif
 - (void)_setDrawsOwnDescendants:(BOOL)drawsOwnDescendants;
 #if PLATFORM(IOS_FAMILY)
@@ -869,9 +841,6 @@ static void hardwareKeyboardAvailabilityChangedCallback(CFNotificationCenterRef,
 - (void)_web_setPrintingModeRecursive;
 - (void)_web_setPrintingModeRecursiveAndAdjustViewSize;
 - (void)_web_clearPrintingModeRecursive;
-#endif
-#if ENABLE(NETSCAPE_PLUGIN_API)
-- (void)_web_makePluginSubviewsPerformSelector:(SEL)selector withObject:(id)object;
 #endif
 @end
 
@@ -1444,21 +1413,6 @@ ALLOW_DEPRECATED_DECLARATIONS_END
 
 #endif // PLATFORM(MAC)
 
-#if ENABLE(NETSCAPE_PLUGIN_API)
-
-- (void)_web_makePluginSubviewsPerformSelector:(SEL)selector withObject:(id)object
-{
-    // Copy subviews because [self subviews] returns the view's mutable internal array,
-    // and we must avoid mutating the array while enumerating it.
-    auto subviewsCopy = adoptNS([self.subviews copy]);
-    for (NSView *view in subviewsCopy.get()) {
-        if ([view isKindOfClass:[WebBaseNetscapePluginView class]])
-            [view performSelector:selector withObject:object];
-    }
-}
-
-#endif
-
 @end
 
 @implementation WebHTMLView (WebPrivate)
@@ -1681,18 +1635,10 @@ ALLOW_DEPRECATED_DECLARATIONS_END
 }
 
 // Don't let AppKit even draw subviews. We take care of that.
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500
 - (void)_recursive:(BOOL)recursive displayRectIgnoringOpacity:(NSRect)displayRect inContext:(NSGraphicsContext *)graphicsContext stopAtLayerBackedViews:(BOOL)stopAtLayerBackedViews
-#else
-- (void)_recursive:(BOOL)recursive displayRectIgnoringOpacity:(NSRect)displayRect inContext:(NSGraphicsContext *)graphicsContext shouldChangeFontReferenceColor:(BOOL)shouldChangeFontReferenceColor stopAtLayerBackedViews:(BOOL)stopAtLayerBackedViews
-#endif
 {
     [self _setAsideSubviews];
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500
     [super _recursive:recursive displayRectIgnoringOpacity:displayRect inContext:graphicsContext stopAtLayerBackedViews:stopAtLayerBackedViews];
-#else
-    [super _recursive:recursive displayRectIgnoringOpacity:displayRect inContext:graphicsContext shouldChangeFontReferenceColor:shouldChangeFontReferenceColor stopAtLayerBackedViews:stopAtLayerBackedViews];
-#endif
     [self _restoreSubviews];
 }
 
@@ -2393,20 +2339,6 @@ ALLOW_DEPRECATED_DECLARATIONS_END
 }
 
 #endif // PLATFORM(MAC)
-
-#if ENABLE(NETSCAPE_PLUGIN_API) 
-
-- (void)_pauseNullEventsForAllNetscapePlugins 
-{
-    [self _web_makePluginSubviewsPerformSelector:@selector(stopTimers) withObject:nil];
-}
-
-- (void)_resumeNullEventsForAllNetscapePlugins
-{
-    [self _web_makePluginSubviewsPerformSelector:@selector(restartTimers) withObject:nil];
-}
-
-#endif 
 
 - (BOOL)_isUsingAcceleratedCompositing
 {
@@ -3279,16 +3211,10 @@ IGNORE_WARNINGS_END
 
 - (void)viewWillMoveToHostWindow:(NSWindow *)hostWindow
 {
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    [self _web_makePluginSubviewsPerformSelector:@selector(viewWillMoveToHostWindow:) withObject:hostWindow];
-#endif
 }
 
 - (void)viewDidMoveToHostWindow
 {
-#if ENABLE(NETSCAPE_PLUGIN_API)
-    [self _web_makePluginSubviewsPerformSelector:@selector(viewDidMoveToHostWindow) withObject:nil];
-#endif
 }
 
 - (void)addSubview:(NSView *)view
@@ -6520,7 +6446,7 @@ static void extractUnderlines(NSAttributedString *string, Vector<WebCore::Compos
             WebCore::Color color = WebCore::Color::black;
             auto compositionUnderlineColor = WebCore::CompositionUnderlineColor::TextColor;
             if (NSColor *colorAttr = [attrs objectForKey:NSUnderlineColorAttributeName]) {
-                color = WebCore::colorFromNSColor(colorAttr);
+                color = WebCore::colorFromCocoaColor(colorAttr);
                 compositionUnderlineColor = WebCore::CompositionUnderlineColor::GivenColor;
             }
             result.append(WebCore::CompositionUnderline(range.location, NSMaxRange(range), compositionUnderlineColor, color, [style intValue] > 1));

@@ -76,7 +76,7 @@ void NetworkLoad::startWithScheduling()
 {
     if (!m_task || !m_task->networkSession())
         return;
-    m_scheduler = makeWeakPtr(m_task->networkSession()->networkLoadScheduler());
+    m_scheduler = m_task->networkSession()->networkLoadScheduler();
     m_scheduler->schedule(*this);
 }
 
@@ -315,6 +315,13 @@ void NetworkLoad::setH2PingCallback(const URL& url, CompletionHandler<void(Expec
         m_task->setH2PingCallback(url, WTFMove(completionHandler));
     else
         completionHandler(makeUnexpected(internalError(url)));
+}
+
+String NetworkLoad::attributedBundleIdentifier(WebPageProxyIdentifier pageID)
+{
+    if (m_task)
+        return m_task->attributedBundleIdentifier(pageID);
+    return { };
 }
 
 } // namespace WebKit

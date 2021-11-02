@@ -26,8 +26,8 @@
 
 #include "CSSValueKeywords.h"
 #include "FontDescription.h"
+#include <variant>
 #include <wtf/RefCountedArray.h>
-#include <wtf/Variant.h>
 
 #if PLATFORM(COCOA)
 #include "FontFamilySpecificationCoreText.h"
@@ -43,7 +43,7 @@ typedef FontFamilySpecificationCoreText FontFamilyPlatformSpecification;
 typedef FontFamilySpecificationNull FontFamilyPlatformSpecification;
 #endif
 
-typedef Variant<AtomString, FontFamilyPlatformSpecification> FontFamilySpecification;
+typedef std::variant<AtomString, FontFamilyPlatformSpecification> FontFamilySpecification;
 
 class FontCascadeDescription : public FontDescription {
 public:

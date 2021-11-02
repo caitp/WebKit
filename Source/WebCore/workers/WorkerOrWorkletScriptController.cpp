@@ -27,6 +27,7 @@
 #include "config.h"
 #include "WorkerOrWorkletScriptController.h"
 
+#include "CommonVM.h"
 #include "DedicatedWorkerGlobalScope.h"
 #include "EventLoop.h"
 #include "JSAudioWorkletGlobalScope.h"
@@ -68,13 +69,15 @@ WorkerOrWorkletScriptController::WorkerOrWorkletScriptController(WorkerThreadTyp
     , m_globalScope(globalScope)
     , m_globalScopeWrapper(*m_vm)
 {
-    m_vm->heap.acquireAccess(); // It's not clear that we have good discipline for heap access, so turn it on permanently.
-    {
-        JSLockHolder lock(m_vm.get());
-        m_vm->ensureTerminationException();
-    }
+    if (!isMainThread() || m_vm != &commonVM()) {
+        m_vm->heap.acquireAccess(); // It's not clear that we have good discipline for heap access, so turn it on permanently.
+        {
+            JSLockHolder lock(m_vm.get());
+            m_vm->ensureTerminationException();
+        }
 
-    JSVMClientData::initNormalWorld(m_vm.get(), type);
+        JSVMClientData::initNormalWorld(m_vm.get(), type);
+    }
 }
 
 WorkerOrWorkletScriptController::WorkerOrWorkletScriptController(WorkerThreadType type, WorkerOrWorkletGlobalScope* globalScope)
@@ -129,7 +132,8 @@ void WorkerOrWorkletScriptController::scheduleExecutionTermination()
 
         m_isTerminatingExecution = true;
     }
-    m_vm->notifyNeedTermination();
+    if (m_vm != &commonVM())
+        m_vm->notifyNeedTermination();
 }
 
 bool WorkerOrWorkletScriptController::isTerminatingExecution() const
@@ -267,10 +271,10 @@ JSC::JSValue WorkerOrWorkletScriptController::evaluateModule(JSC::JSModuleRecord
     return moduleRecord.evaluate(&globalObject, awaitedValue, resumeMode);
 }
 
-MessageQueueWaitResult WorkerOrWorkletScriptController::loadModuleSynchronously(WorkerScriptFetcher& scriptFetcher, const ScriptSourceCode& sourceCode)
+bool WorkerOrWorkletScriptController::loadModuleSynchronously(WorkerScriptFetcher& scriptFetcher, const ScriptSourceCode& sourceCode)
 {
     if (isExecutionForbidden())
-        return MessageQueueTerminated;
+        return false;
 
     initScriptIfNeeded();
 
@@ -340,14 +344,14 @@ MessageQueueWaitResult WorkerOrWorkletScriptController::loadModuleSynchronously(
     // task is queued in WorkerRunLoop before start running module scripts. This task should not be discarded
     // in the following driving of the RunLoop which mainly attempt to collect initial load of module scripts.
     String taskMode = WorkerModuleScriptLoader::taskMode();
-    MessageQueueWaitResult result = MessageQueueMessageReceived;
-    while ((!protector->isLoaded() && !protector->wasCanceled()) && result != MessageQueueTerminated) {
-        result = runLoop.runInMode(m_globalScope, taskMode);
-        if (result != MessageQueueTerminated)
+    bool success = true;
+    while ((!protector->isLoaded() && !protector->wasCanceled()) && success) {
+        success = runLoop.runInMode(m_globalScope, taskMode);
+        if (success)
             m_globalScope->eventLoop().performMicrotaskCheckpoint();
     }
 
-    return result;
+    return success;
 }
 
 void WorkerOrWorkletScriptController::linkAndEvaluateModule(WorkerScriptFetcher& scriptFetcher, const ScriptSourceCode& sourceCode, String* returnedExceptionMessage)
@@ -519,7 +523,7 @@ void WorkerOrWorkletScriptController::initScriptWithSubclass()
     ASSERT(asObject(m_globalScopeWrapper->getPrototypeDirect(*m_vm))->globalObject() == m_globalScopeWrapper);
 
     m_consoleClient = makeUnique<WorkerConsoleClient>(*m_globalScope);
-    m_globalScopeWrapper->setConsoleClient(makeWeakPtr(*m_consoleClient));
+    m_globalScopeWrapper->setConsoleClient(*m_consoleClient);
 }
 
 void WorkerOrWorkletScriptController::initScript()

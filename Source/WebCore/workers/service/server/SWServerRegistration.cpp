@@ -42,12 +42,13 @@ static ServiceWorkerRegistrationIdentifier generateServiceWorkerRegistrationIden
     return ServiceWorkerRegistrationIdentifier::generate();
 }
 
-SWServerRegistration::SWServerRegistration(SWServer& server, const ServiceWorkerRegistrationKey& key, ServiceWorkerUpdateViaCache updateViaCache, const URL& scopeURL, const URL& scriptURL)
+SWServerRegistration::SWServerRegistration(SWServer& server, const ServiceWorkerRegistrationKey& key, ServiceWorkerUpdateViaCache updateViaCache, const URL& scopeURL, const URL& scriptURL, std::optional<ServiceWorkerClientIdentifier> serviceWorkerPageIdentifier)
     : m_identifier(generateServiceWorkerRegistrationIdentifier())
     , m_registrationKey(key)
     , m_updateViaCache(updateViaCache)
     , m_scopeURL(scopeURL)
     , m_scriptURL(scriptURL)
+    , m_serviceWorkerPageIdentifier(serviceWorkerPageIdentifier)
     , m_server(server)
     , m_creationTime(MonotonicTime::now())
     , m_softUpdateTimer { *this, &SWServerRegistration::softUpdate }
@@ -136,7 +137,7 @@ void SWServerRegistration::fireUpdateFoundEvent()
     });
 }
 
-void SWServerRegistration::forEachConnection(const WTF::Function<void(SWServer::Connection&)>& apply)
+void SWServerRegistration::forEachConnection(const Function<void(SWServer::Connection&)>& apply)
 {
     for (auto connectionIdentifierWithClients : m_connectionsWithClientRegistrations.values()) {
         if (auto* connection = m_server.connection(connectionIdentifierWithClients))

@@ -60,12 +60,12 @@ std::unique_ptr<ImageBufferShareableMappedIOSurfaceBackend> ImageBufferShareable
 
 std::unique_ptr<ImageBufferShareableMappedIOSurfaceBackend> ImageBufferShareableMappedIOSurfaceBackend::create(const Parameters& parameters, ImageBufferBackendHandle handle)
 {
-    if (!WTF::holds_alternative<MachSendRight>(handle)) {
+    if (!std::holds_alternative<MachSendRight>(handle)) {
         ASSERT_NOT_REACHED();
         return nullptr;
     }
 
-    auto surface = IOSurface::createFromSendRight(WTFMove(WTF::get<MachSendRight>(handle)), parameters.colorSpace);
+    auto surface = IOSurface::createFromSendRight(WTFMove(std::get<MachSendRight>(handle)), parameters.colorSpace);
     if (!surface)
         return nullptr;
 

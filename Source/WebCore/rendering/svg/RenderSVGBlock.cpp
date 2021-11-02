@@ -23,6 +23,7 @@
 #include "RenderSVGBlock.h"
 
 #include "RenderSVGResource.h"
+#include "SVGGraphicsElement.h"
 #include "SVGResourcesCache.h"
 #include "StyleInheritedData.h"
 #include <wtf/IsoMallocInlines.h>
@@ -86,6 +87,40 @@ void RenderSVGBlock::computeOverflow(LayoutUnit oldClientAfterEdge, bool recompu
     LayoutRect borderRect = borderBoxRect();
     textShadow->adjustRectForShadow(borderRect);
     addVisualOverflow(snappedIntRect(borderRect));
+}
+
+LayoutRect RenderSVGBlock::clippedOverflowRect(const RenderLayerModelObject* repaintContainer, VisibleRectContext) const
+{
+    return SVGRenderSupport::clippedOverflowRectForRepaint(*this, repaintContainer);
+}
+
+std::optional<LayoutRect> RenderSVGBlock::computeVisibleRectInContainer(const LayoutRect& rect, const RenderLayerModelObject* container, VisibleRectContext context) const
+{
+    std::optional<FloatRect> adjustedRect = computeFloatVisibleRectInContainer(rect, container, context);
+    if (adjustedRect)
+        return enclosingLayoutRect(*adjustedRect);
+    return std::nullopt;
+}
+
+std::optional<FloatRect> RenderSVGBlock::computeFloatVisibleRectInContainer(const FloatRect& rect, const RenderLayerModelObject* container, VisibleRectContext context) const
+{
+    return SVGRenderSupport::computeFloatVisibleRectInContainer(*this, rect, container, context);
+}
+
+void RenderSVGBlock::mapLocalToContainer(const RenderLayerModelObject* ancestorContainer, TransformState& transformState, OptionSet<MapCoordinatesMode>, bool* wasFixed) const
+{
+    SVGRenderSupport::mapLocalToContainer(*this, ancestorContainer, transformState, wasFixed);
+}
+
+const RenderObject* RenderSVGBlock::pushMappingToContainer(const RenderLayerModelObject* ancestorToStopAt, RenderGeometryMap& geometryMap) const
+{
+    return SVGRenderSupport::pushMappingToContainer(*this, ancestorToStopAt, geometryMap);
+}
+
+bool RenderSVGBlock::nodeAtPoint(const HitTestRequest&, HitTestResult&, const HitTestLocation&, const LayoutPoint&, HitTestAction)
+{
+    ASSERT_NOT_REACHED();
+    return false;
 }
 
 }

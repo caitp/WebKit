@@ -228,7 +228,11 @@ bool VideoFullscreenManager::supportsVideoFullscreen(WebCore::HTMLMediaElementEn
 #if PLATFORM(IOS_FAMILY)
     UNUSED_PARAM(mode);
 #if HAVE(AVKIT)
+#if HAVE(UIKIT_WEBKIT_INTERNALS)
+    return mode == HTMLMediaElementEnums::VideoFullscreenModeStandard;
+#else
     return true;
+#endif
 #else
     return false;
 #endif
@@ -239,7 +243,7 @@ bool VideoFullscreenManager::supportsVideoFullscreen(WebCore::HTMLMediaElementEn
 
 bool VideoFullscreenManager::supportsVideoFullscreenStandby() const
 {
-#if PLATFORM(IOS_FAMILY)
+#if PLATFORM(IOS_FAMILY) && !HAVE(UIKIT_WEBKIT_INTERNALS)
     return true;
 #else
     return false;
@@ -275,7 +279,7 @@ void VideoFullscreenManager::enterVideoFullscreenForVideoElement(HTMLVideoElemen
         interface->setTargetIsFullscreen(false);
 
     if (mode == HTMLMediaElementEnums::VideoFullscreenModePictureInPicture)
-        m_videoElementInPictureInPicture = makeWeakPtr(videoElement);
+        m_videoElementInPictureInPicture = videoElement;
 
     interface->setFullscreenMode(mode);
     interface->setFullscreenStandby(standby);
@@ -294,7 +298,7 @@ void VideoFullscreenManager::enterVideoFullscreenForVideoElement(HTMLVideoElemen
         [videoLayer setDelegate:[WebActionDisablingCALayerDelegate shared]];
         [videoLayer setName:@"Web Video Fullscreen Layer"];
         [videoLayer setPosition:CGPointMake(0, 0)];
-        [videoLayer setBackgroundColor:cachedCGColor(WebCore::Color::transparentBlack)];
+        [videoLayer setBackgroundColor:cachedCGColor(WebCore::Color::transparentBlack).get()];
 
         // Set a scale factor here to make convertRect:toLayer:nil take scale factor into account. <rdar://problem/18316542>.
         // This scale factor is inverted in the hosting process.

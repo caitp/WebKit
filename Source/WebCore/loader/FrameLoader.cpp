@@ -55,11 +55,11 @@
 #include "DatabaseManager.h"
 #include "DiagnosticLoggingClient.h"
 #include "DiagnosticLoggingKeys.h"
-#include "Document.h"
+#include "DocumentInlines.h"
 #include "DocumentLoader.h"
 #include "Editor.h"
 #include "EditorClient.h"
-#include "Element.h"
+#include "ElementInlines.h"
 #include "Event.h"
 #include "EventHandler.h"
 #include "EventNames.h"
@@ -217,7 +217,7 @@ static bool isDocumentSandboxed(Frame& frame, SandboxFlags mask)
 class PageLevelForbidScope {
 protected:
     explicit PageLevelForbidScope(Page* page)
-        : m_page(makeWeakPtr(page))
+        : m_page(page)
     {
     }
 
@@ -634,7 +634,7 @@ static inline bool shouldClearWindowName(const Frame& frame, const Document& new
     return !newDocument.securityOrigin().isSameOriginAs(frame.document()->securityOrigin());
 }
 
-void FrameLoader::clear(Document* newDocument, bool clearWindowProperties, bool clearScriptObjects, bool clearFrameView, WTF::Function<void()>&& handleDOMWindowCreation)
+void FrameLoader::clear(Document* newDocument, bool clearWindowProperties, bool clearScriptObjects, bool clearFrameView, Function<void()>&& handleDOMWindowCreation)
 {
     bool neededClear = m_needsClear;
     m_needsClear = false;
@@ -985,7 +985,7 @@ void FrameLoader::loadURLIntoChildFrame(const URL& url, const String& referer, F
     auto* lexicalFrame = lexicalFrameFromCommonVM();
     auto initiatedByMainFrame = lexicalFrame && lexicalFrame->isMainFrame() ? InitiatedByMainFrame::Yes : InitiatedByMainFrame::Unknown;
 
-    FrameLoadRequest frameLoadRequest { *m_frame.document(), m_frame.document()->securityOrigin(), { url }, "_self"_s, initiatedByMainFrame };
+    FrameLoadRequest frameLoadRequest { *m_frame.document(), m_frame.document()->securityOrigin(), { url }, selfTargetFrameName(), initiatedByMainFrame };
     frameLoadRequest.setNewFrameOpenerPolicy(NewFrameOpenerPolicy::Suppress);
     frameLoadRequest.setLockBackForwardList(LockBackForwardList::Yes);
     childFrame->loader().loadURL(WTFMove(frameLoadRequest), referer, FrameLoadType::RedirectWithLockedBackForwardList, nullptr, { }, std::nullopt, [] { });
@@ -1055,11 +1055,11 @@ void FrameLoader::setOpener(Frame* opener)
         openerFrameLoader.m_openedFrames.remove(m_frame);
     }
     if (opener) {
-        opener->loader().m_openedFrames.add(&m_frame);
+        opener->loader().m_openedFrames.add(m_frame);
         if (auto* page = m_frame.page())
             page->setOpenedByDOMWithOpener(true);
     }
-    m_opener = makeWeakPtr(opener);
+    m_opener = opener;
 
     if (m_frame.document())
         m_frame.document()->initSecurityContext();
@@ -1270,7 +1270,7 @@ void FrameLoader::loadFrameRequest(FrameLoadRequest&& request, Event* event, Ref
     else
         loadType = FrameLoadType::Standard;
 
-    auto completionHandler = [this, protectedFrame = Ref { m_frame }, formState = makeWeakPtr(formState.get()), frameName = request.frameName()] {
+    auto completionHandler = [this, protectedFrame = Ref { m_frame }, formState = WeakPtr { formState }, frameName = request.frameName()] {
         // FIXME: It's possible this targetFrame will not be the same frame that was targeted by the actual
         // load if frame names have changed.
         Frame* sourceFrame = formState ? formState->sourceDocument().frame() : &m_frame;
@@ -1346,7 +1346,7 @@ void FrameLoader::loadURL(FrameLoadRequest&& frameLoadRequest, const String& ref
     // The search for a target frame is done earlier in the case of form submission.
     auto targetFrame = isFormSubmission ? nullptr : RefPtr { findFrameForNavigation(effectiveFrameName) };
     if (targetFrame && targetFrame != &m_frame) {
-        frameLoadRequest.setFrameName("_self");
+        frameLoadRequest.setFrameName(selfTargetFrameName());
         targetFrame->loader().loadURL(WTFMove(frameLoadRequest), referrer, newLoadType, event, WTFMove(formState), WTFMove(privateClickMeasurement), completionHandlerCaller.release());
         return;
     }
@@ -1376,7 +1376,7 @@ void FrameLoader::loadURL(FrameLoadRequest&& frameLoadRequest, const String& ref
 
         // https://html.spec.whatwg.org/#the-rules-for-choosing-a-browsing-context-given-a-browsing-context-name (Step 8.2)
         if (frameLoadRequest.requester().shouldForceNoOpenerBasedOnCOOP()) {
-            effectiveFrameName = "_blank"_s;
+            effectiveFrameName = blankTargetFrameName();
             openerPolicy = NewFrameOpenerPolicy::Suppress;
         }
 
@@ -2825,12 +2825,13 @@ void FrameLoader::frameDetached()
         checkCompletenessNow();
     }
 
-    if (m_frame.document()->backForwardCacheState() != Document::InBackForwardCache) {
+    if (m_frame.document()->backForwardCacheState() != Document::InBackForwardCache)
         stopAllLoadersAndCheckCompleteness();
-        m_frame.document()->stopActiveDOMObjects();
-    }
 
     detachFromParent();
+
+    if (m_frame.document()->backForwardCacheState() != Document::InBackForwardCache)
+        m_frame.document()->stopActiveDOMObjects();
 }
 
 void FrameLoader::detachFromParent()
@@ -3081,7 +3082,7 @@ void FrameLoader::loadPostRequest(FrameLoadRequest&& request, const String& refe
 
         // https://html.spec.whatwg.org/#the-rules-for-choosing-a-browsing-context-given-a-browsing-context-name (Step 8.2)
         if (request.requester().shouldForceNoOpenerBasedOnCOOP()) {
-            frameName = "_blank"_s;
+            frameName = blankTargetFrameName();
             openerPolicy = NewFrameOpenerPolicy::Suppress;
         }
 
@@ -3573,7 +3574,7 @@ void FrameLoader::continueLoadAfterNewWindowPolicy(const ResourceRequest& reques
     if (sandboxFlags & SandboxPropagatesToAuxiliaryBrowsingContexts)
         mainFrame->loader().forceSandboxFlags(sandboxFlags);
 
-    if (!equalIgnoringASCIICase(frameName, "_blank"))
+    if (!isBlankTargetFrameName(frameName))
         mainFrame->tree().setName(frameName);
 
     mainFrame->page()->setOpenedByDOM();
@@ -4101,12 +4102,12 @@ RefPtr<Frame> createWindow(Frame& openerFrame, Frame& lookupFrame, FrameLoadRequ
     created = false;
 
     // FIXME: Provide line number information with respect to the opener's document.
-    if (request.resourceRequest().url().protocolIsJavaScript() && !openerFrame.document()->contentSecurityPolicy()->allowJavaScriptURLs(openerFrame.document()->url().string(), { }))
+    if (request.resourceRequest().url().protocolIsJavaScript() && !openerFrame.document()->contentSecurityPolicy()->allowJavaScriptURLs(openerFrame.document()->url().string(), { }, request.resourceRequest().url().string()))
         return nullptr;
 
-    if (!request.frameName().isEmpty() && !equalIgnoringASCIICase(request.frameName(), "_blank")) {
+    if (!request.frameName().isEmpty() && !isBlankTargetFrameName(request.frameName())) {
         if (RefPtr<Frame> frame = lookupFrame.loader().findFrameForNavigation(request.frameName(), openerFrame.document())) {
-            if (!equalIgnoringASCIICase(request.frameName(), "_self")) {
+            if (!isSelfTargetFrameName(request.frameName())) {
                 if (Page* page = frame->page())
                     page->chrome().focus();
             }
@@ -4116,7 +4117,7 @@ RefPtr<Frame> createWindow(Frame& openerFrame, Frame& lookupFrame, FrameLoadRequ
 
     // https://html.spec.whatwg.org/#the-rules-for-choosing-a-browsing-context-given-a-browsing-context-name (Step 8.2)
     if (openerFrame.document()->shouldForceNoOpenerBasedOnCOOP()) {
-        request.setFrameName("_blank"_s);
+        request.setFrameName(blankTargetFrameName());
         features.noopener = true;
     }
 
@@ -4148,7 +4149,7 @@ RefPtr<Frame> createWindow(Frame& openerFrame, Frame& lookupFrame, FrameLoadRequ
     if (isDocumentSandboxed(openerFrame, SandboxPropagatesToAuxiliaryBrowsingContexts))
         frame->loader().forceSandboxFlags(openerFrame.document()->sandboxFlags());
 
-    if (!equalIgnoringASCIICase(request.frameName(), "_blank"))
+    if (!isBlankTargetFrameName(request.frameName()))
         frame->tree().setName(request.frameName());
 
     page->chrome().setToolbarsVisible(features.toolBarVisible || features.locationBarVisible);

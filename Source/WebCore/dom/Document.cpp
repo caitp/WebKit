@@ -62,6 +62,7 @@
 #include "DebugPageOverlays.h"
 #include "DeprecatedGlobalSettings.h"
 #include "DocumentFontLoader.h"
+#include "DocumentInlines.h"
 #include "DocumentLoader.h"
 #include "DocumentMarkerController.h"
 #include "DocumentSharedObjectPool.h"
@@ -116,6 +117,7 @@
 #include "HTMLStyleElement.h"
 #include "HTMLTitleElement.h"
 #include "HTMLUnknownElement.h"
+#include "HTMLVideoElement.h"
 #include "HTTPHeaderNames.h"
 #include "HTTPParsers.h"
 #include "HashChangeEvent.h"
@@ -162,6 +164,7 @@
 #include "PaintWorkletGlobalScope.h"
 #include "Performance.h"
 #include "PerformanceNavigationTiming.h"
+#include "PermissionController.h"
 #include "PlatformLocale.h"
 #include "PlatformMediaSessionManager.h"
 #include "PlatformScreen.h"
@@ -176,6 +179,7 @@
 #include "PseudoClassChangeInvalidation.h"
 #include "PublicSuffix.h"
 #include "Quirks.h"
+#include "RTCNetworkManager.h"
 #include "Range.h"
 #include "RealtimeMediaSourceCenter.h"
 #include "RenderChildIterator.h"
@@ -191,8 +195,8 @@
 #include "RuntimeApplicationChecks.h"
 #include "RuntimeEnabledFeatures.h"
 #include "SVGDocumentExtensions.h"
-#include "SVGElement.h"
 #include "SVGElementFactory.h"
+#include "SVGElementTypeHelpers.h"
 #include "SVGNames.h"
 #include "SVGSVGElement.h"
 #include "SVGTitleElement.h"
@@ -238,6 +242,7 @@
 #include "TextEvent.h"
 #include "TextManipulationController.h"
 #include "TextNodeTraversal.h"
+#include "TextResourceDecoder.h"
 #include "TouchAction.h"
 #include "TransformSource.h"
 #include "TreeWalker.h"
@@ -894,7 +899,7 @@ void Document::buildAccessKeyCache()
             auto& key = element.attributeWithoutSynchronization(accesskeyAttr);
             if (key.isEmpty())
                 continue;
-            map.add(key, makeWeakPtr(element));
+            map.add(key, element);
         }
         return map;
     }());
@@ -978,7 +983,7 @@ void Document::resetLinkColor()
 
 void Document::resetVisitedLinkColor()
 {
-    m_visitedLinkColor = StyleColor::colorFromKeyword(CSSValueWebkitLink, styleColorOptions(nullptr) | StyleColor::Options::ForVisitedLink);
+    m_visitedLinkColor = StyleColor::colorFromKeyword(CSSValueWebkitLink, styleColorOptions(nullptr) | StyleColorOptions::ForVisitedLink);
 }
 
 void Document::resetActiveLinkColor()
@@ -1567,11 +1572,7 @@ void Document::setDocumentURI(const String& uri)
 void Document::setContent(const String& content)
 {
     open();
-    // FIXME: This should probably use insert(), but that's (intentionally)
-    // not implemented for the XML parser as it's normally synonymous with
-    // document.write(). append() will end up yielding, but close() will
-    // pump the tokenizer syncrhonously and finish the parse.
-    m_parser->append(content.impl());
+    m_parser->appendSynchronously(content.impl());
     close();
 }
 
@@ -2261,9 +2262,9 @@ std::unique_ptr<RenderStyle> Document::styleForElementIgnoringPendingStylesheets
     auto& resolver = element.styleResolver();
 
     if (pseudoElementSpecifier != PseudoId::None)
-        return resolver.pseudoStyleForElement(element, { pseudoElementSpecifier }, *parentStyle);
+        return resolver.pseudoStyleForElement(element, { pseudoElementSpecifier }, { parentStyle });
 
-    auto elementStyle = resolver.styleForElement(element, parentStyle);
+    auto elementStyle = resolver.styleForElement(element, { parentStyle });
     if (elementStyle.relations) {
         Style::Update emptyUpdate(*this);
         Style::commitRelations(WTFMove(elementStyle.relations), emptyUpdate);
@@ -2870,7 +2871,7 @@ void Document::collectRangeDataFromRegister(Vector<WeakPtr<HighlightRangeData>>&
                 continue;
             if (&rangeData->range->startContainer().treeScope() != &rangeData->range->endContainer().treeScope())
                 continue;
-            rangesData.append(makeWeakPtr(rangeData.ptr()));
+            rangesData.append(rangeData.get());
         }
     }
 }
@@ -2916,21 +2917,21 @@ ExceptionOr<RefPtr<WindowProxy>> Document::openForBindings(DOMWindow& activeWind
     return m_domWindow->open(activeWindow, firstWindow, url, name, features);
 }
 
-ExceptionOr<Document&> Document::openForBindings(Document* responsibleDocument, const String&, const String&)
+ExceptionOr<Document&> Document::openForBindings(Document* entryDocument, const String&, const String&)
 {
     if (!isHTMLDocument() || m_throwOnDynamicMarkupInsertionCount)
         return Exception { InvalidStateError };
 
-    auto result = open(responsibleDocument);
+    auto result = open(entryDocument);
     if (UNLIKELY(result.hasException()))
         return result.releaseException();
 
     return *this;
 }
 
-ExceptionOr<void> Document::open(Document* responsibleDocument)
+ExceptionOr<void> Document::open(Document* entryDocument)
 {
-    if (responsibleDocument && !responsibleDocument->securityOrigin().isSameOriginAs(securityOrigin()))
+    if (entryDocument && !entryDocument->securityOrigin().isSameOriginAs(securityOrigin()))
         return Exception { SecurityError };
 
     if (m_ignoreOpensDuringUnloadCount)
@@ -2959,16 +2960,16 @@ ExceptionOr<void> Document::open(Document* responsibleDocument)
 
     removeAllEventListeners();
 
-    if (responsibleDocument && isFullyActive()) {
-        auto newURL = responsibleDocument->url();
-        if (responsibleDocument != this)
+    if (entryDocument && isFullyActive()) {
+        auto newURL = entryDocument->url();
+        if (entryDocument != this)
             newURL.removeFragmentIdentifier();
         setURL(newURL);
-        auto newCookieURL = responsibleDocument->cookieURL();
-        if (responsibleDocument != this)
+        auto newCookieURL = entryDocument->cookieURL();
+        if (entryDocument != this)
             newCookieURL.removeFragmentIdentifier();
         setCookieURL(newCookieURL);
-        setSecurityOriginPolicy(responsibleDocument->securityOriginPolicy());
+        setSecurityOriginPolicy(entryDocument->securityOriginPolicy());
     }
 
     implicitOpen();
@@ -3307,7 +3308,7 @@ void Document::enqueuePaintTimingEntryIfNeeded()
     m_didEnqueueFirstContentfulPaint = true;
 }
 
-ExceptionOr<void> Document::write(Document* responsibleDocument, SegmentedString&& text)
+ExceptionOr<void> Document::write(Document* entryDocument, SegmentedString&& text)
 {
     if (m_activeParserWasAborted)
         return { };
@@ -3325,7 +3326,7 @@ ExceptionOr<void> Document::write(Document* responsibleDocument, SegmentedString
         return { };
 
     if (!hasInsertionPoint) {
-        auto result = open(responsibleDocument);
+        auto result = open(entryDocument);
         if (UNLIKELY(result.hasException()))
             return result.releaseException();
     }
@@ -3335,7 +3336,7 @@ ExceptionOr<void> Document::write(Document* responsibleDocument, SegmentedString
     return { };
 }
 
-ExceptionOr<void> Document::write(Document* responsibleDocument, Vector<String>&& strings)
+ExceptionOr<void> Document::write(Document* entryDocument, Vector<String>&& strings)
 {
     if (!isHTMLDocument() || m_throwOnDynamicMarkupInsertionCount)
         return Exception { InvalidStateError };
@@ -3344,10 +3345,10 @@ ExceptionOr<void> Document::write(Document* responsibleDocument, Vector<String>&
     for (auto& string : strings)
         text.append(WTFMove(string));
 
-    return write(responsibleDocument, WTFMove(text));
+    return write(entryDocument, WTFMove(text));
 }
 
-ExceptionOr<void> Document::writeln(Document* responsibleDocument, Vector<String>&& strings)
+ExceptionOr<void> Document::writeln(Document* entryDocument, Vector<String>&& strings)
 {
     if (!isHTMLDocument() || m_throwOnDynamicMarkupInsertionCount)
         return Exception { InvalidStateError };
@@ -3357,7 +3358,7 @@ ExceptionOr<void> Document::writeln(Document* responsibleDocument, Vector<String
         text.append(WTFMove(string));
 
     text.append("\n"_s);
-    return write(responsibleDocument, WTFMove(text));
+    return write(entryDocument, WTFMove(text));
 }
 
 Seconds Document::minimumDOMTimerInterval() const
@@ -3576,6 +3577,13 @@ RefPtr<RTCDataChannelRemoteHandlerConnection> Document::createRTCDataChannelRemo
         return nullptr;
     return page->libWebRTCProvider().createRTCDataChannelRemoteHandlerConnection();
 }
+
+#if ENABLE(WEB_RTC)
+void Document::setRTCNetworkManager(Ref<RTCNetworkManager>&& rtcNetworkManager)
+{
+    m_rtcNetworkManager = WTFMove(rtcNetworkManager);
+}
+#endif
 
 bool Document::canNavigate(Frame* targetFrame, const URL& destinationURL)
 {
@@ -3934,7 +3942,7 @@ WeakPtr<HTMLMetaElement> Document::determineActiveThemeColorMetaElement()
         Vector<WeakPtr<HTMLMetaElement>> metaThemeColorElements;
         for (auto& metaElement : descendantsOfType<HTMLMetaElement>(*this)) {
             if (equalLettersIgnoringASCIICase(metaElement.name(), "theme-color") && metaElement.contentColor().isValid())
-                metaThemeColorElements.append(makeWeakPtr(metaElement));
+                metaThemeColorElements.append(metaElement);
         }
         m_metaThemeColorElements = WTFMove(metaThemeColorElements);
     }
@@ -3955,7 +3963,7 @@ void Document::themeColorChanged()
 }
 
 #if ENABLE(DARK_MODE_CSS)
-static void processColorSchemeString(StringView colorScheme, const WTF::Function<void(StringView key)>& callback)
+static void processColorSchemeString(StringView colorScheme, const Function<void(StringView key)>& callback)
 {
     unsigned length = colorScheme.length();
     for (unsigned i = 0; i < length; ) {
@@ -4383,7 +4391,7 @@ void Document::setActiveSpeechRecognition(SpeechRecognition* speechRecognition)
     if (m_activeSpeechRecognition == speechRecognition)
         return;
 
-    m_activeSpeechRecognition = makeWeakPtr(speechRecognition);
+    m_activeSpeechRecognition = speechRecognition;
     updateIsPlayingMedia();
 }
 
@@ -4402,18 +4410,18 @@ void Document::noteUserInteractionWithMediaElement()
 void Document::updateIsPlayingMedia()
 {
     ASSERT(!m_audioProducers.hasNullReferences());
-    MediaProducer::MediaStateFlags state;
+    MediaProducerMediaStateFlags state;
     for (auto& audioProducer : m_audioProducers)
         state.add(audioProducer.mediaState());
 
 #if ENABLE(MEDIA_STREAM)
     state.add(MediaStreamTrack::captureState(*this));
     if (m_activeSpeechRecognition)
-        state.add(MediaProducer::MediaState::HasActiveAudioCaptureDevice);
+        state.add(MediaProducerMediaState::HasActiveAudioCaptureDevice);
 #endif
 
     if (m_userHasInteractedWithMediaElement)
-        state.add(MediaProducer::MediaState::HasUserInteractedWithMediaElement);
+        state.add(MediaProducerMediaState::HasUserInteractedWithMediaElement);
 
     if (state == m_mediaState)
         return;
@@ -4470,6 +4478,40 @@ void Document::adjustFocusedNodeOnNodeRemoval(Node& node, NodeRemoval nodeRemova
         // Also we need to call removeFocusNavigationNodeOfSubtree after this function because
         // setFocusedElement(nullptr) will reset m_focusNavigationStartingNode.
         setFocusNavigationStartingNode(focusedElement.get());
+    }
+}
+
+void Document::appendAutofocusCandidate(Element& candidate)
+{
+    ASSERT(isTopDocument());
+    ASSERT(!m_isAutofocusProcessed);
+    auto it = m_autofocusCandidates.findIf([&candidate](auto& c) {
+        return c == &candidate;
+    });
+    if (it != m_autofocusCandidates.end())
+        m_autofocusCandidates.remove(it);
+    m_autofocusCandidates.append(candidate);
+}
+
+void Document::flushAutofocusCandidates()
+{
+    ASSERT(isTopDocument());
+    if (m_isAutofocusProcessed)
+        return;
+    while (!m_autofocusCandidates.isEmpty()) {
+        RefPtr element = m_autofocusCandidates.takeFirst().get();
+        if (!element || !element->document().isFullyActive() || &element->document().topDocument() != this)
+            continue;
+        if (auto* parser = scriptableDocumentParser(); parser && parser->hasScriptsWaitingForStylesheets())
+            break;
+        // FIXME: Need to ignore if the inclusive ancestor documents has a target element.
+        // FIXME: Use the result of getting the focusable area for element if element is not focusable.
+        if (element->isFocusable()) {
+            clearAutofocusCandidates();
+            setAutofocusProcessed();
+            element->runFocusingStepsForAutofocus();
+            return;
+        }
     }
 }
 
@@ -5763,7 +5805,7 @@ void Document::captionPreferencesChanged()
 
 void Document::setMediaElementShowingTextTrack(const HTMLMediaElement& element)
 {
-    m_mediaElementShowingTextTrack = makeWeakPtr(element);
+    m_mediaElementShowingTextTrack = element;
 }
 
 void Document::clearMediaElementShowingTextTrack()
@@ -6402,6 +6444,8 @@ bool Document::isSecureContext() const
         return true;
     if (!RuntimeEnabledFeatures::sharedFeatures().secureContextChecksEnabled())
         return true;
+    if (page() && page()->isServiceWorkerPage())
+        return true;
 
     for (auto* frame = m_frame->tree().parent(); frame; frame = frame->tree().parent()) {
         if (!isDocumentSecure(*frame->document()))
@@ -6696,6 +6740,32 @@ void Document::serviceRequestAnimationFrameCallbacks()
         m_scriptedAnimationController->serviceRequestAnimationFrameCallbacks(domWindow()->frozenNowTimestamp());
 }
 
+void Document::serviceRequestVideoFrameCallbacks()
+{
+#if ENABLE(VIDEO)
+    if (!domWindow())
+        return;
+
+    bool isServicingRequestVideoFrameCallbacks = false;
+    forEachMediaElement([now = domWindow()->frozenNowTimestamp(), &isServicingRequestVideoFrameCallbacks](auto& element) {
+        if (!is<HTMLVideoElement>(element))
+            return;
+
+        auto& videoElement = downcast<HTMLVideoElement>(element);
+        if (videoElement.shouldServiceRequestVideoFrameCallbacks()) {
+            isServicingRequestVideoFrameCallbacks = true;
+            videoElement.serviceRequestVideoFrameCallbacks(now);
+        }
+    });
+
+    if (!isServicingRequestVideoFrameCallbacks)
+        return;
+
+    if (auto* page = this->page())
+        page->scheduleRenderingUpdate(RenderingUpdateStep::VideoFrameCallbacks);
+#endif
+}
+
 void Document::windowScreenDidChange(PlatformDisplayID displayID)
 {
     if (RenderView* view = renderView()) {
@@ -6722,7 +6792,7 @@ void Document::dispatchPageshowEvent(PageshowEventPersistence persisted)
     dispatchWindowEvent(PageTransitionEvent::create(eventNames().pageshowEvent, persisted), this);
 }
 
-void Document::enqueueSecurityPolicyViolationEvent(SecurityPolicyViolationEvent::Init&& eventInit)
+void Document::enqueueSecurityPolicyViolationEvent(SecurityPolicyViolationEventInit&& eventInit)
 {
     queueTaskToDispatchEvent(TaskSource::DOMManipulation, SecurityPolicyViolationEvent::create(eventNames().securitypolicyviolationEvent, WTFMove(eventInit), Event::IsTrusted::Yes));
 }
@@ -7242,7 +7312,7 @@ void Document::decrementActiveParserCount()
 }
 
 DocumentParserYieldToken::DocumentParserYieldToken(Document& document)
-    : m_document(makeWeakPtr(document))
+    : m_document(document)
 {
     if (++document.m_parserYieldTokenCount != 1)
         return;
@@ -7506,15 +7576,15 @@ bool Document::useElevatedUserInterfaceLevel() const
     return false;
 }
 
-OptionSet<StyleColor::Options> Document::styleColorOptions(const RenderStyle* style) const
+OptionSet<StyleColorOptions> Document::styleColorOptions(const RenderStyle* style) const
 {
-    OptionSet<StyleColor::Options> options;
+    OptionSet<StyleColorOptions> options;
     if (useSystemAppearance())
-        options.add(StyleColor::Options::UseSystemAppearance);
+        options.add(StyleColorOptions::UseSystemAppearance);
     if (useDarkAppearance(style))
-        options.add(StyleColor::Options::UseDarkAppearance);
+        options.add(StyleColorOptions::UseDarkAppearance);
     if (useElevatedUserInterfaceLevel())
-        options.add(StyleColor::Options::UseElevatedUserInterfaceLevel);
+        options.add(StyleColorOptions::UseElevatedUserInterfaceLevel);
     return options;
 }
 
@@ -7538,7 +7608,7 @@ void Document::didAssociateFormControl(Element& element)
     if (!page || !page->chrome().client().shouldNotifyOnFormChanges())
         return;
 
-    auto isNewEntry = m_associatedFormControls.add(&element).isNewEntry;
+    auto isNewEntry = m_associatedFormControls.add(element).isNewEntry;
     if (isNewEntry && !m_didAssociateFormControlsTimer.isActive())
         m_didAssociateFormControlsTimer.startOneShot(isTopDocument() || hasHadUserInteraction() ? 0_s : 1_s);
 }
@@ -7691,7 +7761,7 @@ void Document::showPlaybackTargetPicker(MediaPlaybackTargetClient& client, bool 
     page->showPlaybackTargetPicker(it->value, position, isVideo, routeSharingPolicy, routingContextUID);
 }
 
-void Document::playbackTargetPickerClientStateDidChange(MediaPlaybackTargetClient& client, MediaProducer::MediaStateFlags state)
+void Document::playbackTargetPickerClientStateDidChange(MediaPlaybackTargetClient& client, MediaProducerMediaStateFlags state)
 {
     Page* page = this->page();
     if (!page)
@@ -7844,7 +7914,7 @@ void Document::scheduleRenderingUpdate(OptionSet<RenderingUpdateStep> requestedS
 void Document::addIntersectionObserver(IntersectionObserver& observer)
 {
     ASSERT(m_intersectionObservers.find(&observer) == notFound);
-    m_intersectionObservers.append(makeWeakPtr(&observer));
+    m_intersectionObservers.append(observer);
 }
 
 void Document::removeIntersectionObserver(IntersectionObserver& observer)
@@ -8050,7 +8120,7 @@ void Document::updateIntersectionObservations()
             }
         }
         if (needNotify)
-            intersectionObserversWithPendingNotifications.append(makeWeakPtr(observer.get()));
+            intersectionObserversWithPendingNotifications.append(observer);
     }
 
     for (const auto& observer : intersectionObserversWithPendingNotifications) {
@@ -8077,7 +8147,7 @@ IntersectionObserverData& Document::ensureIntersectionObserverData()
 void Document::addResizeObserver(ResizeObserver& observer)
 {
     if (!m_resizeObservers.contains(&observer))
-        m_resizeObservers.append(makeWeakPtr(&observer));
+        m_resizeObservers.append(observer);
 }
 
 void Document::removeResizeObserver(ResizeObserver& observer)
@@ -8196,7 +8266,7 @@ void Document::orientationChanged(int orientation)
 
 #if ENABLE(MEDIA_STREAM)
 
-void Document::stopMediaCapture(MediaProducer::MediaCaptureKind kind)
+void Document::stopMediaCapture(MediaProducerMediaCaptureKind kind)
 {
     MediaStreamTrack::endCapture(*this, kind);
 }
@@ -8354,7 +8424,7 @@ void Document::updateMainArticleElementAfterLayout()
     }
 
     if (numberOfArticles == 1) {
-        m_mainArticleElement = makeWeakPtr(tallestArticle.get());
+        m_mainArticleElement = tallestArticle;
         return;
     }
 
@@ -8368,7 +8438,7 @@ void Document::updateMainArticleElementAfterLayout()
     if (tallestArticleWidth * tallestArticleHeight < minimumViewportAreaFactor * (viewportSize.width() * viewportSize.height()).toFloat())
         return;
 
-    m_mainArticleElement = makeWeakPtr(tallestArticle.get());
+    m_mainArticleElement = tallestArticle;
 }
 
 #if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
@@ -8443,7 +8513,7 @@ Vector<RefPtr<WebAnimation>> Document::getAnimations()
     });
 }
 
-Vector<RefPtr<WebAnimation>> Document::matchingAnimations(const WTF::Function<bool(Element&)>& function)
+Vector<RefPtr<WebAnimation>> Document::matchingAnimations(const Function<bool(Element&)>& function)
 {
     // For the list of animations to be current, we need to account for any pending CSS changes,
     // such as updates to CSS Animations and CSS Transitions.
@@ -8608,7 +8678,7 @@ void Document::didLogMessage(const WTFLogChannel& channel, WTFLogLevel level, Ve
     if (messageSource == MessageSource::Other)
         return;
 
-    eventLoop().queueTask(TaskSource::InternalAsyncTask, [weakThis = makeWeakPtr(*this), level, messageSource, logMessages = WTFMove(logMessages)]() mutable {
+    eventLoop().queueTask(TaskSource::InternalAsyncTask, [weakThis = WeakPtr { *this }, level, messageSource, logMessages = WTFMove(logMessages)]() mutable {
         if (!weakThis || !weakThis->page())
             return;
 
@@ -8823,7 +8893,7 @@ void Document::didRejectSyncXHRDuringPageDismissal()
     if (m_numberOfRejectedSyncXHRs > 1)
         return;
 
-    postTask([this, weakThis = makeWeakPtr(*this)](auto&) mutable {
+    postTask([this, weakThis = WeakPtr { *this }](auto&) mutable {
         if (weakThis)
             m_numberOfRejectedSyncXHRs = 0;
     });
@@ -8883,7 +8953,7 @@ HTMLVideoElement* Document::pictureInPictureElement() const
 
 void Document::setPictureInPictureElement(HTMLVideoElement* element)
 {
-    m_pictureInPictureElement = makeWeakPtr(element);
+    m_pictureInPictureElement = element;
 }
 #endif
 
