@@ -116,6 +116,7 @@
 #include "JSPromise.h"
 #include "JSPropertyNameEnumerator.h"
 #include "JSProxy.h"
+#include "JSRemoteFunction.h"
 #include "JSScriptFetchParameters.h"
 #include "JSScriptFetcher.h"
 #include "JSSet.h"
@@ -898,6 +899,27 @@ NativeExecutable* VM::getBoundFunction(bool isJSFunction, bool canConstruct)
     return getOrCreate(m_fastBoundExecutable);
 }
 
+NativeExecutable* VM::getRemoteFunction(bool isJSFunction)
+{
+    bool slowCase = !isJSFunction;
+
+    auto getOrCreate = [&] (Weak<NativeExecutable>& slot) -> NativeExecutable* {
+        if (auto* cached = slot.get())
+            return cached;
+        NativeExecutable* result = getHostFunction(
+            slowCase ? remoteFunctionCall : remoteJSFunctionCall,
+            // FIXME: Add thunk generator for FastRemoteFunctionCall
+            slowCase ? NoIntrinsic : NoIntrinsic,
+            remoteFunctionConstruct, nullptr, String());
+        slot = Weak<NativeExecutable>(result);
+        return result;
+    };
+
+    if (slowCase)
+        return getOrCreate(m_slowRemoteFunctionExecutable);
+    return getOrCreate(m_fastRemoteFunctionExecutable);
+}
+
 MacroAssemblerCodePtr<JSEntryPtrTag> VM::getCTIInternalFunctionTrampolineFor(CodeSpecializationKind kind)
 {
 #if ENABLE(JIT)
@@ -1620,6 +1642,7 @@ DYNAMIC_ISO_SUBSPACE_DEFINE_MEMBER_SLOW(moduleNamespaceObjectSpace, *moduleNames
 DYNAMIC_ISO_SUBSPACE_DEFINE_MEMBER_SLOW(nativeStdFunctionSpace, *nativeStdFunctionHeapCellType, JSNativeStdFunction) // Hash:0x70ed61e4
 DYNAMIC_ISO_SUBSPACE_DEFINE_MEMBER_SLOW(proxyObjectSpace, *cellHeapCellType, ProxyObject)
 DYNAMIC_ISO_SUBSPACE_DEFINE_MEMBER_SLOW(proxyRevokeSpace, *cellHeapCellType, ProxyRevoke) // Hash:0xb506a939
+DYNAMIC_ISO_SUBSPACE_DEFINE_MEMBER_SLOW(remoteFunctionSpace, *cellHeapCellType, JSRemoteFunction)
 DYNAMIC_ISO_SUBSPACE_DEFINE_MEMBER_SLOW(scopedArgumentsTableSpace, *destructibleCellHeapCellType, ScopedArgumentsTable)
 DYNAMIC_ISO_SUBSPACE_DEFINE_MEMBER_SLOW(scriptFetchParametersSpace, *destructibleCellHeapCellType, JSScriptFetchParameters)
 DYNAMIC_ISO_SUBSPACE_DEFINE_MEMBER_SLOW(scriptFetcherSpace, *destructibleCellHeapCellType, JSScriptFetcher)
