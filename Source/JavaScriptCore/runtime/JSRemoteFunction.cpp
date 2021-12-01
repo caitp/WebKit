@@ -170,13 +170,10 @@ JSC_DEFINE_HOST_FUNCTION(createRemoteFunction, (JSGlobalObject* globalObject, Ca
     JSCallee* targetFunction = jsCast<JSCallee*>(callFrame->uncheckedArgument(0));
     JSGlobalObject* destinationGlobalObject = globalObject;
     if (!callFrame->uncheckedArgument(1).isUndefinedOrNull()) {
-        if (auto shadowRealm = jsDynamicCast<ShadowRealmObject*>(vm, callFrame->uncheckedArgument(1))) {
-            dataLog("using ShadowRealm's globalObject\n");
+        if (auto shadowRealm = jsDynamicCast<ShadowRealmObject*>(vm, callFrame->uncheckedArgument(1)))
             destinationGlobalObject = shadowRealm->globalObject();
-        } else {
-            dataLog("using global object\n");
+        else
             destinationGlobalObject = jsCast<JSGlobalObject*>(callFrame->uncheckedArgument(1));
-        }
     }
 
     ASSERT(destinationGlobalObject != targetFunction->globalObject());
