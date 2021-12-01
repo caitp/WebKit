@@ -910,7 +910,7 @@ NativeExecutable* VM::getRemoteFunction(bool isJSFunction)
             slowCase ? remoteFunctionCall : remoteJSFunctionCall,
             // FIXME: Add thunk generator for FastRemoteFunctionCall
             slowCase ? NoIntrinsic : NoIntrinsic,
-            remoteFunctionConstruct, nullptr, String());
+            callHostFunctionAsConstructor, nullptr, String());
         slot = Weak<NativeExecutable>(result);
         return result;
     };

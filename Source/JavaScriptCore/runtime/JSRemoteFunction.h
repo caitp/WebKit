@@ -34,7 +34,6 @@ namespace JSC {
 
 JSC_DECLARE_HOST_FUNCTION(remoteJSFunctionCall);
 JSC_DECLARE_HOST_FUNCTION(remoteFunctionCall);
-JSC_DECLARE_HOST_FUNCTION(remoteFunctionConstruct);
 JSC_DECLARE_HOST_FUNCTION(isRemoteFunction);
 JSC_DECLARE_HOST_FUNCTION(createRemoteFunction);
 

@@ -156,15 +156,6 @@ JSC_DEFINE_HOST_FUNCTION(remoteFunctionCall, (JSGlobalObject* globalObject, Call
     RELEASE_AND_RETURN(scope, JSValue::encode(wrappedResult));
 }
 
-JSC_DEFINE_HOST_FUNCTION(remoteFunctionConstruct, (JSGlobalObject* globalObject, CallFrame* callFrame))
-{
-    VM& vm = globalObject->vm();
-    auto scope = DECLARE_THROW_SCOPE(vm);
-
-    throwTypeError(globalObject, scope);
-    return encodedJSValue();
-}
-
 JSC_DEFINE_HOST_FUNCTION(isRemoteFunction, (JSGlobalObject* globalObject, CallFrame* callFrame))
 {
     return JSValue::encode(JSValue(static_cast<bool>(jsDynamicCast<JSRemoteFunction*>(globalObject->vm(), callFrame->uncheckedArgument(0)))));
