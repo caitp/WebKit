@@ -66,7 +66,7 @@ static inline JSValue wrapArgument(JSGlobalObject* globalObject, JSGlobalObject*
     auto scope = DECLARE_THROW_SCOPE(vm);
     JSValue result = wrapValue(globalObject, targetGlobalObject, value);
     if (result.isEmpty())
-        throwVMError(globalObject, scope, createTypeError(globalObject, "value passing between realms must be callable or primitive"));
+        throwTypeError(globalObject, scope, "value passing between realms must be callable or primitive");
     return result;
 }
 
@@ -76,7 +76,7 @@ static inline JSValue wraprReturnValue(JSGlobalObject* globalObject, JSGlobalObj
     auto scope = DECLARE_THROW_SCOPE(vm);
     JSValue result = wrapValue(globalObject, targetGlobalObject, value);
     if (result.isEmpty())
-        throwVMError(globalObject, scope, createTypeError(globalObject, "value passing between realms must be callable or primitive"));
+        throwTypeError(globalObject, scope, "value passing between realms must be callable or primitive");
     return result;
 }
 
@@ -113,7 +113,7 @@ JSC_DEFINE_HOST_FUNCTION(remoteJSFunctionCall, (JSGlobalObject* globalObject, Ca
     // Hide exceptions from calling realm
     if (scope.exception()) {
         scope.clearException();
-        throwTypeError(globalObject, scope);
+        throwTypeError(globalObject, scope, "an error occurred in remote realm");
         return encodedJSValue();
     }
 
@@ -148,7 +148,7 @@ JSC_DEFINE_HOST_FUNCTION(remoteFunctionCall, (JSGlobalObject* globalObject, Call
     // Hide exceptions from calling realm
     if (scope.exception()) {
         scope.clearException();
-        throwTypeError(globalObject, scope);
+        throwTypeError(globalObject, scope, "an error occurred in remote realm");
         return encodedJSValue();
     }
 
