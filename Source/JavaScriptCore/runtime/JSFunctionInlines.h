@@ -27,6 +27,7 @@
 
 #include "FunctionExecutable.h"
 #include "JSBoundFunction.h"
+#include "JSRemoteFunction.h"
 #include "JSFunction.h"
 #include "NativeExecutable.h"
 
@@ -78,6 +79,11 @@ inline bool JSFunction::isClassConstructorFunction() const
     return !isHostFunction() && jsExecutable()->isClassConstructorFunction();
 }
 
+inline bool JSFunction::isRemoteFunction() const
+{
+    return static_cast<bool>(jsDynamicCast<const JSRemoteFunction*>(globalObject()->vm(), this));
+}
+
 inline TaggedNativeFunction JSFunction::nativeFunction()
 {
     ASSERT(isHostFunctionNonInline());
@@ -96,6 +102,14 @@ inline bool isHostFunction(JSValue value, TaggedNativeFunction nativeFunction)
     if (!function || !function->isHostFunction())
         return false;
     return function->nativeFunction() == nativeFunction;
+}
+
+inline bool isRemoteFunction(JSValue value)
+{
+    JSFunction* function = jsCast<JSFunction*>(getJSFunction(value));
+    if (!function)
+        return false;
+    return function->isRemoteFunction();
 }
 
 inline bool JSFunction::hasReifiedLength() const

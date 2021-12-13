@@ -116,29 +116,22 @@ JSC_DEFINE_JIT_OPERATION(operationThrowStackOverflowErrorFromThunk, void, (JSGlo
     ASSERT(vm.targetMachinePCForThrow);
 }
 
-JSC_DEFINE_JIT_OPERATION(operationGetWrappedValue, EncodedJSValue, (JSFunction* callee, EncodedJSValue encodedValue))
+JSC_DEFINE_JIT_OPERATION(operationGetWrappedValue, EncodedJSValue, (JSGlobalObject* targetGlobalObject, EncodedJSValue encodedValue))
 {
-    ASSERT(isRemoteFunction(callee));
-    JSGlobalObject* globalObject = callee->globalObject();
-    VM& vm = globalObject->vm();
-
+    VM& vm = targetGlobalObject->vm();
     CallFrame* callFrame = DECLARE_CALL_FRAME(vm);
     JITOperationPrologueCallFrameTracer tracer(vm, callFrame);
-
-    JSGlobalObject* targetGlobalObject = jsCast<JSRemoteFunction*>(callee)->targetFunction()->globalObject();
-
+    auto scope = DECLARE_THROW_SCOPE(vm);
     JSValue value = JSValue::decode(encodedValue);
-    if (!value.isObject()) {
-        return encodedValue;
-    }
+    if (value.isPrimitive())
+        RELEASE_AND_RETURN(scope, encodedValue);
 
     if (value.isCallable(vm)) {
         JSCallee* targetCallee = jsCast<JSCallee*>(value.asCell());
-        ASSERT(targetCallee->globalObject() != targetGlobalObject);
+        ASSERT(targetCallee->structure()->globalObject() != targetGlobalObject);
+
         return JSValue::encode(JSRemoteFunction::create(vm, targetGlobalObject, targetCallee));
     }
-
-    auto scope = DECLARE_THROW_SCOPE(vm);
     throwTypeError(targetGlobalObject, scope, "value passing between realms must be callable or primitive");
     return encodedJSValue();
 }

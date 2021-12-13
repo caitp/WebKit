@@ -822,6 +822,8 @@ static ThunkGenerator thunkGeneratorForIntrinsic(Intrinsic intrinsic)
         return randomThunkGenerator;
     case BoundFunctionCallIntrinsic:
         return boundFunctionCallGenerator;
+    case RemoteFunctionCallIntrinsic:
+        return remoteFunctionCallGenerator;
     default:
         return nullptr;
     }
@@ -908,8 +910,7 @@ NativeExecutable* VM::getRemoteFunction(bool isJSFunction)
             return cached;
         NativeExecutable* result = getHostFunction(
             slowCase ? remoteFunctionCall : remoteJSFunctionCall,
-            // FIXME: Add thunk generator for FastRemoteFunctionCall
-            slowCase ? NoIntrinsic : NoIntrinsic,
+            slowCase ? NoIntrinsic : RemoteFunctionCallIntrinsic,
             callHostFunctionAsConstructor, nullptr, String());
         slot = Weak<NativeExecutable>(result);
         return result;

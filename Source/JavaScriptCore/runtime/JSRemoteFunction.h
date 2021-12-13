@@ -54,6 +54,7 @@ public:
     JS_EXPORT_PRIVATE static JSRemoteFunction* create(VM&, JSGlobalObject*, JSCallee* targetFunction);
 
     JSCallee* targetFunction() { return m_targetFunction.get(); }
+    JSGlobalObject* targetGlobalObject() { return targetFunction()->globalObject(); }
 
     static Structure* createStructure(VM& vm, JSGlobalObject* globalObject, JSValue prototype)
     {

@@ -29,6 +29,7 @@
 #include "JITOperations.h"
 #include "JITThunks.h"
 #include "JSBoundFunction.h"
+#include "JSRemoteFunction.h"
 #include "LLIntThunks.h"
 #include "MaxFrameExtentForSlowPathCall.h"
 #include "SpecializedThunkJIT.h"
@@ -36,6 +37,8 @@
 #include <wtf/StdIntExtras.h>
 #include <wtf/StringPrintStream.h>
 #include <wtf/text/StringImpl.h>
+
+#include "MacroAssemblerPrinter.h"
 
 #if ENABLE(JIT)
 
@@ -1410,6 +1413,149 @@ MacroAssemblerCodeRef<JITThunkPtrTag> boundFunctionCallGenerator(VM& vm)
     jit.emitFunctionEpilogue();
     jit.ret();
     
+    LinkBuffer linkBuffer(jit, GLOBAL_THUNK_ID, LinkBuffer::Profile::BoundFunctionThunk);
+    linkBuffer.link(noCode, CodeLocationLabel<JITThunkPtrTag>(vm.jitStubs->ctiNativeTailCallWithoutSavedTags(vm)));
+    return FINALIZE_CODE(
+        linkBuffer, JITThunkPtrTag, "Specialized thunk for bound function calls with no arguments");
+}
+
+MacroAssemblerCodeRef<JITThunkPtrTag> remoteFunctionCallGenerator(VM& vm)
+{
+    CCallHelpers jit;
+    jit.emitFunctionPrologue();
+
+    // Set up our call frame.
+    jit.storePtr(CCallHelpers::TrustedImmPtr(nullptr), CCallHelpers::addressFor(CallFrameSlot::codeBlock));
+    jit.store32(CCallHelpers::TrustedImm32(0), CCallHelpers::tagFor(CallFrameSlot::argumentCountIncludingThis));
+
+    unsigned extraStackNeeded = 0;
+    if (unsigned stackMisalignment = sizeof(CallerFrameAndPC) % stackAlignmentBytes())
+        extraStackNeeded = stackAlignmentBytes() - stackMisalignment;
+    
+    // We need to forward all of the arguments that we were passed. We aren't allowed to do a tail
+    // call here as far as I can tell. At least not so long as the generic path doesn't do a tail
+    // call, since that would be way too weird.
+    
+    // The formula for the number of stack bytes needed given some number of parameters (including
+    // this) is:
+    //
+    //     stackAlign((numParams + CallFrameHeaderSize) * sizeof(Register) - sizeof(CallerFrameAndPC))
+    //
+    // Probably we want to write this as:
+    //
+    //     stackAlign((numParams + (CallFrameHeaderSize - CallerFrameAndPCSize)) * sizeof(Register))
+    //
+    // That's really all there is to this. We have all the registers we need to do it.
+    
+    jit.loadCell(CCallHelpers::addressFor(CallFrameSlot::callee), GPRInfo::regT0); // t0 = callee
+    jit.load32(CCallHelpers::payloadFor(CallFrameSlot::argumentCountIncludingThis), GPRInfo::regT1); // t1 = arguments+this on stack
+    jit.sub32(CCallHelpers::TrustedImm32(1), GPRInfo::regT1); // t1 -= 1 (remove `this` from arguments count)
+
+    jit.add32(CCallHelpers::TrustedImm32(CallFrame::headerSizeInRegisters - CallerFrameAndPC::sizeInRegisters), GPRInfo::regT1, GPRInfo::regT2); // t2 += space for callee, codeblock and argument count
+    jit.lshift32(CCallHelpers::TrustedImm32(3), GPRInfo::regT2); // t2 *= 8 (64 bits per reg)
+    jit.add32(CCallHelpers::TrustedImm32(stackAlignmentBytes() - 1), GPRInfo::regT2); // grow to satckAlignmentBytes in size
+    jit.and32(CCallHelpers::TrustedImm32(-stackAlignmentBytes()), GPRInfo::regT2);
+    
+    if (extraStackNeeded)
+        jit.add32(CCallHelpers::TrustedImm32(extraStackNeeded), GPRInfo::regT2); // add extra if needed
+    
+    // At this point regT1 has the actual argument count, regT2 has the amount of stack we will need, and regT3 has the passed argument count.
+    // Check to see if we have enough stack space.
+    
+    jit.negPtr(GPRInfo::regT2); // t2 = -t2
+    jit.addPtr(CCallHelpers::stackPointerRegister, GPRInfo::regT2); // t2 += sp
+    CCallHelpers::Jump haveStackSpace = jit.branchPtr(CCallHelpers::BelowOrEqual, CCallHelpers::AbsoluteAddress(vm.addressOfSoftStackLimit()), GPRInfo::regT2); // stackcheck
+
+    // Throw Stack Overflow exception
+    jit.copyCalleeSavesToEntryFrameCalleeSavesBuffer(vm.topEntryFrame);
+    jit.loadPtr(CCallHelpers::Address(GPRInfo::regT0, JSBoundFunction::offsetOfScopeChain()), GPRInfo::regT3);
+    jit.setupArguments<decltype(operationThrowStackOverflowErrorFromThunk)>(GPRInfo::regT3);
+    jit.prepareCallOperation(vm);
+    jit.move(CCallHelpers::TrustedImmPtr(tagCFunction<OperationPtrTag>(operationThrowStackOverflowErrorFromThunk)), GPRInfo::nonArgGPR0);
+    emitPointerValidation(jit, GPRInfo::nonArgGPR0, OperationPtrTag);
+    jit.call(GPRInfo::nonArgGPR0, OperationPtrTag);
+    jit.jumpToExceptionHandler(vm);
+
+    haveStackSpace.link(&jit);
+    jit.move(GPRInfo::regT2, CCallHelpers::stackPointerRegister);
+
+    // Do basic callee frame setup, including 'this'.
+
+    jit.store32(GPRInfo::regT1, CCallHelpers::calleeFramePayloadSlot(CallFrameSlot::argumentCountIncludingThis));// t1 = argumentCountIncludingThis
+
+    JSValueRegs valueRegs = JSValueRegs::withTwoAvailableRegs(GPRInfo::regT4, GPRInfo::regT2);
+    jit.storeTrustedValue(jsUndefined(), CCallHelpers::calleeArgumentSlot(0));
+
+    // OK, now we can start copying. This is a simple matter of copying parameters from the caller's
+    // frame to the callee's frame. Note that we know that regT3 (the argument count) must be at
+    // least 1.
+    CCallHelpers::Jump done = jit.branchTest32(CCallHelpers::Zero, GPRInfo::regT1);
+    
+    CCallHelpers::Label loop = jit.label();
+    jit.sub32(CCallHelpers::TrustedImm32(1), GPRInfo::regT1);
+    jit.print("  loop: ", GPRInfo::regT1, "\n", AllRegisters(2), "\n");
+    jit.loadValue(CCallHelpers::addressFor(virtualRegisterForArgumentIncludingThis(1)).indexedBy(GPRInfo::regT1, CCallHelpers::TimesEight), valueRegs);
+    jit.print("  testing value: ", valueRegs.gpr(), "\n");
+
+    // Check the passed value (in valueRegs) and convert to a JSRemoteFunction if necessary.
+    // (regT3 and regT5 are free, regT0 is callee JSRemoteFunction)
+    CCallHelpers::JumpList valueIsPrimitive;
+    valueIsPrimitive.append(jit.branchIfNotCell(valueRegs));
+    valueIsPrimitive.append(jit.branchIfNotObject(valueRegs.payloadGPR()));
+    jit.print("saving regT1: ", GPRInfo::regT1, "\n");
+    jit.pushToSave(GPRInfo::regT1);
+
+    // If value is a function, we must allocate a wrapper JSRemoteFunction, otherwise throw an exception
+    //jit.emitLoadStructure(vm, GPRInfo::regT0, GPRInfo::regT3, GPRInfo::regT5);
+    //jit.print("calleee structure: ", GPRInfo::regT3, "\n");
+
+    //jit.loadPtr(CCallHelpers::Address(GPRInfo::regT3, Structure::globalObjectOffset()), GPRInfo::regT3);
+    jit.move(CCallHelpers::TrustedImmPtr(tagCFunction<OperationPtrTag>(operationGetWrappedValue)), GPRInfo::nonArgGPR0);
+    emitPointerValidation(jit, GPRInfo::nonArgGPR0, OperationPtrTag);
+
+    // save regT3 to the stack
+    jit.loadCell(CCallHelpers::addressFor(CallFrameSlot::callee), GPRInfo::regT0); // t0 = callee
+    jit.setupArguments<decltype(operationGetWrappedValue)>(GPRInfo::regT0, valueRegs);
+    jit.prepareCallOperation(vm);
+    jit.call(GPRInfo::nonArgGPR0, OperationPtrTag);
+    auto checkException = jit.emitJumpIfException(vm);
+    jit.setupResults(valueRegs);
+    jit.popToRestore(GPRInfo::regT1);
+    jit.print("restored regT1: ", GPRInfo::regT1, "\n");
+
+    valueIsPrimitive.link(&jit);
+    jit.storeValue(valueRegs, CCallHelpers::calleeArgumentSlot(1).indexedBy(GPRInfo::regT1, CCallHelpers::TimesEight));
+    jit.branchTest32(CCallHelpers::NonZero, GPRInfo::regT1).linkTo(loop, &jit);
+    
+    done.link(&jit);
+    jit.print("  done argument loop: ", GPRInfo::regT1, "\n");
+
+    jit.loadPtr(CCallHelpers::Address(GPRInfo::regT0, JSRemoteFunction::offsetOfTargetFunction()), GPRInfo::regT2);
+    jit.storeCell(GPRInfo::regT2, CCallHelpers::calleeFrameSlot(CallFrameSlot::callee));
+    
+    jit.loadPtr(CCallHelpers::Address(GPRInfo::regT2, JSFunction::offsetOfExecutableOrRareData()), GPRInfo::regT0);
+    auto hasExecutable = jit.branchTestPtr(CCallHelpers::Zero, GPRInfo::regT0, CCallHelpers::TrustedImm32(JSFunction::rareDataTag));
+    jit.loadPtr(CCallHelpers::Address(GPRInfo::regT0, FunctionRareData::offsetOfExecutable() - JSFunction::rareDataTag), GPRInfo::regT0);
+    hasExecutable.link(&jit);
+
+    jit.loadPtr(
+        CCallHelpers::Address(
+            GPRInfo::regT0, ExecutableBase::offsetOfJITCodeWithArityCheckFor(CodeForCall)),
+        GPRInfo::regT0);
+    CCallHelpers::Jump noCode = jit.branchTestPtr(CCallHelpers::Zero, GPRInfo::regT0);
+    
+    emitPointerValidation(jit, GPRInfo::regT0, JSEntryPtrTag);
+    jit.call(GPRInfo::regT0, JSEntryPtrTag);
+
+    jit.print("done\n");
+    jit.emitFunctionEpilogue();
+    jit.ret();
+
+    checkException.link(&jit);
+    jit.print("Jumping to exception handler\n", AllRegisters(2));
+    jit.copyCalleeSavesToEntryFrameCalleeSavesBuffer(vm.topEntryFrame);
+    jit.jumpToExceptionHandler(vm);
+
     LinkBuffer linkBuffer(jit, GLOBAL_THUNK_ID, LinkBuffer::Profile::BoundFunctionThunk);
     linkBuffer.link(noCode, CodeLocationLabel<JITThunkPtrTag>(vm.jitStubs->ctiNativeTailCallWithoutSavedTags(vm)));
     return FINALIZE_CODE(

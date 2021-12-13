@@ -82,6 +82,7 @@ static inline JSValue wraprReturnValue(JSGlobalObject* globalObject, JSGlobalObj
 
 JSC_DEFINE_HOST_FUNCTION(remoteJSFunctionCall, (JSGlobalObject* globalObject, CallFrame* callFrame))
 {
+    dataLog("remoteJSFunctionCall\n");
     VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
     JSRemoteFunction* remoteFunction = jsCast<JSRemoteFunction*>(callFrame->jsCallee());
@@ -123,6 +124,7 @@ JSC_DEFINE_HOST_FUNCTION(remoteJSFunctionCall, (JSGlobalObject* globalObject, Ca
 
 JSC_DEFINE_HOST_FUNCTION(remoteFunctionCall, (JSGlobalObject* globalObject, CallFrame* callFrame))
 {
+    dataLog("remoteFunctionCall\n");
     VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
     JSRemoteFunction* remoteFunction = jsCast<JSRemoteFunction*>(callFrame->jsCallee());
@@ -170,10 +172,13 @@ JSC_DEFINE_HOST_FUNCTION(createRemoteFunction, (JSGlobalObject* globalObject, Ca
     JSCallee* targetFunction = jsCast<JSCallee*>(callFrame->uncheckedArgument(0));
     JSGlobalObject* destinationGlobalObject = globalObject;
     if (!callFrame->uncheckedArgument(1).isUndefinedOrNull()) {
+        dataLog("creating remote function for shadow realm\n");
         if (auto shadowRealm = jsDynamicCast<ShadowRealmObject*>(vm, callFrame->uncheckedArgument(1)))
             destinationGlobalObject = shadowRealm->globalObject();
         else
             destinationGlobalObject = jsCast<JSGlobalObject*>(callFrame->uncheckedArgument(1));
+    } else {
+        dataLog("creating remote function for incubator realm\n");
     }
 
     ASSERT(destinationGlobalObject != targetFunction->globalObject());
