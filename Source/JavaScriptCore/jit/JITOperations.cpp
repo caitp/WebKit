@@ -133,8 +133,7 @@ JSC_DEFINE_JIT_OPERATION(operationGetWrappedValue, EncodedJSValue, (JSFunction* 
     }
 
     if (value.isCallable(vm)) {
-        JSCallee* targetCallee = jsCast<JSCallee*>(value.asCell());
-        ASSERT(targetCallee->globalObject() != targetGlobalObject);
+        JSFunction* targetCallee = static_cast<JSFunction*>(value.asCell());
         return JSValue::encode(JSRemoteFunction::create(vm, targetGlobalObject, targetCallee));
     }
 

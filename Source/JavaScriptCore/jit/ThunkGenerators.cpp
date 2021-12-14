@@ -1451,7 +1451,7 @@ MacroAssemblerCodeRef<JITThunkPtrTag> remoteFunctionCallGenerator(VM& vm)
     jit.load32(CCallHelpers::payloadFor(CallFrameSlot::argumentCountIncludingThis), GPRInfo::regT1); // t1 = arguments+this on stack
     jit.sub32(CCallHelpers::TrustedImm32(1), GPRInfo::regT1); // t1 -= 1 (remove `this` from arguments count)
 
-    jit.add32(CCallHelpers::TrustedImm32(CallFrame::headerSizeInRegisters - CallerFrameAndPC::sizeInRegisters), GPRInfo::regT1, GPRInfo::regT2); // t2 += space for callee, codeblock and argument count
+    jit.add32(CCallHelpers::TrustedImm32(CallFrame::headerSizeInRegisters - CallerFrameAndPC::sizeInRegisters + 1), GPRInfo::regT1, GPRInfo::regT2); // t2 += space for callee, codeblock and argument count
     jit.lshift32(CCallHelpers::TrustedImm32(3), GPRInfo::regT2); // t2 *= 8 (64 bits per reg)
     jit.add32(CCallHelpers::TrustedImm32(stackAlignmentBytes() - 1), GPRInfo::regT2); // grow to satckAlignmentBytes in size
     jit.and32(CCallHelpers::TrustedImm32(-stackAlignmentBytes()), GPRInfo::regT2);
@@ -1493,44 +1493,33 @@ MacroAssemblerCodeRef<JITThunkPtrTag> remoteFunctionCallGenerator(VM& vm)
     
     CCallHelpers::Label loop = jit.label();
     jit.sub32(CCallHelpers::TrustedImm32(1), GPRInfo::regT1);
-    jit.print("  loop: ", GPRInfo::regT1, "\n", AllRegisters(2), "\n");
     jit.loadValue(CCallHelpers::addressFor(virtualRegisterForArgumentIncludingThis(1)).indexedBy(GPRInfo::regT1, CCallHelpers::TimesEight), valueRegs);
-    jit.print("  testing value: ", valueRegs.gpr(), "\n");
 
     // Check the passed value (in valueRegs) and convert to a JSRemoteFunction if necessary.
     // (regT3 and regT5 are free, regT0 is callee JSRemoteFunction)
     CCallHelpers::JumpList valueIsPrimitive;
     valueIsPrimitive.append(jit.branchIfNotCell(valueRegs));
     valueIsPrimitive.append(jit.branchIfNotObject(valueRegs.payloadGPR()));
-    jit.print("saving regT1: ", GPRInfo::regT1, "\n");
     jit.pushToSave(GPRInfo::regT1);
 
-    // If value is a function, we must allocate a wrapper JSRemoteFunction, otherwise throw an exception
-    //jit.emitLoadStructure(vm, GPRInfo::regT0, GPRInfo::regT3, GPRInfo::regT5);
-    //jit.print("calleee structure: ", GPRInfo::regT3, "\n");
-
-    //jit.loadPtr(CCallHelpers::Address(GPRInfo::regT3, Structure::globalObjectOffset()), GPRInfo::regT3);
     jit.move(CCallHelpers::TrustedImmPtr(tagCFunction<OperationPtrTag>(operationGetWrappedValue)), GPRInfo::nonArgGPR0);
     emitPointerValidation(jit, GPRInfo::nonArgGPR0, OperationPtrTag);
 
-    // save regT3 to the stack
     jit.loadCell(CCallHelpers::addressFor(CallFrameSlot::callee), GPRInfo::regT0); // t0 = callee
     jit.setupArguments<decltype(operationGetWrappedValue)>(GPRInfo::regT0, valueRegs);
     jit.prepareCallOperation(vm);
     jit.call(GPRInfo::nonArgGPR0, OperationPtrTag);
+    jit.popToRestore(GPRInfo::regT1);
     auto checkException = jit.emitJumpIfException(vm);
     jit.setupResults(valueRegs);
-    jit.popToRestore(GPRInfo::regT1);
-    jit.print("restored regT1: ", GPRInfo::regT1, "\n");
 
     valueIsPrimitive.link(&jit);
     jit.storeValue(valueRegs, CCallHelpers::calleeArgumentSlot(1).indexedBy(GPRInfo::regT1, CCallHelpers::TimesEight));
     jit.branchTest32(CCallHelpers::NonZero, GPRInfo::regT1).linkTo(loop, &jit);
     
     done.link(&jit);
-    jit.print("  done argument loop: ", GPRInfo::regT1, "\n");
 
-    jit.loadPtr(CCallHelpers::Address(GPRInfo::regT0, JSRemoteFunction::offsetOfTargetFunction()), GPRInfo::regT2);
+    jit.loadPtr(CCallHelpers::Address(GPRInfo::regT0, JSRemoteFunction::offsetOfTarget()), GPRInfo::regT2);
     jit.storeCell(GPRInfo::regT2, CCallHelpers::calleeFrameSlot(CallFrameSlot::callee));
     
     jit.loadPtr(CCallHelpers::Address(GPRInfo::regT2, JSFunction::offsetOfExecutableOrRareData()), GPRInfo::regT0);
@@ -1547,12 +1536,10 @@ MacroAssemblerCodeRef<JITThunkPtrTag> remoteFunctionCallGenerator(VM& vm)
     emitPointerValidation(jit, GPRInfo::regT0, JSEntryPtrTag);
     jit.call(GPRInfo::regT0, JSEntryPtrTag);
 
-    jit.print("done\n");
     jit.emitFunctionEpilogue();
     jit.ret();
 
     checkException.link(&jit);
-    jit.print("Jumping to exception handler\n", AllRegisters(2));
     jit.copyCalleeSavesToEntryFrameCalleeSavesBuffer(vm.topEntryFrame);
     jit.jumpToExceptionHandler(vm);
 

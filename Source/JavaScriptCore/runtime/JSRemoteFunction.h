@@ -51,9 +51,12 @@ public:
         return vm.remoteFunctionSpace<mode>();
     }
 
-    JS_EXPORT_PRIVATE static JSRemoteFunction* create(VM&, JSGlobalObject*, JSCallee* targetFunction);
+    JS_EXPORT_PRIVATE static JSRemoteFunction* create(VM&, JSGlobalObject*, JSCell* targetCallable);
 
-    JSCallee* targetFunction() { return m_targetFunction.get(); }
+    JSCell* target() { return m_target.get(); }
+    JSFunction* targetFunction() {
+        return static_cast<JSFunction*>(getJSFunction(target()));
+    }
     JSGlobalObject* targetGlobalObject() { return targetFunction()->globalObject(); }
 
     static Structure* createStructure(VM& vm, JSGlobalObject* globalObject, JSValue prototype)
@@ -62,17 +65,17 @@ public:
         return Structure::create(vm, globalObject, prototype, TypeInfo(JSFunctionType, StructureFlags), info()); 
     }
     
-    static ptrdiff_t offsetOfTargetFunction() { return OBJECT_OFFSETOF(JSRemoteFunction, m_targetFunction); }
+    static ptrdiff_t offsetOfTarget() { return OBJECT_OFFSETOF(JSRemoteFunction, m_target); }
 
     DECLARE_INFO;
 
 private:
-    JSRemoteFunction(VM&, NativeExecutable*, JSGlobalObject*, Structure*, JSCallee* targetFunction);
+    JSRemoteFunction(VM&, NativeExecutable*, JSGlobalObject*, Structure*, JSCell* targetCallable);
 
     void finishCreation(VM&);
     DECLARE_VISIT_CHILDREN;
 
-    WriteBarrier<JSCallee> m_targetFunction;
+    WriteBarrier<JSCell> m_target;
 };
 
 }

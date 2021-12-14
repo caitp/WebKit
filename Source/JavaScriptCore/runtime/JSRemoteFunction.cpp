@@ -25,6 +25,7 @@
  */
 
 #include "config.h"
+#include "JSFunctionInlines.h"
 #include "JSRemoteFunction.h"
 
 #include "ExecutableBaseInlines.h"
@@ -37,9 +38,9 @@ namespace JSC {
 
 const ClassInfo JSRemoteFunction::s_info = { "Function", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSRemoteFunction) };
 
-JSRemoteFunction::JSRemoteFunction(VM& vm, NativeExecutable* executable, JSGlobalObject* globalObject, Structure* structure, JSCallee* targetFunction)
+JSRemoteFunction::JSRemoteFunction(VM& vm, NativeExecutable* executable, JSGlobalObject* globalObject, Structure* structure, JSCell* target)
     : Base(vm, executable, globalObject, structure)
-    , m_targetFunction(vm, this, targetFunction)
+    , m_target(vm, this, target)
 {
 }
 
@@ -51,10 +52,8 @@ JSValue wrapValue(JSGlobalObject* globalObject, JSGlobalObject* targetGlobalObje
         return value;
 
     if (value.isCallable(vm)) {
-        JSCallee* targetCallee = jsCast<JSCallee*>(value.asCell());
-        ASSERT(targetCallee->structure()->globalObject() != targetGlobalObject);
-
-        return JSValue(JSRemoteFunction::create(vm, targetGlobalObject, targetCallee));
+        JSCallee* target = static_cast<JSCallee*>(value.asCell());
+        return JSValue(JSRemoteFunction::create(vm, targetGlobalObject, target));
     }
 
     return JSValue();
@@ -86,10 +85,10 @@ JSC_DEFINE_HOST_FUNCTION(remoteJSFunctionCall, (JSGlobalObject* globalObject, Ca
     VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
     JSRemoteFunction* remoteFunction = jsCast<JSRemoteFunction*>(callFrame->jsCallee());
-    JSFunction* targetFunction = jsCast<JSFunction*>(remoteFunction->targetFunction());
-    JSGlobalObject* targetGlobalObject = targetFunction->structure()->globalObject();
+    JSFunction* target = remoteFunction->targetFunction();
+    ASSERT(target);
 
-    RELEASE_ASSERT(targetGlobalObject != globalObject);
+    JSGlobalObject* targetGlobalObject = target->structure()->globalObject();
 
     MarkedArgumentBuffer args;
     for (unsigned i = 0; i < callFrame->argumentCount(); ++i) {
@@ -101,15 +100,15 @@ JSC_DEFINE_HOST_FUNCTION(remoteJSFunctionCall, (JSGlobalObject* globalObject, Ca
         throwOutOfMemoryError(globalObject, scope);
         return encodedJSValue();
     }
-    ExecutableBase* executable = targetFunction->executable();
+    ExecutableBase* executable = target->executable();
     if (executable->hasJITCodeForCall()) {
         // Force the executable to cache its arity entrypoint.
         executable->entrypointFor(CodeForCall, MustCheckArity);
     }
 
-    auto callData = getCallData(vm, targetFunction);
+    auto callData = getCallData(vm, target);
     ASSERT(callData.type != CallData::Type::None);
-    auto result = call(targetGlobalObject, targetFunction, callData, jsUndefined(), args);
+    auto result = call(targetGlobalObject, target, callData, jsUndefined(), args);
 
     // Hide exceptions from calling realm
     if (scope.exception()) {
@@ -128,10 +127,8 @@ JSC_DEFINE_HOST_FUNCTION(remoteFunctionCall, (JSGlobalObject* globalObject, Call
     VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
     JSRemoteFunction* remoteFunction = jsCast<JSRemoteFunction*>(callFrame->jsCallee());
-    JSObject* targetFunction = remoteFunction->targetFunction();
-    JSGlobalObject* targetGlobalObject = targetFunction->structure()->globalObject();
-
-    RELEASE_ASSERT(targetGlobalObject != globalObject);
+    JSCell* target = remoteFunction->target();
+    JSGlobalObject* targetGlobalObject = target->structure()->globalObject();
 
     MarkedArgumentBuffer args;
     for (unsigned i = 0; i < callFrame->argumentCount(); ++i) {
@@ -143,9 +140,9 @@ JSC_DEFINE_HOST_FUNCTION(remoteFunctionCall, (JSGlobalObject* globalObject, Call
         return encodedJSValue();
     }
 
-    auto callData = getCallData(vm, targetFunction);
+    auto callData = getCallData(vm, target);
     ASSERT(callData.type != CallData::Type::None);
-    auto result = call(targetGlobalObject, targetFunction, callData, jsUndefined(), args);
+    auto result = call(targetGlobalObject, target, callData, jsUndefined(), args);
 
     // Hide exceptions from calling realm
     if (scope.exception()) {
@@ -169,21 +166,19 @@ JSC_DEFINE_HOST_FUNCTION(createRemoteFunction, (JSGlobalObject* globalObject, Ca
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     ASSERT(callFrame->argumentCount() == 2);
-    JSCallee* targetFunction = jsCast<JSCallee*>(callFrame->uncheckedArgument(0));
+    JSValue target = callFrame->uncheckedArgument(0);
+    ASSERT(target.isCallable(vm));
+
+    JSCell* targetCallable = target.asCell();
     JSGlobalObject* destinationGlobalObject = globalObject;
     if (!callFrame->uncheckedArgument(1).isUndefinedOrNull()) {
-        dataLog("creating remote function for shadow realm\n");
         if (auto shadowRealm = jsDynamicCast<ShadowRealmObject*>(vm, callFrame->uncheckedArgument(1)))
             destinationGlobalObject = shadowRealm->globalObject();
         else
             destinationGlobalObject = jsCast<JSGlobalObject*>(callFrame->uncheckedArgument(1));
-    } else {
-        dataLog("creating remote function for incubator realm\n");
     }
 
-    ASSERT(destinationGlobalObject != targetFunction->globalObject());
-
-    auto result = JSRemoteFunction::create(vm, destinationGlobalObject, targetFunction);
+    auto result = JSRemoteFunction::create(vm, destinationGlobalObject, targetCallable);
     RELEASE_AND_RETURN(scope, JSValue::encode(result));
 }
 
@@ -193,16 +188,21 @@ inline Structure* getRemoteFunctionStructure(JSGlobalObject* globalObject)
     return globalObject->remoteFunctionStructure();
 }
 
-JSRemoteFunction* JSRemoteFunction::create(VM& vm, JSGlobalObject* globalObject, JSCallee* targetFunction)
+JSRemoteFunction* JSRemoteFunction::create(VM& vm, JSGlobalObject* globalObject, JSCell* targetCallable)
 {
-    ASSERT(globalObject != targetFunction->structure()->globalObject());
     auto scope = DECLARE_THROW_SCOPE(vm);
 
-    bool isJSFunction = getJSFunction(targetFunction);
+    ASSERT(targetCallable && targetCallable->isCallable(vm));
+    if (auto remote = jsDynamicCast<JSRemoteFunction*>(vm, targetCallable)) {
+        targetCallable = remote->target();
+        ASSERT(!JSC::isRemoteFunction(targetCallable));
+    }
+
+    bool isJSFunction = getJSFunction(targetCallable);
     NativeExecutable* executable = vm.getRemoteFunction(isJSFunction);
     Structure* structure = getRemoteFunctionStructure(globalObject);
     RETURN_IF_EXCEPTION(scope, nullptr);
-    JSRemoteFunction* function = new (NotNull, allocateCell<JSRemoteFunction>(vm)) JSRemoteFunction(vm, executable, globalObject, structure, targetFunction);
+    JSRemoteFunction* function = new (NotNull, allocateCell<JSRemoteFunction>(vm)) JSRemoteFunction(vm, executable, globalObject, structure, targetCallable);
 
     function->finishCreation(vm);
     return function;
@@ -221,7 +221,7 @@ void JSRemoteFunction::visitChildrenImpl(JSCell* cell, Visitor& visitor)
     ASSERT_GC_OBJECT_INHERITS(thisObject, info());
     Base::visitChildren(thisObject, visitor);
 
-    visitor.append(thisObject->m_targetFunction);
+    visitor.append(thisObject->m_target);
 }
 
 DEFINE_VISIT_CHILDREN(JSRemoteFunction);
