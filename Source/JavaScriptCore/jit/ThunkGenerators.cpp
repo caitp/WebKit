@@ -1540,6 +1540,7 @@ MacroAssemblerCodeRef<JITThunkPtrTag> remoteFunctionCallGenerator(VM& vm)
     jit.ret();
 
     checkException.link(&jit);
+    jit.print("EXCEPTION HANDLED\n");
     jit.copyCalleeSavesToEntryFrameCalleeSavesBuffer(vm.topEntryFrame);
     jit.jumpToExceptionHandler(vm);
 
